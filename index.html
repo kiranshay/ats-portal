@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PSM Generator — Affordable Tutoring Solutions</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E📐%3C/text%3E%3C/svg%3E" />
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  html,body,#root{margin:0;padding:0;height:100%;}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:#eef2f7;}
+  *{box-sizing:border-box;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-type="module" data-presets="env,react">
+const { useState, useEffect, useMemo } = React;
+
+const B1="#003258", B2="#004a79", B3="#0066a6";
+const DC={easy:"#16a34a",medium:"#d97706",hard:"#dc2626",mixed:"#7c3aed"};
+const SC={"Reading & Writing":"#1d4ed8","Math":"#0369a1"};
+const makeWE=(name)=>({name:`WellEd ${name}`,difficulty:"mixed",isWellEd:true,student:`Please complete ${name} on WellEd Labs. Use the instructions for WellEd Labs practice exams located in your Wise "Full Practice Exam Instructions" Module to login to the platform and make sure to toggle the assignments section in the top right of the page, so that you see the topic-specific assignment.`,key:`${name} will be auto-graded on Wise.`});
+const W=(n,d,s,k)=>({name:n,difficulty:d,student:s,key:k});
+const L="#";
+const WORKSHEETS={
+  "Reading & Writing":{
+    "Information & Ideas":{
+      "Comprehensive Info & Ideas":[W("CompInfoIdeas-Easy (10Qs)","easy","https://1drv.ms/b/s!AsTNdk2gnmVMhehyphggo3aa5JhKGQ?e=7uhodT","https://1drv.ms/b/s!AsTNdk2gnmVMheh0Co9JY-kvOl0LAg?e=8PZu5u"),W("CompInfoIdeas-Medium (10Qs)","medium",L,L),W("CompInfoIdeas-Hard (10Qs)","hard",L,L),makeWE("Information & Ideas")],
+      "Command of Evidence (Textual)":[W("CmdEvText-Easy (5Qs)","easy",L,L),W("CmdEvText-Medium (5Qs)","medium",L,L),W("CmdEvText-Hard (5Qs)","hard",L,L)],
+      "Command of Evidence (Quantitative)":[W("CmdEvQuant-Easy (5Qs)","easy",L,L),W("CmdEvQuant-Medium (5Qs)","medium",L,L),W("CmdEvQuant-Hard (5Qs)","hard",L,L)],
+      "Central Ideas & Details":[W("CentIdeas-Easy (5Qs)","easy",L,L),W("CentIdeas-Medium (5Qs)","medium",L,L),W("CentIdeas-Hard (5Qs)","hard",L,L)],
+      "Inferences":[W("Inferences-Easy (5Qs)","easy",L,L),W("Inferences-Medium (5Qs)","medium",L,L),W("Inferences-Hard (5Qs)","hard",L,L)],
+    },
+    "Expression of Ideas":{
+      "Comprehensive Expression of Ideas":[W("CompEOI-Easy (10Qs)","easy",L,L),W("CompEOI-Medium (10Qs)","medium",L,L),W("CompEOI-Hard (10Qs)","hard",L,L),makeWE("Expression of Ideas")],
+      "Rhetorical Synthesis":[W("RhetSynth-Easy (5Qs)","easy",L,L),W("RhetSynth-Medium (5Qs)","medium",L,L),W("RhetSynth-Hard (5Qs)","hard",L,L)],
+      "Transitions":[W("Transitions-Easy (5Qs)","easy",L,L),W("Transitions-Medium (5Qs)","medium",L,L),W("Transitions-Hard (5Qs)","hard",L,L)],
+    },
+    "Standard English Conventions":{
+      "Comprehensive Standard English Conventions":[W("CompSEC-Easy (10Qs)","easy",L,L),W("CompSEC-Medium (10Qs)","medium",L,L),W("CompSEC-Hard (10Qs)","hard",L,L),makeWE("Standard English Conventions")],
+      "Boundaries":[W("Boundaries-Easy (5Qs)","easy",L,L),W("Boundaries-Medium (5Qs)","medium",L,L),W("Boundaries-Hard (5Qs)","hard",L,L)],
+      "Form, Structure, & Sense":[W("FormStructSense-Easy (5Qs)","easy",L,L),W("FormStructSense-Medium (5Qs)","medium",L,L),W("FormStructSense-Hard (5Qs)","hard",L,L)],
+    },
+  },
+  "Math":{
+    "Algebra":{
+      "Comprehensive Algebra":[W("CompAlgebra-Easy (10Qs)","easy",L,L),W("CompAlgebra-Medium (10Qs)","medium",L,L),W("CompAlgebra-Hard (10Qs)","hard",L,L),makeWE("Algebra")],
+      "Linear Equations (1 Variable)":[W("LinEq1V-Easy (5Qs)","easy",L,L),W("LinEq1V-Medium (5Qs)","medium",L,L),W("LinEq1V-Hard (5Qs)","hard",L,L)],
+      "Linear Equations (2 Variables)":[W("LinEq2V-Easy (5Qs)","easy",L,L),W("LinEq2V-Medium (5Qs)","medium",L,L),W("LinEq2V-Hard (5Qs)","hard",L,L)],
+      "Linear Functions":[W("LinFun-Easy (5Qs)","easy",L,L),W("LinFun-Medium (5Qs)","medium",L,L),W("LinFun-Hard (5Qs)","hard",L,L)],
+      "Systems of Linear Equations":[W("SysLinEq-Easy (5Qs)","easy",L,L),W("SysLinEq-Medium (5Qs)","medium",L,L),W("SysLinEq-Hard (5Qs)","hard",L,L)],
+    },
+    "Advanced Math":{
+      "Comprehensive Advanced Math":[W("CompAdvMath-Easy (10Qs)","easy",L,L),W("CompAdvMath-Medium (10Qs)","medium",L,L),W("CompAdvMath-Hard (10Qs)","hard",L,L),makeWE("Advanced Math")],
+      "Equivalent Expressions":[W("EquivExpr-Easy (5Qs)","easy",L,L),W("EquivExpr-Medium (5Qs)","medium",L,L),W("EquivExpr-Hard (5Qs)","hard",L,L)],
+      "Nonlinear Equations":[W("NonlinEq-Easy (5Qs)","easy",L,L),W("NonlinEq-Medium (5Qs)","medium",L,L),W("NonlinEq-Hard (5Qs)","hard",L,L)],
+      "Nonlinear Functions":[W("NonlinFun-Easy (5Qs)","easy",L,L),W("NonlinFun-Medium (5Qs)","medium",L,L),W("NonlinFun-Hard (5Qs)","hard",L,L)],
+    },
+    "Problem Solving & Data Analysis":{
+      "Comprehensive PS&DA":[W("CompPSDA-Easy (10Qs)","easy",L,L),W("CompPSDA-Medium (10Qs)","medium",L,L),W("CompPSDA-Hard (10Qs)","hard",L,L),makeWE("Problem Solving & Data Analysis")],
+      "Ratios, Rates & Proportional Relationships":[W("RatioRate-Easy (5Qs)","easy",L,L),W("RatioRate-Medium (5Qs)","medium",L,L),W("RatioRate-Hard (5Qs)","hard",L,L)],
+      "Percentages":[W("Percentages-Easy (5Qs)","easy",L,L),W("Percentages-Medium (5Qs)","medium",L,L),W("Percentages-Hard (5Qs)","hard",L,L)],
+      "One Variable Data":[W("OneVarData-Easy (5Qs)","easy",L,L),W("OneVarData-Medium (5Qs)","medium",L,L),W("OneVarData-Hard (5Qs)","hard",L,L)],
+      "Two Variable Data":[W("TwoVarData-Easy (5Qs)","easy",L,L),W("TwoVarData-Medium (5Qs)","medium",L,L),W("TwoVarData-Hard (5Qs)","hard",L,L)],
+      "Probability":[W("Probability-Easy (5Qs)","easy",L,L),W("Probability-Medium (5Qs)","medium",L,L),W("Probability-Hard (5Qs)","hard",L,L)],
+      "Inference & Margin of Error":[W("InfMarginErr-Easy (5Qs)","easy",L,L),W("InfMarginErr-Medium (5Qs)","medium",L,L),W("InfMarginErr-Hard (5Qs)","hard",L,L)],
+      "Evaluating Statistical Claims":[W("EvalStatClaims-Easy (5Qs)","easy",L,L),W("EvalStatClaims-Medium (5Qs)","medium",L,L),W("EvalStatClaims-Hard (5Qs)","hard",L,L)],
+    },
+    "Geometry & Trigonometry":{
+      "Comprehensive Geometry":[W("CompGeo-Easy (10Qs)","easy",L,L),W("CompGeo-Medium (10Qs)","medium",L,L),W("CompGeo-Hard (10Qs)","hard",L,L),makeWE("Geometry & Trigonometry")],
+      "Area & Volume":[W("AreaVol-Easy (5Qs)","easy",L,L),W("AreaVol-Medium (5Qs)","medium",L,L),W("AreaVol-Hard (5Qs)","hard",L,L)],
+      "Lines, Angles & Triangles":[W("LinesAngTri-Easy (5Qs)","easy",L,L),W("LinesAngTri-Medium (5Qs)","medium",L,L),W("LinesAngTri-Hard (5Qs)","hard",L,L)],
+      "Right Triangles & Trigonometry":[W("RightTriTrig-Easy (5Qs)","easy",L,L),W("RightTriTrig-Medium (5Qs)","medium",L,L),W("RightTriTrig-Hard (5Qs)","hard",L,L)],
+      "Circles":[W("Circles-Easy (5Qs)","easy",L,L),W("Circles-Medium (5Qs)","medium",L,L),W("Circles-Hard (5Qs)","hard",L,L)],
+    },
+  },
+};
+
+const ALL_WS=[];
+for(const[subj,doms]of Object.entries(WORKSHEETS))
+  for(const[dom,subdoms]of Object.entries(doms))
+    for(const[subdom,sheets]of Object.entries(subdoms))
+      for(const sh of sheets) ALL_WS.push({...sh,subject:subj,domain:dom,subdomain:subdom});
+
+const uid=()=>Math.random().toString(36).slice(2,10);
+const todayStr=()=>new Date().toISOString().slice(0,10);
+const sLoad=(k,fb)=>{try{const r=localStorage.getItem(k);return r?JSON.parse(r):fb;}catch{return fb;}};
+const sSave=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch{}};
+
+const INP={border:"1px solid #cbd5e1",borderRadius:7,padding:"7px 11px",fontSize:13,outline:"none",width:"100%",background:"#fff",color:"#1e293b"};
+const CARD={background:"#fff",borderRadius:12,padding:16,boxShadow:"0 1px 4px rgba(0,0,0,.07)"};
+const mkPill=(bg,fg)=>({background:bg,color:fg,borderRadius:20,padding:"2px 9px",fontSize:10,fontWeight:700,display:"inline-block"});
+const mkBtn=(bg,fg)=>({background:bg,color:fg,border:"none",borderRadius:7,padding:"7px 15px",fontSize:13,cursor:"pointer",fontWeight:600});
+
+function Tag({c="#eff6ff",t="#1d4ed8",children}){
+  return <span style={mkPill(c,t)}>{children}</span>;
+}
+function Toggle({on,set,label,sub}){
+  return(
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer"}} onClick={()=>set(!on)}>
+      <div>
+        <div style={{fontSize:13,fontWeight:700,color:B2}}>{label}</div>
+        {sub&&<div style={{fontSize:11,color:"#64748b",marginTop:2}}>{sub}</div>}
+      </div>
+      <div style={{width:44,height:24,borderRadius:12,background:on?B2:"#cbd5e1",position:"relative",transition:"background .2s",flexShrink:0,marginLeft:10}}>
+        <div style={{position:"absolute",top:3,left:on?22:3,width:18,height:18,borderRadius:9,background:"#fff",transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.2)"}}/>
+      </div>
+    </div>
+  );
+}
+function SH({children}){
+  return <div style={{fontSize:10,fontWeight:800,color:"#94a3b8",textTransform:"uppercase",letterSpacing:1.2,marginBottom:8}}>{children}</div>;
+}
+
+function App(){
+  const[tab,setTab]=useState("generator");
+  const[students,setStudents]=useState(()=>sLoad("psm_v3",[]));
+  const[selSt,setSelSt]=useState("");
+  const[subjF,setSubjF]=useState("All");
+  const[domF,setDomF]=useState("All");
+  const[sdomF,setSdomF]=useState("All");
+  const[diffF,setDiffF]=useState("All");
+  const[srch,setSrch]=useState("");
+  const[chk,setChk]=useState({});
+  const[timeDrill,setTimeDrill]=useState(false);
+  const[timeLims,setTimeLims]=useState({});
+  const[oneNote,setOneNote]=useState(false);
+  const[addBB,setAddBB]=useState(false);
+  const[bbType,setBbType]=useState("full");
+  const[bbCnt,setBbCnt]=useState(1);
+  const[addWE,setAddWE]=useState(false);
+  const[weType,setWeType]=useState("full");
+  const[weCnt,setWeCnt]=useState(1);
+  const[output,setOutput]=useState("");
+  const[copied,setCopied]=useState(false);
+  const[profile,setProfile]=useState(null);
+  const[showAdd,setShowAdd]=useState(false);
+  const[newS,setNewS]=useState({name:"",grade:"",tutor:"",notes:""});
+  const[ptab,setPtab]=useState("history");
+  const[paChk,setPaChk]=useState({});
+  const[paSubj,setPaSubj]=useState("All");
+  const[paSrch,setPaSrch]=useState("");
+  const[sfm,setSfm]=useState({date:todayStr(),testType:"",score:"",maxScore:"",notes:""});
+  const[toast,setToast]=useState("");
+
+  useEffect(()=>{sSave("psm_v3",students);},[students]);
+
+  const showToast=(msg)=>{setToast(msg);setTimeout(()=>setToast(""),2500);};
+
+  const availDoms=useMemo(()=>{const s=new Set();ALL_WS.forEach(ws=>{if(subjF==="All"||ws.subject===subjF)s.add(ws.domain);});return[...s];},[subjF]);
+  const availSdoms=useMemo(()=>{const s=new Set();ALL_WS.forEach(ws=>{if((subjF==="All"||ws.subject===subjF)&&(domF==="All"||ws.domain===domF))s.add(ws.subdomain);});return[...s];},[subjF,domF]);
+  const filtWS=useMemo(()=>ALL_WS.filter(ws=>{
+    if(subjF!=="All"&&ws.subject!==subjF)return false;
+    if(domF!=="All"&&ws.domain!==domF)return false;
+    if(sdomF!=="All"&&ws.subdomain!==sdomF)return false;
+    if(diffF!=="All"&&ws.difficulty!==diffF)return false;
+    if(srch&&!ws.name.toLowerCase().includes(srch.toLowerCase()))return false;
+    return true;
+  }),[subjF,domF,sdomF,diffF,srch]);
+  const grouped=useMemo(()=>{const g={};filtWS.forEach(ws=>{const k=`${ws.subject}|${ws.domain}|${ws.subdomain}`;if(!g[k])g[k]={subject:ws.subject,domain:ws.domain,subdomain:ws.subdomain,sheets:[]};g[k].sheets.push(ws);});return Object.values(g);},[filtWS]);
+  const paGrouped=useMemo(()=>{const f=ALL_WS.filter(ws=>{if(paSubj!=="All"&&ws.subject!==paSubj)return false;if(paSrch&&!ws.name.toLowerCase().includes(paSrch.toLowerCase()))return false;return true;});const g={};f.forEach(ws=>{const k=`${ws.subject}|${ws.domain}|${ws.subdomain}`;if(!g[k])g[k]={subject:ws.subject,domain:ws.domain,subdomain:ws.subdomain,sheets:[]};g[k].sheets.push(ws);});return Object.values(g);},[paSubj,paSrch]);
+
+  const selWS=filtWS.filter(ws=>chk[ws.name]);
+  const curStudent=students.find(st=>st.id===selSt);
+
+  const heatDoms=useMemo(()=>[...new Set(ALL_WS.map(ws=>ws.domain))],[]);
+  const getHV=(st,d)=>(st.assignments||[]).reduce((n,a)=>n+a.worksheets.filter(w=>w.domain===d).length,0);
+  const heatMax=useMemo(()=>students.reduce((mx,st)=>heatDoms.reduce((m,d)=>Math.max(m,getHV(st,d)),mx),1),[students,heatDoms]);
+  const heatC=(v)=>{if(!v)return"#f1f5f9";const i=v/heatMax;return i<.25?"#bfdbfe":i<.5?"#60a5fa":i<.75?"#3b82f6":"#1d4ed8";};
+
+  const generate=()=>{
+    const lines=[];
+    lines.push("═══════════════════════════════════════════════════════════════");
+    lines.push(`  PSM ASSIGNMENT${curStudent?` — ${curStudent.name}`:""}`);
+    lines.push(`  Generated: ${new Date().toLocaleDateString("en-US",{weekday:"long",year:"numeric",month:"long",day:"numeric"})}`);
+    lines.push("═══════════════════════════════════════════════════════════════");
+    if(timeDrill){lines.push("\n⏱  TIME DRILL ACTIVE");lines.push("Complete each worksheet within the stated time limit.");}
+    if(oneNote){lines.push("\n📝  ONENOTE ASSIGNMENT");lines.push("Complete all worksheets digitally in OneNote.");lines.push("  • Use BLACK ink for your work");lines.push("  • Use RED ink for corrections when reviewing with your answer key");}
+    if(addBB||addWE){
+      lines.push("\n📚  PRACTICE EXAM COMPONENT");
+      if(addBB){const ex=bbType==="full"?bbCnt:bbCnt*0.5;lines.push(`  BlueBook — ${bbCnt} ${bbType==="full"?"Full Test":"Section"}${bbCnt>1?"s":""} (${ex} exam${ex!==1?"s":""})`);lines.push("  → Use the BlueBook app. See 'Full Practice Exam Instructions' in your Wise course.");}
+      if(addWE){const ex=weType==="full"?weCnt:weCnt*0.5;lines.push(`  WellEd — ${weCnt} ${weType==="full"?"Full Test":"Section"}${weCnt>1?"s":""} (${ex} exam${ex!==1?"s":""})`);lines.push("  → Log into WellEd Labs. See 'Full Practice Exam Instructions' in your Wise course.");}
+    }
+    if(selWS.length>0){
+      lines.push("\n📋  WORKSHEET ASSIGNMENTS\n");
+      const sg={};selWS.forEach(ws=>{if(!sg[ws.subdomain])sg[ws.subdomain]={domain:ws.domain,subdomain:ws.subdomain,sheets:[]};sg[ws.subdomain].sheets.push(ws);});
+      Object.values(sg).forEach(g=>{
+        lines.push(`  ▸ ${g.domain} › ${g.subdomain}`);
+        g.sheets.forEach(ws=>{
+          lines.push(`\n  ${ws.name} [${ws.difficulty.toUpperCase()}]`);
+          if(ws.isWellEd){lines.push(`  📋 Instructions: ${ws.student}`);lines.push(`  ✅ ${ws.key}`);}
+          else if(oneNote){lines.push(`  📝 Complete digitally in OneNote`);lines.push(`  🔑 Answer Key: ${ws.key!==L?ws.key:"[UPDATE LINK]"}`);}
+          else{lines.push(`  📄 Student Copy: ${ws.student!==L?ws.student:"[UPDATE LINK]"}`);lines.push(`  🔑 Answer Key: ${ws.key!==L?ws.key:"[UPDATE LINK]"}`);}
+          if(timeDrill&&timeLims[ws.name])lines.push(`  ⏱  Time Limit: ${timeLims[ws.name]} minutes`);
+        });
+        lines.push("");
+      });
+    }
+    lines.push("═══════════════════════════════════════════════════════════════");
+    lines.push("  Questions? Contact: Aidan Meyers");
+    lines.push("  ameyers@affordabletutoringsolutions.org | (321) 341-9820");
+    lines.push("═══════════════════════════════════════════════════════════════");
+    setOutput(lines.join("\n"));
+    if(curStudent&&(selWS.length>0||addBB||addWE)){
+      const entry={id:uid(),date:todayStr(),preAssigned:false,worksheets:selWS.map(ws=>({name:ws.name,subject:ws.subject,domain:ws.domain,subdomain:ws.subdomain,difficulty:ws.difficulty})),practiceExams:[...(addBB?[{platform:"BlueBook",type:bbType,count:bbCnt}]:[]),...(addWE?[{platform:"WellEd",type:weType,count:weCnt}]:[])],timeDrill,oneNote};
+      setStudents(prev=>prev.map(st=>st.id===curStudent.id?{...st,assignments:[...(st.assignments||[]),entry]}:st));
+      showToast(`✅ Saved to ${curStudent.name}'s profile`);
+    }
+  };
+
+  const copyOut=()=>{if(!output)return;navigator.clipboard.writeText(output).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),2000);});};
+  const addStudent=()=>{if(!newS.name.trim())return;setStudents(prev=>[...prev,{...newS,id:uid(),dateAdded:todayStr(),assignments:[],scores:[]}]);setNewS({name:"",grade:"",tutor:"",notes:""});setShowAdd(false);showToast("✅ Student added");};
+  const openProfile=(st)=>{setProfile(st);setPtab("history");setPaChk({});setPaSubj("All");setPaSrch("");setSfm({date:todayStr(),testType:"",score:"",maxScore:"",notes:""});setTab("students");};
+  const savePreAssign=()=>{const names=Object.keys(paChk).filter(k=>paChk[k]);if(!names.length)return;const sheets=ALL_WS.filter(ws=>names.includes(ws.name));const entry={id:uid(),date:"pre-assigned",preAssigned:true,worksheets:sheets.map(ws=>({name:ws.name,subject:ws.subject,domain:ws.domain,subdomain:ws.subdomain,difficulty:ws.difficulty})),practiceExams:[],timeDrill:false,oneNote:false};const upd=students.map(st=>st.id===profile.id?{...st,assignments:[...(st.assignments||[]),entry]}:st);setStudents(upd);setProfile(upd.find(st=>st.id===profile.id));setPaChk({});showToast(`✅ ${names.length} worksheets pre-assigned`);};
+  const addScore=()=>{if(!sfm.testType||!sfm.score)return;const entry={...sfm,id:uid()};const upd=students.map(st=>st.id===profile.id?{...st,scores:[...(st.scores||[]),entry]}:st);setStudents(upd);setProfile(upd.find(st=>st.id===profile.id));setSfm({date:todayStr(),testType:"",score:"",maxScore:"",notes:""});showToast("✅ Score recorded");};
+  const delScore=(sid)=>{const upd=students.map(st=>st.id===profile.id?{...st,scores:st.scores.filter(sc=>sc.id!==sid)}:st);setStudents(upd);setProfile(upd.find(st=>st.id===profile.id));};
+  const delAsg=(aid)=>{const upd=students.map(st=>st.id===profile.id?{...st,assignments:st.assignments.filter(a=>a.id!==aid)}:st);setStudents(upd);setProfile(upd.find(st=>st.id===profile.id));};
+  const delStudent=(id)=>{if(!confirm("Delete this student and all their data?"))return;setStudents(prev=>prev.filter(st=>st.id!==id));if(profile?.id===id)setProfile(null);};
+
+  const exportData=()=>{
+    const blob=new Blob([JSON.stringify(students,null,2)],{type:"application/json"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url;a.download=`psm-data-${todayStr()}.json`;a.click();
+    URL.revokeObjectURL(url);
+    showToast("✅ Data exported");
+  };
+  const importData=(e)=>{
+    const f=e.target.files?.[0];if(!f)return;
+    const r=new FileReader();
+    r.onload=()=>{try{const d=JSON.parse(r.result);if(Array.isArray(d)){if(confirm(`Import ${d.length} students? This will REPLACE all current data.`)){setStudents(d);showToast("✅ Data imported");}}else alert("Invalid file format");}catch{alert("Failed to parse file");}};
+    r.readAsText(f);
+    e.target.value="";
+  };
+
+  return(
+    <div style={{fontFamily:"'Segoe UI',system-ui,sans-serif",background:"#eef2f7",minHeight:"100vh",display:"flex",flexDirection:"column"}}>
+      {toast&&<div style={{position:"fixed",top:16,right:16,background:"#1e293b",color:"#fff",padding:"10px 18px",borderRadius:10,fontSize:13,fontWeight:600,zIndex:9999,boxShadow:"0 4px 16px rgba(0,0,0,.25)"}}>{toast}</div>}
+      <div style={{background:`linear-gradient(135deg,${B1} 0%,${B2} 55%,${B3} 100%)`,color:"#fff",padding:"0 24px",display:"flex",alignItems:"center",justifyContent:"space-between",height:58,flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:12}}>
+          <div style={{width:36,height:36,borderRadius:10,background:"rgba(255,255,255,.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>📐</div>
+          <div><div style={{fontSize:16,fontWeight:800}}>Affordable Tutoring Solutions</div><div style={{fontSize:10,opacity:.75,letterSpacing:.5}}>PSM GENERATOR & STUDENT TRACKING SYSTEM</div></div>
+        </div>
+        <div style={{display:"flex",gap:10,alignItems:"center",fontSize:12,opacity:.9}}>
+          <span>👤 {students.length}</span>
+          <span>📋 {students.reduce((n,st)=>n+(st.assignments||[]).reduce((m,a)=>m+a.worksheets.length,0),0)}</span>
+          <button onClick={exportData} title="Export data" style={{background:"rgba(255,255,255,.15)",border:"none",color:"#fff",borderRadius:6,padding:"5px 10px",fontSize:11,cursor:"pointer",fontWeight:600}}>⬇ Export</button>
+          <label title="Import data" style={{background:"rgba(255,255,255,.15)",border:"none",color:"#fff",borderRadius:6,padding:"5px 10px",fontSize:11,cursor:"pointer",fontWeight:600}}>
+            ⬆ Import
+            <input type="file" accept="application/json" onChange={importData} style={{display:"none"}}/>
+          </label>
+        </div>
+      </div>
+      <div style={{background:"#fff",borderBottom:"2px solid #e2e8f0",display:"flex",padding:"0 24px",gap:2,flexShrink:0}}>
+        {[{id:"generator",icon:"📋",label:"Generator"},{id:"students",icon:"👤",label:"Students"},{id:"heatmap",icon:"🔥",label:"Heat Map"},{id:"scores",icon:"📊",label:"Score Tracking"}].map(t=>(
+          <button key={t.id} onClick={()=>{if(t.id!=="students")setProfile(null);setTab(t.id);}} style={{border:"none",background:"none",cursor:"pointer",padding:"12px 18px",fontSize:13,fontWeight:tab===t.id?700:500,color:tab===t.id?B2:"#64748b",borderBottom:tab===t.id?`3px solid ${B2}`:"3px solid transparent",marginBottom:-2,display:"flex",alignItems:"center",gap:6}}>
+            <span>{t.icon}</span>{t.label}
+          </button>
+        ))}
+      </div>
+      <div style={{flex:1,padding:20,overflowY:"auto"}}>
+
+        {tab==="generator"&&(
+          <div style={{display:"grid",gridTemplateColumns:"265px 1fr 345px",gap:14,minHeight:"calc(100vh - 188px)"}}>
+            <div style={{display:"flex",flexDirection:"column",gap:10,paddingRight:2}}>
+              <div style={{...CARD}}>
+                <SH>Assign To</SH>
+                <select value={selSt} onChange={e=>setSelSt(e.target.value)} style={{...INP}}>
+                  <option value="">— No Student —</option>
+                  {students.map(st=><option key={st.id} value={st.id}>{st.name}</option>)}
+                </select>
+                {selSt&&<button onClick={()=>openProfile(curStudent)} style={{...mkBtn("#eff6ff",B2),marginTop:8,width:"100%",fontSize:12}}>👤 View Profile</button>}
+              </div>
+              <div style={{...CARD}}>
+                <SH>Filters</SH>
+                <div style={{marginBottom:10}}>
+                  <div style={{fontSize:10,color:"#94a3b8",marginBottom:5}}>SUBJECT</div>
+                  <div style={{display:"flex",gap:4}}>
+                    {["All","Reading & Writing","Math"].map(s=>(
+                      <button key={s} onClick={()=>{setSubjF(s);setDomF("All");setSdomF("All");}} style={{...mkBtn(subjF===s?B2:"#f1f5f9",subjF===s?"#fff":"#475569"),padding:"4px 10px",fontSize:11,flex:1}}>
+                        {s==="All"?"All":s==="Reading & Writing"?"R&W":"Math"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div style={{marginBottom:8}}>
+                  <div style={{fontSize:10,color:"#94a3b8",marginBottom:4}}>DOMAIN</div>
+                  <select value={domF} onChange={e=>{setDomF(e.target.value);setSdomF("All");}} style={{...INP,fontSize:12}}>
+                    <option value="All">All Domains</option>
+                    {availDoms.map(d=><option key={d}>{d}</option>)}
+                  </select>
+                </div>
+                <div style={{marginBottom:8}}>
+                  <div style={{fontSize:10,color:"#94a3b8",marginBottom:4}}>SUBDOMAIN</div>
+                  <select value={sdomF} onChange={e=>setSdomF(e.target.value)} style={{...INP,fontSize:12}}>
+                    <option value="All">All Subdomains</option>
+                    {availSdoms.map(d=><option key={d}>{d}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <div style={{fontSize:10,color:"#94a3b8",marginBottom:5}}>DIFFICULTY</div>
+                  <div style={{display:"flex",gap:4}}>
+                    {["All","easy","medium","hard"].map(d=>(
+                      <button key={d} onClick={()=>setDiffF(d)} style={{...mkBtn(diffF===d?(d==="All"?B2:DC[d]):"#f1f5f9",diffF===d?"#fff":"#475569"),padding:"3px 8px",fontSize:11,flex:1}}>
+                        {d==="All"?"All":d.charAt(0).toUpperCase()+d.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <input placeholder="🔍 Search worksheets..." value={srch} onChange={e=>setSrch(e.target.value)} style={{...INP,boxShadow:"0 1px 3px rgba(0,0,0,.06)"}}/>
+              <div style={{...CARD,background:timeDrill?"#eff6ff":"#fff",border:timeDrill?"1.5px solid #93c5fd":"1.5px solid #e2e8f0"}}>
+                <Toggle on={timeDrill} set={setTimeDrill} label="⏱ Time Drill" sub={timeDrill?"Set time limits per worksheet →":"Assign timed worksheet practice"}/>
+              </div>
+              <div style={{...CARD,background:oneNote?"#eff6ff":"#fff",border:oneNote?"1.5px solid #93c5fd":"1.5px solid #e2e8f0"}}>
+                <Toggle on={oneNote} set={setOneNote} label="📝 OneNote Mode" sub={oneNote?"Links hidden · keys only":"Digital completion mode"}/>
+              </div>
+              <div style={{...CARD}}>
+                <SH>Practice Exams</SH>
+                <div style={{padding:10,background:"#f8fafc",borderRadius:8,marginBottom:8}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:addBB?8:0}}>
+                    <span style={{fontSize:12,fontWeight:700,color:"#1e40af"}}>📘 BlueBook</span>
+                    <input type="checkbox" checked={addBB} onChange={e=>setAddBB(e.target.checked)} style={{cursor:"pointer"}}/>
+                  </div>
+                  {addBB&&<div style={{display:"grid",gridTemplateColumns:"1fr 54px",gap:6}}>
+                    <select value={bbType} onChange={e=>setBbType(e.target.value)} style={{...INP,fontSize:11}}><option value="full">Full Test (1.0)</option><option value="section">Section (0.5)</option></select>
+                    <input type="number" min={1} max={10} value={bbCnt} onChange={e=>setBbCnt(Number(e.target.value))} style={{...INP,fontSize:12,textAlign:"center"}}/>
+                  </div>}
+                </div>
+                <div style={{padding:10,background:"#f8fafc",borderRadius:8}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:addWE?8:0}}>
+                    <span style={{fontSize:12,fontWeight:700,color:"#065f46"}}>🌿 WellEd</span>
+                    <input type="checkbox" checked={addWE} onChange={e=>setAddWE(e.target.checked)} style={{cursor:"pointer"}}/>
+                  </div>
+                  {addWE&&<div style={{display:"grid",gridTemplateColumns:"1fr 54px",gap:6}}>
+                    <select value={weType} onChange={e=>setWeType(e.target.value)} style={{...INP,fontSize:11}}><option value="full">Full Test (1.0)</option><option value="section">Section (0.5)</option></select>
+                    <input type="number" min={1} max={10} value={weCnt} onChange={e=>setWeCnt(Number(e.target.value))} style={{...INP,fontSize:12,textAlign:"center"}}/>
+                  </div>}
+                </div>
+              </div>
+              <div style={{background:selWS.length>0?"#ecfdf5":"#f8fafc",border:`1.5px solid ${selWS.length>0?"#a7f3d0":"#e2e8f0"}`,borderRadius:8,padding:10,fontSize:12,color:selWS.length>0?"#065f46":"#94a3b8",textAlign:"center",fontWeight:600}}>
+                {selWS.length>0?`✅ ${selWS.length} worksheet${selWS.length!==1?"s":""} selected`:"No worksheets selected yet"}
+              </div>
+            </div>
+
+            <div style={{...CARD,display:"flex",flexDirection:"column",overflow:"hidden",maxHeight:"calc(100vh - 188px)"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexShrink:0}}>
+                <div style={{fontSize:14,fontWeight:800,color:B2}}>Worksheets <span style={{fontSize:12,fontWeight:500,color:"#94a3b8"}}>({filtWS.length} shown)</span></div>
+                <div style={{display:"flex",gap:6}}>
+                  <button onClick={()=>{const a={};filtWS.forEach(ws=>{a[ws.name]=true;});setChk(prev=>({...prev,...a}));}} style={{...mkBtn("#f1f5f9","#475569"),padding:"4px 12px",fontSize:11}}>Select All</button>
+                  <button onClick={()=>setChk({})} style={{...mkBtn("#fee2e2","#dc2626"),padding:"4px 12px",fontSize:11}}>Clear</button>
+                </div>
+              </div>
+              <div style={{overflowY:"auto",flex:1}}>
+                {grouped.length===0&&<div style={{color:"#94a3b8",textAlign:"center",paddingTop:40,fontSize:13}}>No worksheets match filters.</div>}
+                {grouped.map(g=>(
+                  <div key={`${g.subject}|${g.domain}|${g.subdomain}`} style={{marginBottom:16}}>
+                    <div style={{fontSize:10,fontWeight:800,color:SC[g.subject]||B2,textTransform:"uppercase",letterSpacing:.6,padding:"4px 10px",background:g.subject==="Math"?"#eff6ff":"#f0f9ff",borderRadius:5,marginBottom:6,borderLeft:`3px solid ${SC[g.subject]||B2}`}}>
+                      {g.subject} › {g.domain} › {g.subdomain}
+                    </div>
+                    {g.sheets.map(ws=>{
+                      const ck=!!chk[ws.name];
+                      const cnt=curStudent?.assignments?.reduce((n,a)=>n+a.worksheets.filter(w=>w.name===ws.name).length,0)||0;
+                      return(
+                        <div key={ws.name} onClick={()=>setChk(prev=>({...prev,[ws.name]:!prev[ws.name]}))} style={{display:"flex",alignItems:"center",padding:"7px 10px",cursor:"pointer",borderRadius:8,marginBottom:3,background:ck?"#eff6ff":"transparent",border:ck?"1.5px solid #bfdbfe":"1.5px solid transparent"}}>
+                          <input type="checkbox" checked={ck} onChange={()=>{}} onClick={e=>e.stopPropagation()} style={{marginRight:10,cursor:"pointer"}}/>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:12,fontWeight:ck?700:400,color:"#1e293b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ws.name}</div>
+                            {ws.isWellEd&&<div style={{fontSize:10,color:"#7c3aed",fontWeight:600}}>WellEd Assignment</div>}
+                          </div>
+                          {cnt>0&&<span style={{...mkPill("#fef3c7","#92400e"),marginRight:6,flexShrink:0}}>×{cnt}</span>}
+                          <span style={{...mkPill(DC[ws.difficulty]+"20",DC[ws.difficulty]),flexShrink:0}}>{ws.difficulty}</span>
+                          {timeDrill&&ck&&<input type="number" placeholder="min" min={1} max={120} value={timeLims[ws.name]||""} onChange={e=>{e.stopPropagation();setTimeLims(prev=>({...prev,[ws.name]:e.target.value}));}} onClick={e=>e.stopPropagation()} style={{width:48,marginLeft:8,border:"1.5px solid #93c5fd",borderRadius:5,padding:"3px 5px",fontSize:11,outline:"none"}}/>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              <button onClick={generate} style={{...mkBtn(B2,"#fff"),padding:"13px 20px",fontSize:14,boxShadow:"0 3px 10px rgba(0,74,121,.3)"}}>⚡ Generate Assignment</button>
+              <div style={{...CARD,flex:1,display:"flex",flexDirection:"column"}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10,flexShrink:0}}>
+                  <div style={{fontSize:13,fontWeight:800,color:B2}}>Output</div>
+                  <button onClick={copyOut} disabled={!output} style={{...mkBtn(copied?"#22c55e":"#f1f5f9",copied?"#fff":"#475569"),padding:"5px 14px",fontSize:12}}>{copied?"✓ Copied!":"📋 Copy"}</button>
+                </div>
+                <textarea readOnly value={output||"Generate an assignment to see output here…"} style={{flex:1,border:"1.5px solid #e2e8f0",borderRadius:8,padding:12,fontSize:11,fontFamily:"monospace",color:output?"#1e293b":"#94a3b8",resize:"none",background:"#f8fafc",lineHeight:1.6,minHeight:200}}/>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {tab==="students"&&!profile&&(
+          <div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+              <div style={{fontSize:20,fontWeight:800,color:B2}}>Students</div>
+              <button onClick={()=>setShowAdd(!showAdd)} style={{...mkBtn(B2,"#fff")}}>+ Add Student</button>
+            </div>
+            {showAdd&&(
+              <div style={{...CARD,maxWidth:520,marginBottom:16}}>
+                <div style={{fontSize:14,fontWeight:800,color:B2,marginBottom:14}}>New Student</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+                  {[["name","Student Name *","e.g. Jane Smith"],["grade","Grade Level","e.g. 11th"],["tutor","Assigned Tutor","Tutor name"],["notes","Notes","Optional info"]].map(([k,label,ph])=>(
+                    <div key={k}>
+                      <div style={{fontSize:10,color:"#64748b",marginBottom:4,fontWeight:600}}>{label}</div>
+                      <input value={newS[k]} onChange={e=>setNewS(prev=>({...prev,[k]:e.target.value}))} placeholder={ph} style={INP}/>
+                    </div>
+                  ))}
+                </div>
+                <div style={{display:"flex",gap:8}}>
+                  <button onClick={addStudent} style={{...mkBtn(B2,"#fff")}}>Add Student</button>
+                  <button onClick={()=>setShowAdd(false)} style={{...mkBtn("#f1f5f9","#475569")}}>Cancel</button>
+                </div>
+              </div>
+            )}
+            {students.length===0?(
+              <div style={{...CARD,padding:50,textAlign:"center",color:"#94a3b8"}}><div style={{fontSize:32,marginBottom:8}}>👤</div><div style={{fontSize:16,fontWeight:600}}>No students enrolled yet</div></div>
+            ):(
+              <div style={{...CARD,overflow:"hidden"}}>
+                <table style={{width:"100%",borderCollapse:"collapse"}}>
+                  <thead><tr style={{background:B2,color:"#fff"}}>{["Name","Grade","Tutor","Date Added","Worksheets","Scores","Actions"].map(h=><th key={h} style={{padding:"10px 14px",textAlign:"left",fontSize:11,fontWeight:700}}>{h}</th>)}</tr></thead>
+                  <tbody>
+                    {students.map((st,i)=>{
+                      const wsCnt=(st.assignments||[]).reduce((n,a)=>n+a.worksheets.length,0);
+                      return(
+                        <tr key={st.id} style={{borderBottom:"1px solid #f1f5f9",background:i%2===0?"#fff":"#f8fafc"}}>
+                          <td style={{padding:"11px 14px",fontWeight:700,color:B2,fontSize:14}}>{st.name}</td>
+                          <td style={{padding:"11px 14px",fontSize:13,color:"#475569"}}>{st.grade||"—"}</td>
+                          <td style={{padding:"11px 14px",fontSize:13,color:"#475569"}}>{st.tutor||"—"}</td>
+                          <td style={{padding:"11px 14px",fontSize:12,color:"#94a3b8"}}>{st.dateAdded}</td>
+                          <td style={{padding:"11px 14px"}}><Tag c="#eff6ff" t="#1d4ed8">{wsCnt} worksheets</Tag></td>
+                          <td style={{padding:"11px 14px"}}><Tag c="#f0fdf4" t="#15803d">{(st.scores||[]).length} scores</Tag></td>
+                          <td style={{padding:"11px 14px"}}><div style={{display:"flex",gap:6}}><button onClick={()=>openProfile(st)} style={{...mkBtn("#eff6ff",B2),padding:"4px 12px",fontSize:12}}>Profile</button><button onClick={()=>delStudent(st.id)} style={{...mkBtn("#fee2e2","#dc2626"),padding:"4px 10px",fontSize:12}}>✕</button></div></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab==="students"&&profile&&(()=>{
+          const p=students.find(st=>st.id===profile.id)||profile;
+          return(
+            <div>
+              <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16,flexWrap:"wrap"}}>
+                <button onClick={()=>setProfile(null)} style={{...mkBtn("#f1f5f9","#475569"),padding:"5px 12px"}}>← Back</button>
+                <div style={{width:44,height:44,borderRadius:12,background:B2,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:18,fontWeight:700}}>{p.name.charAt(0).toUpperCase()}</div>
+                <div>
+                  <div style={{fontSize:22,fontWeight:800,color:B2}}>{p.name}</div>
+                  <div style={{display:"flex",gap:6,marginTop:4,flexWrap:"wrap"}}>
+                    {p.grade&&<Tag c="#eff6ff" t="#1d4ed8">Grade {p.grade}</Tag>}
+                    {p.tutor&&<Tag c="#f0fdf4" t="#15803d">📐 {p.tutor}</Tag>}
+                    <Tag c="#f1f5f9" t="#475569">Since {p.dateAdded}</Tag>
+                    {p.notes&&<Tag c="#fffbeb" t="#92400e">📝 {p.notes}</Tag>}
+                  </div>
+                </div>
+                <div style={{marginLeft:"auto",display:"flex",gap:10}}>
+                  {[[(p.assignments||[]).reduce((n,a)=>n+a.worksheets.length,0),"Worksheets","#eff6ff",B2],[(p.scores||[]).length,"Scores","#f0fdf4","#15803d"],[(p.assignments||[]).length,"Sessions","#fefce8","#92400e"]].map(([v,l,bg,fg])=>(
+                    <div key={l} style={{textAlign:"center",background:bg,borderRadius:10,padding:"8px 16px"}}>
+                      <div style={{fontWeight:800,color:fg,fontSize:20}}>{v}</div>
+                      <div style={{color:"#64748b",fontSize:10}}>{l}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div style={{display:"flex",gap:4,marginBottom:16,borderBottom:"2px solid #e2e8f0"}}>
+                {[{id:"history",icon:"📋",label:"Assignment History"},{id:"preassign",icon:"✅",label:"Pre-Assign Worksheets"},{id:"scores",icon:"📊",label:"WellEd Scores"}].map(pt=>(
+                  <button key={pt.id} onClick={()=>setPtab(pt.id)} style={{border:"none",background:"none",cursor:"pointer",padding:"10px 18px",fontSize:13,fontWeight:ptab===pt.id?700:500,color:ptab===pt.id?B2:"#64748b",borderBottom:ptab===pt.id?`3px solid ${B2}`:"3px solid transparent",marginBottom:-2,display:"flex",alignItems:"center",gap:6}}>
+                    {pt.icon} {pt.label}
+                  </button>
+                ))}
+              </div>
+
+              {ptab==="history"&&(
+                <div>
+                  {(!p.assignments||p.assignments.length===0)?(
+                    <div style={{...CARD,padding:40,textAlign:"center",color:"#94a3b8"}}>No assignments recorded yet.</div>
+                  ):(
+                    <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                      {[...p.assignments].reverse().map(asg=>(
+                        <div key={asg.id} style={{...CARD}}>
+                          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+                            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                              <span style={{fontWeight:700,color:B2,fontSize:14}}>{asg.date==="pre-assigned"?"Pre-Assigned Session":asg.date}</span>
+                              {asg.preAssigned&&<Tag c="#fef3c7" t="#92400e">PRE-EXISTING</Tag>}
+                              {asg.timeDrill&&<Tag c="#eff6ff" t="#1d4ed8">⏱ TIMED</Tag>}
+                              {asg.oneNote&&<Tag c="#f0fdf4" t="#15803d">📝 ONENOTE</Tag>}
+                              <span style={mkPill("#f1f5f9","#64748b")}>{asg.worksheets.length} worksheet{asg.worksheets.length!==1?"s":""}</span>
+                            </div>
+                            <button onClick={()=>delAsg(asg.id)} style={{...mkBtn("#fee2e2","#dc2626"),padding:"3px 10px",fontSize:11}}>✕ Remove</button>
+                          </div>
+                          <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                            {asg.worksheets.map(ws=>(
+                              <span key={ws.name} style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:6,padding:"3px 9px",fontSize:11,color:"#475569"}}>{ws.name} <span style={{color:DC[ws.difficulty],fontSize:9,fontWeight:700}}>({ws.difficulty})</span></span>
+                            ))}
+                            {asg.practiceExams?.map((ex,i)=>(
+                              <span key={i} style={{background:"#ede9fe",border:"1px solid #c4b5fd",borderRadius:6,padding:"3px 9px",fontSize:11,color:"#7c3aed"}}>📚 {ex.platform} – {ex.count} {ex.type}</span>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {ptab==="preassign"&&(
+                <div>
+                  <div style={{background:"#fffbeb",border:"1.5px solid #fcd34d",borderRadius:10,padding:12,marginBottom:14,fontSize:13,color:"#92400e"}}>
+                    💡 <strong>Pre-Assign Panel</strong> — Mark worksheets already given before this student was added to the system.
+                  </div>
+                  <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
+                    {["All","Reading & Writing","Math"].map(s=>(
+                      <button key={s} onClick={()=>setPaSubj(s)} style={{...mkBtn(paSubj===s?B2:"#f1f5f9",paSubj===s?"#fff":"#475569"),padding:"5px 14px",fontSize:12}}>{s==="Reading & Writing"?"R&W":s}</button>
+                    ))}
+                    <input placeholder="🔍 Search..." value={paSrch} onChange={e=>setPaSrch(e.target.value)} style={{...INP,width:180}}/>
+                    <span style={{fontSize:12,color:"#64748b",marginLeft:"auto"}}>{Object.values(paChk).filter(Boolean).length} selected</span>
+                  </div>
+                  <div style={{...CARD,maxHeight:500,overflowY:"auto"}}>
+                    {paGrouped.map(g=>(
+                      <div key={`${g.subject}|${g.domain}|${g.subdomain}`} style={{marginBottom:14}}>
+                        <div style={{fontSize:10,fontWeight:800,color:SC[g.subject]||B2,textTransform:"uppercase",letterSpacing:.6,padding:"3px 10px",background:g.subject==="Math"?"#eff6ff":"#f0f9ff",borderRadius:5,marginBottom:6,borderLeft:`3px solid ${SC[g.subject]||B2}`}}>
+                          {g.subject} › {g.domain} › {g.subdomain}
+                        </div>
+                        {g.sheets.map(ws=>{
+                          const already=p.assignments?.some(a=>a.worksheets.some(w=>w.name===ws.name));
+                          return(
+                            <div key={ws.name} onClick={()=>!already&&setPaChk(prev=>({...prev,[ws.name]:!prev[ws.name]}))} style={{display:"flex",alignItems:"center",padding:"6px 10px",cursor:already?"default":"pointer",borderRadius:7,marginBottom:2,background:paChk[ws.name]?"#f0fdf4":already?"#fefce8":"transparent",border:paChk[ws.name]?"1.5px solid #86efac":already?"1.5px solid #fde68a":"1.5px solid transparent"}}>
+                              <input type="checkbox" checked={!!paChk[ws.name]||already} disabled={already} readOnly onChange={()=>{}} onClick={e=>e.stopPropagation()} style={{marginRight:9,cursor:already?"default":"pointer"}}/>
+                              <span style={{fontSize:12,flex:1,color:already?"#78716c":"#1e293b"}}>{ws.name}{already&&<span style={{fontSize:9,marginLeft:8,color:"#a16207",fontWeight:800,background:"#fef3c7",padding:"1px 6px",borderRadius:4}}>✓ ASSIGNED</span>}</span>
+                              <span style={{fontSize:10,color:DC[ws.difficulty],fontWeight:700}}>{ws.difficulty}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{marginTop:12,display:"flex",gap:8}}>
+                    <button onClick={savePreAssign} style={{...mkBtn(B2,"#fff"),padding:"9px 20px"}}>✅ Save Pre-Assigned ({Object.values(paChk).filter(Boolean).length} selected)</button>
+                    <button onClick={()=>setPaChk({})} style={{...mkBtn("#f1f5f9","#475569")}}>Clear</button>
+                  </div>
+                </div>
+              )}
+
+              {ptab==="scores"&&(
+                <div style={{display:"grid",gridTemplateColumns:"310px 1fr",gap:16}}>
+                  <div style={{...CARD}}>
+                    <div style={{fontSize:14,fontWeight:800,color:B2,marginBottom:14}}>Add WellEd Score</div>
+                    <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                      <div><div style={{fontSize:10,color:"#64748b",marginBottom:4,fontWeight:600}}>DATE</div><input type="date" value={sfm.date} onChange={e=>setSfm(prev=>({...prev,date:e.target.value}))} style={INP}/></div>
+                      <div>
+                        <div style={{fontSize:10,color:"#64748b",marginBottom:4,fontWeight:600}}>TEST / SECTION</div>
+                        <select value={sfm.testType} onChange={e=>setSfm(prev=>({...prev,testType:e.target.value}))} style={INP}>
+                          <option value="">Select test type…</option>
+                          <optgroup label="Reading & Writing">
+                            <option>R&W — Information & Ideas</option>
+                            <option>R&W — Expression of Ideas</option>
+                            <option>R&W — Standard English Conventions</option>
+                            <option>R&W — Full Section</option>
+                          </optgroup>
+                          <optgroup label="Math">
+                            <option>Math — Algebra</option>
+                            <option>Math — Advanced Math</option>
+                            <option>Math — Problem Solving & Data Analysis</option>
+                            <option>Math — Geometry & Trigonometry</option>
+                            <option>Math — Full Section</option>
+                          </optgroup>
+                          <optgroup label="Full Practice Tests">
+                            <option>WellEd Full Practice Test</option>
+                            <option>BlueBook Full Practice Test</option>
+                            <option>Official SAT / PSAT</option>
+                          </optgroup>
+                          <option value="Other">Other (see notes)</option>
+                        </select>
+                      </div>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                        <div><div style={{fontSize:10,color:"#64748b",marginBottom:4,fontWeight:600}}>SCORE</div><input type="number" value={sfm.score} onChange={e=>setSfm(prev=>({...prev,score:e.target.value}))} placeholder="e.g. 650" style={INP}/></div>
+                        <div><div style={{fontSize:10,color:"#64748b",marginBottom:4,fontWeight:600}}>MAX SCORE</div><input type="number" value={sfm.maxScore} onChange={e=>setSfm(prev=>({...prev,maxScore:e.target.value}))} placeholder="e.g. 800" style={INP}/></div>
+                      </div>
+                      <div><div style={{fontSize:10,color:"#64748b",marginBottom:4,fontWeight:600}}>NOTES</div><input value={sfm.notes} onChange={e=>setSfm(prev=>({...prev,notes:e.target.value}))} placeholder="Optional notes…" style={INP}/></div>
+                      <button onClick={addScore} style={{...mkBtn(B2,"#fff"),padding:10,fontSize:13}}>+ Add Score</button>
+                    </div>
+                  </div>
+                  <div style={{...CARD}}>
+                    <div style={{fontSize:14,fontWeight:800,color:B2,marginBottom:14}}>Score History</div>
+                    {(!p.scores||p.scores.length===0)?(
+                      <div style={{color:"#94a3b8",textAlign:"center",paddingTop:30,fontSize:13}}>No scores yet.</div>
+                    ):(
+                      <>
+                        <div style={{overflowX:"auto",marginBottom:16}}>
+                          <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                            <thead><tr style={{background:"#f1f5f9"}}>{["Date","Test / Section","Score","Max","%","Notes",""].map(h=><th key={h} style={{padding:"7px 11px",textAlign:"left",fontSize:10,color:"#64748b",fontWeight:700}}>{h}</th>)}</tr></thead>
+                            <tbody>
+                              {[...p.scores].sort((a,b)=>b.date.localeCompare(a.date)).map(sc=>{
+                                const pct=sc.maxScore?Math.round((Number(sc.score)/Number(sc.maxScore))*100):null;
+                                return(
+                                  <tr key={sc.id} style={{borderBottom:"1px solid #f1f5f9"}}>
+                                    <td style={{padding:"8px 11px",color:"#475569"}}>{sc.date}</td>
+                                    <td style={{padding:"8px 11px",fontWeight:700,color:B2}}>{sc.testType}</td>
+                                    <td style={{padding:"8px 11px",fontWeight:800,fontSize:14}}>{sc.score}</td>
+                                    <td style={{padding:"8px 11px",color:"#94a3b8"}}>{sc.maxScore||"—"}</td>
+                                    <td style={{padding:"8px 11px"}}>{pct!==null&&<span style={mkPill(pct>=75?"#f0fdf4":pct>=60?"#fffbeb":"#fef2f2",pct>=75?"#15803d":pct>=60?"#92400e":"#dc2626")}>{pct}%</span>}</td>
+                                    <td style={{padding:"8px 11px",color:"#94a3b8",fontSize:11}}>{sc.notes||"—"}</td>
+                                    <td style={{padding:"8px 11px"}}><button onClick={()=>delScore(sc.id)} style={{...mkBtn("#fee2e2","#dc2626"),padding:"2px 9px",fontSize:11}}>✕</button></td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                        <div style={{background:"#f8fafc",borderRadius:10,padding:14}}>
+                          <div style={{fontSize:11,fontWeight:800,color:"#475569",marginBottom:10}}>Trend Summary</div>
+                          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:8}}>
+                            {Object.entries(p.scores.reduce((acc,sc)=>{if(!acc[sc.testType])acc[sc.testType]=[];if(sc.score)acc[sc.testType].push(Number(sc.score));return acc;},{})).map(([type,scArr])=>{
+                              const avg=scArr.reduce((s,v)=>s+v,0)/scArr.length;
+                              const latest=scArr[scArr.length-1];
+                              const trend=scArr.length>1?latest-scArr[scArr.length-2]:null;
+                              return(
+                                <div key={type} style={{background:"#fff",borderRadius:8,padding:10,border:"1px solid #e2e8f0"}}>
+                                  <div style={{fontSize:9,fontWeight:800,color:"#94a3b8",textTransform:"uppercase",marginBottom:5,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{type}</div>
+                                  <div style={{fontSize:20,fontWeight:800,color:B2}}>{latest}</div>
+                                  <div style={{fontSize:11,color:"#64748b",marginTop:2}}>Avg: {avg.toFixed(0)}</div>
+                                  {trend!==null&&<div style={{fontSize:12,color:trend>0?"#15803d":trend<0?"#dc2626":"#64748b",fontWeight:700,marginTop:3}}>{trend>0?"▲ +":trend<0?"▼ ":"→ "}{Math.abs(trend)}</div>}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {tab==="heatmap"&&(
+          <div>
+            <div style={{fontSize:20,fontWeight:800,color:B2,marginBottom:4}}>Assignment Coverage Heat Map</div>
+            <div style={{fontSize:13,color:"#64748b",marginBottom:14}}>Worksheets from each domain assigned per student. Click a name to view their profile.</div>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,fontSize:11,color:"#475569"}}>
+              <span>None</span>{["#f1f5f9","#bfdbfe","#60a5fa","#3b82f6","#1d4ed8"].map((c,i)=><div key={i} style={{width:22,height:22,borderRadius:4,background:c,border:"1px solid #e2e8f0"}}/>)}<span>Most</span>
+            </div>
+            {students.length===0?(
+              <div style={{...CARD,padding:40,textAlign:"center",color:"#94a3b8"}}>No students enrolled yet.</div>
+            ):(
+              <div style={{...CARD,overflowX:"auto"}}>
+                <table style={{borderCollapse:"collapse",fontSize:12}}>
+                  <thead>
+                    <tr>
+                      <th style={{padding:"8px 14px",textAlign:"left",color:"#475569",fontWeight:700,fontSize:11,minWidth:140,borderRight:"2px solid #e2e8f0"}}>Student</th>
+                      {heatDoms.map(d=><th key={d} style={{padding:"4px 2px",textAlign:"center",fontSize:9,color:"#64748b",fontWeight:700,width:52}}><div style={{writingMode:"vertical-lr",transform:"rotate(180deg)",height:90,overflow:"hidden"}}>{d}</div></th>)}
+                      <th style={{padding:"8px 12px",textAlign:"center",color:"#475569",fontWeight:700,fontSize:11,borderLeft:"2px solid #e2e8f0"}}>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {students.map((st,i)=>{
+                      const total=(st.assignments||[]).reduce((n,a)=>n+a.worksheets.length,0);
+                      return(
+                        <tr key={st.id} style={{borderBottom:"1px solid #f1f5f9",background:i%2===0?"#fff":"#f9fafb"}}>
+                          <td style={{padding:"8px 14px",borderRight:"2px solid #e2e8f0"}}>
+                            <button onClick={()=>openProfile(st)} style={{background:"none",border:"none",color:B2,fontWeight:700,cursor:"pointer",fontSize:13,padding:0}}>{st.name}</button>
+                            {st.grade&&<span style={{...mkPill("#f1f5f9","#64748b"),marginLeft:6}}>{st.grade}</span>}
+                          </td>
+                          {heatDoms.map(d=>{const v=getHV(st,d);return(
+                            <td key={d} style={{padding:3,textAlign:"center"}}>
+                              <div style={{width:34,height:34,borderRadius:7,background:heatC(v),display:"flex",alignItems:"center",justifyContent:"center",fontWeight:v>0?800:400,color:v>0?"#1e3a5f":"#e2e8f0",fontSize:12,margin:"0 auto"}} title={`${st.name}: ${v} in ${d}`}>{v||"·"}</div>
+                            </td>
+                          );})}
+                          <td style={{padding:"8px 12px",textAlign:"center",fontWeight:800,color:total>0?B2:"#94a3b8",fontSize:14,borderLeft:"2px solid #e2e8f0"}}>{total}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab==="scores"&&(
+          <div>
+            <div style={{fontSize:20,fontWeight:800,color:B2,marginBottom:4}}>Score Tracking Overview</div>
+            <div style={{fontSize:13,color:"#64748b",marginBottom:16}}>Latest scores and trends. Add scores from each student's profile.</div>
+            {students.every(st=>!(st.scores?.length))?(
+              <div style={{...CARD,padding:50,textAlign:"center",color:"#94a3b8"}}><div style={{fontSize:32,marginBottom:8}}>📊</div><div style={{fontSize:16,fontWeight:600}}>No scores recorded yet</div><div style={{fontSize:13,marginTop:4}}>Open a student profile → WellEd Scores tab</div></div>
+            ):(
+              <div style={{display:"flex",flexDirection:"column",gap:14}}>
+                {students.filter(st=>st.scores?.length>0).map(st=>{
+                  const byType=st.scores.reduce((acc,sc)=>{if(!acc[sc.testType])acc[sc.testType]=[];acc[sc.testType].push({date:sc.date,score:Number(sc.score),max:Number(sc.maxScore)});return acc;},{});
+                  const latest=[...st.scores].sort((a,b)=>b.date.localeCompare(a.date))[0];
+                  return(
+                    <div key={st.id} style={{...CARD}}>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+                        <div style={{display:"flex",alignItems:"center",gap:10}}>
+                          <div style={{width:36,height:36,borderRadius:10,background:B2,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:16}}>{st.name.charAt(0)}</div>
+                          <div><div style={{fontSize:16,fontWeight:800,color:B2}}>{st.name}</div><div style={{fontSize:11,color:"#94a3b8"}}>Last score: {latest?.date}</div></div>
+                        </div>
+                        <button onClick={()=>openProfile(st)} style={{...mkBtn("#eff6ff",B2),padding:"6px 14px",fontSize:12}}>View Profile & Add Scores</button>
+                      </div>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(175px,1fr))",gap:10}}>
+                        {Object.entries(byType).map(([type,entries])=>{
+                          const lv=entries[entries.length-1];
+                          const pct=lv.max?Math.round((lv.score/lv.max)*100):null;
+                          const improvement=entries.length>1?lv.score-entries[0].score:null;
+                          const pColor=pct===null?"#64748b":pct>=75?"#15803d":pct>=60?"#d97706":"#dc2626";
+                          return(
+                            <div key={type} style={{background:"#f8fafc",borderRadius:10,padding:14,border:"1.5px solid #e2e8f0",position:"relative",overflow:"hidden"}}>
+                              <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:pct===null?B2:pct>=75?"#22c55e":pct>=60?"#f59e0b":"#ef4444"}}/>
+                              <div style={{fontSize:9,fontWeight:800,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.7,marginBottom:6,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{type}</div>
+                              <div style={{fontSize:24,fontWeight:900,color:B2,lineHeight:1}}>{lv.score}</div>
+                              {pct!==null&&<div style={{fontSize:13,color:pColor,fontWeight:700,marginTop:4}}>{pct}%</div>}
+                              {improvement!==null&&<div style={{fontSize:11,color:improvement>0?"#15803d":improvement<0?"#dc2626":"#64748b",marginTop:5,fontWeight:600}}>{improvement>0?"▲ +":improvement<0?"▼ ":"→ "}{Math.abs(improvement)} since start</div>}
+                              <div style={{fontSize:10,color:"#94a3b8",marginTop:4}}>{entries.length} score{entries.length!==1?"s":""} on record</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+      </div>
+      <div style={{background:B1,color:"#64748b",padding:"10px 24px",display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:11,flexShrink:0}}>
+        <span style={{fontWeight:700,color:"#94a3b8"}}>Affordable Tutoring Solutions Inc.</span>
+        <span>Support: Aidan Meyers · ameyers@affordabletutoringsolutions.org · (321) 341-9820</span>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
