@@ -43,12 +43,14 @@ VOCAB_SETS.forEach(name=>{
 });
 
 /* ============ INSTRUCTION TEMPLATES ============ */
+// Each block: {title, body}. Title is bolded with ** in output. Intro A has no title.
 const INTRO_A = `The recording of today's session has been posted on Wise. Please complete the following worksheets using the PSM instructions posted in the PSMs modules.`;
-const INTRO_B = `Important Reminder: Please book your next session in advance, timing it for when you expect to have these PSMs completed. After completing the worksheets, check and mark your work according to the PSM instructions, then upload your marked work as a comment to this PSMs assignment.`;
-const ONENOTE_TXT = `OneNote Instructions: Printouts of the worksheet have been added to the next session's page on OneNote for you to complete all of your work/annotations on. Please complete all of your work in black ink and check all answers with the answer keys provided below. Please use red ink for marks on your paper (correct/incorrect) and for stars on questions you had trouble on. Please make sure to leave room for us to work through problems you miss on each page.`;
-const WED_TXT = `WellEd Labs Domain Assignment Instructions: Please complete assigned domain assignments on WellEd Labs. Use the instructions for WellEd Labs practice exams located in your Wise "Full Practice Exam Instructions" Module to login to the platform and make sure to toggle the assignments section in the top right of the page, so that you see the topic-specific assignments you are to complete.  https://ats.practicetest.io/sign-in`;
-const VOCAB_TXT = `WellEd Labs Vocab Instructions: Please complete assigned vocab flashcards and/or quizzes on WellEd Labs. Login to the platform using the instructions in your Wise "Full Practice Exam Instructions" Module and toggle to the Vocab section in the top right of the page, so that you see the vocab sets and quizzes you are to complete.  https://ats.practicetest.io/sign-in`;
-const TIME_TXT = `Time Drilling Instructions: Time limits are indicated in parentheses before each worksheet name. Please set a timer for the allotted minutes before beginning each worksheet and stop working when time expires. Mark any unfinished questions clearly so we can discuss them in the next session.`;
+const INTRO_B = {title:"Important Reminder:", body:"Please book your next session in advance, timing it for when you expect to have these PSMs completed. After completing the worksheets, check and mark your work according to the PSM instructions, then upload your marked work as a comment to this PSMs assignment."};
+const ONENOTE_TXT = {title:"OneNote Instructions:", body:"Printouts of the worksheet have been added to the next session's page on OneNote for you to complete all of your work/annotations on. Please complete all of your work in black ink and check all answers with the answer keys provided below. Please use red ink for marks on your paper (correct/incorrect) and for stars on questions you had trouble on. Please make sure to leave room for us to work through problems you miss on each page."};
+const WED_TXT = {title:"WellEd Labs Domain Assignment Instructions:", body:"Please complete assigned domain assignments on WellEd Labs. Use the instructions for WellEd Labs practice exams located in your Wise \"Full Practice Exam Instructions\" Module to login to the platform and make sure to toggle the assignments section in the top right of the page, so that you see the topic-specific assignments you are to complete.  https://ats.practicetest.io/sign-in"};
+const VOCAB_TXT = {title:"WellEd Labs Vocab Instructions:", body:"Please complete assigned vocab flashcards and/or quizzes on WellEd Labs. Login to the platform using the instructions in your Wise \"Full Practice Exam Instructions\" Module and toggle to the Vocab section in the top right of the page, so that you see the vocab sets and quizzes you are to complete.  https://ats.practicetest.io/sign-in"};
+const TIME_TXT = {title:"Time Drilling Instructions:", body:"Time limits are indicated in parentheses before each worksheet name. Please set a timer for the allotted minutes before beginning each worksheet and stop working when time expires. Mark any unfinished questions clearly so we can discuss them in the next session."};
+const fmtInstr = (o)=>`**${o.title}** ${o.body}`;
 
 /* ============ STYLE HELPERS ============ */
 const INP={border:"1px solid #cbd5e1",borderRadius:7,padding:"7px 11px",fontSize:13,outline:"none",width:"100%",background:"#fff",color:"#1e293b"};
@@ -73,9 +75,17 @@ function Toggle({on,set,label,sub}){
   );
 }
 
+/* ============ SAT SCORE CONVERSION TABLE ============ */
+// From College Board Practice Test #4 scoring guide
+// Indexed by raw score; each value is [lower, upper] of the scaled score range
+const RW_TABLE = [[200,200],[200,200],[200,200],[200,200],[200,200],[200,200],[200,200],[200,210],[200,220],[210,230],[230,250],[240,260],[250,270],[260,280],[280,300],[290,310],[320,340],[340,360],[350,370],[360,380],[370,390],[370,390],[380,400],[390,410],[400,420],[410,430],[420,440],[420,440],[430,450],[440,460],[450,470],[460,480],[460,480],[470,490],[480,500],[490,510],[490,510],[500,520],[510,530],[520,540],[530,550],[540,560],[540,560],[550,570],[560,580],[570,590],[580,600],[590,610],[590,610],[600,620],[610,630],[620,640],[630,650],[630,650],[640,660],[650,670],[660,680],[670,690],[680,700],[690,710],[700,720],[710,730],[720,740],[730,750],[750,770],[770,790],[790,800]];
+const MATH_TABLE = [[200,200],[200,200],[200,200],[200,200],[200,200],[200,200],[200,200],[200,220],[200,230],[220,250],[250,280],[280,310],[290,320],[300,330],[310,340],[320,350],[330,360],[330,360],[340,370],[350,380],[360,390],[370,400],[370,400],[380,410],[390,420],[400,430],[420,450],[430,460],[440,470],[460,490],[470,500],[480,510],[500,530],[510,540],[520,550],[530,560],[550,580],[560,590],[570,600],[580,610],[590,620],[600,630],[620,650],[630,660],[650,680],[670,700],[690,720],[710,740],[730,760],[740,770],[750,780],[760,790],[770,800],[780,800],[790,800]];
+const scaleRW = (raw)=>{const r=Math.max(0,Math.min(66,raw|0));return RW_TABLE[r];};
+const scaleMath = (raw)=>{const r=Math.max(0,Math.min(54,raw|0));return MATH_TABLE[r];};
+
 /* ============ PDF DIAGNOSTIC PARSER ============ */
 // Parses a ZipGrade SAT Diagnostic PDF, extracting the "Tag Name / Earn / Poss / %"
-// table at the end which contains domain + subdomain scores.
+// table at the end. Handles multi-line tag names. Detects Reading / Math Mod 1 / Math Mod 2.
 async function parseDiagnosticPdf(file){
   if(!window.pdfjsLib) throw new Error("pdf.js not loaded");
   const buf = await file.arrayBuffer();
@@ -84,7 +94,6 @@ async function parseDiagnosticPdf(file){
   for(let p=1;p<=pdf.numPages;p++){
     const page = await pdf.getPage(p);
     const tc = await page.getTextContent();
-    // Sort by y then x so we get readable line order
     const items = tc.items.map(it=>({s:it.str,x:it.transform[4],y:it.transform[5]}));
     items.sort((a,b)=>(b.y-a.y)||(a.x-b.x));
     let lastY=null, line=[];
@@ -96,29 +105,35 @@ async function parseDiagnosticPdf(file){
     if(line.length)lines.push(line.join(" ").trim());
     fullText += "\n" + lines.join("\n");
   }
-  // Determine quiz type from title
-  const isReading = /READING/i.test(fullText);
-  const isMath = /MATH/i.test(fullText);
-  const subject = isReading?"Reading & Writing":(isMath?"Math":"Unknown");
-  // Extract percent correct
+  // Detect quiz type from title
+  let subject="Unknown", module=null;
+  if(/SECTION\s*1[-\s]*READING/i.test(fullText) || (/READING/i.test(fullText) && !/MATH/i.test(fullText.split("TAGGED")[0]||""))) subject = "Reading & Writing";
+  if(/MATH\s*MOD\w*\s*\.?\s*1/i.test(fullText)){ subject = "Math"; module = 1; }
+  else if(/MATH\s*MOD\w*\s*\.?\s*2/i.test(fullText)){ subject = "Math"; module = 2; }
+  else if(/MATH/i.test(fullText) && subject==="Unknown"){ subject = "Math"; }
+
   const pctMatch = fullText.match(/Percent\s*Correct:?\s*([\d.]+)/i);
   const earnedMatch = fullText.match(/Earned\s*Points:?\s*(\d+)/i);
   const possMatch = fullText.match(/Possible\s*Points:?\s*(\d+)/i);
-  // Extract tag rows: lines after "TAGGED QUESTIONS & QUIZ"
-  const tagSection = fullText.split(/TAGGED\s*QUESTIONS\s*&\s*QUIZ/i)[1] || "";
-  // Pattern: <tag name> <earn> <poss> <%>
-  // The name may span lines; easier to use regex across whole section
+
+  // Extract tag rows. The section layout is:
+  //   <tag name possibly wrapped across lines> <space> <earn> <poss> <pct>
+  // We collapse whitespace/newlines then scan for sequences starting with "!SAT".
+  const tagSection = fullText.split(/TAGGED\s*QUESTIONS\s*&?\s*QUIZ/i)[1] || "";
+  const cleaned = tagSection.replace(/\s+/g," ").trim();
   const rows = [];
-  // Match: !SAT <name> <earn> <poss> <pct>  (where pct may be float)
-  const rx = /(!?SAT\s[^\n]*?)\s+(\d+)\s+(\d+)\s+([\d.]+)/g;
-  let m;
-  const cleaned = tagSection.replace(/\s+/g," ");
-  while((m = rx.exec(cleaned))!==null){
-    const rawName = m[1].replace(/^!SAT\s*/,"").replace(/\s*\(2024\)\s*$/,"").trim();
-    rows.push({tag:rawName,earn:Number(m[2]),poss:Number(m[3]),pct:Number(m[4])});
+  // Match: "!SAT <name...> <earn> <poss> <pct>" where the name is anything until we hit "number number float" at the end
+  // Split at each "!SAT " occurrence, then parse the trailing 3 numbers off each chunk.
+  const chunks = cleaned.split(/(?=!SAT\s)/g).filter(c=>c.trim().startsWith("!SAT"));
+  for(const chunk of chunks){
+    // End of chunk: "<name> <int> <int> <float>"
+    const m = chunk.match(/^(!SAT\s+.+?)\s+(\d+)\s+(\d+)\s+([\d.]+)\s*$/);
+    if(!m) continue;
+    let name = m[1].replace(/^!SAT\s+/,"").replace(/\s*\(2024\)\s*$/,"").replace(/\s+/g," ").trim();
+    rows.push({tag:name,earn:Number(m[2]),poss:Number(m[3]),pct:Number(m[4])});
   }
   return {
-    subject,
+    subject, module,
     percentCorrect: pctMatch?Number(pctMatch[1]):null,
     earned: earnedMatch?Number(earnedMatch[1]):null,
     possible: possMatch?Number(possMatch[1]):null,
@@ -128,69 +143,95 @@ async function parseDiagnosticPdf(file){
   };
 }
 
-// Map parsed tag names to canonical domain/subdomain in our catalog
-const TAG_MAP = {
-  // Reading & Writing — domains
-  "Craft & Structure":{subject:"Reading & Writing",kind:"domain",name:"Craft & Structure"},
-  "Information & Ideas":{subject:"Reading & Writing",kind:"domain",name:"Information & Ideas"},
-  "Expression of Ideas":{subject:"Reading & Writing",kind:"domain",name:"Expression of Ideas"},
-  "Standard English Conventions":{subject:"Reading & Writing",kind:"domain",name:"Standard English Conventions"},
-  // R&W subdomains (ZipGrade uses prefixes like "C&S -", "Info/Ideas -", "SEC -", "EOI -")
-  "C&S - Cross-Text Connections":{subject:"Reading & Writing",kind:"sub",domain:"Craft & Structure",name:"Cross Text Connections"},
-  "C&S - Text Structure & Purpose":{subject:"Reading & Writing",kind:"sub",domain:"Craft & Structure",name:"Text Structure & Purpose"},
-  "C&S - Words in Context":{subject:"Reading & Writing",kind:"sub",domain:"Craft & Structure",name:"Words in Context"},
-  "Info/Ideas - Central Idea & Details":{subject:"Reading & Writing",kind:"sub",domain:"Information & Ideas",name:"Central Ideas & Details"},
-  "Info/Ideas - Command of Evidence":{subject:"Reading & Writing",kind:"sub",domain:"Information & Ideas",name:"Command of Evidence"},
-  "Info/Ideas - Inferences":{subject:"Reading & Writing",kind:"sub",domain:"Information & Ideas",name:"Inferences"},
-  "EOI - Rhetorical Synthesis":{subject:"Reading & Writing",kind:"sub",domain:"Expression of Ideas",name:"Rhetorical Synthesis"},
-  "EOI - Transitions":{subject:"Reading & Writing",kind:"sub",domain:"Expression of Ideas",name:"Transitions"},
-  "SEC - Form Structure Sense":{subject:"Reading & Writing",kind:"sub",domain:"Standard English Conventions",name:"Form, Structure, & Sense"},
-  "SEC - Boundaries":{subject:"Reading & Writing",kind:"sub",domain:"Standard English Conventions",name:"Boundaries"},
+// Map parsed tag names to canonical domain/subdomain. Key is normalized lowercase, punctuation-light.
+const _rawTagMap = {
+  // R&W domains
+  "Craft & Structure":             ["Reading & Writing","domain","Craft & Structure"],
+  "Information & Ideas":           ["Reading & Writing","domain","Information & Ideas"],
+  "Expression of Ideas":           ["Reading & Writing","domain","Expression of Ideas"],
+  "Standard English Conventions":  ["Reading & Writing","domain","Standard English Conventions"],
+  // R&W subdomains
+  "C&S - Cross-Text Connections":           ["Reading & Writing","sub","Craft & Structure","Cross Text Connections"],
+  "C&S - Text Structure & Purpose":         ["Reading & Writing","sub","Craft & Structure","Text Structure & Purpose"],
+  "C&S - Words in Context":                 ["Reading & Writing","sub","Craft & Structure","Words in Context"],
+  "Info/Ideas - Central Idea & Details":    ["Reading & Writing","sub","Information & Ideas","Central Ideas & Details"],
+  "Info/Ideas - Command of Evidence":       ["Reading & Writing","sub","Information & Ideas","Command of Evidence"],
+  "Info/Ideas - Inferences":                ["Reading & Writing","sub","Information & Ideas","Inferences"],
+  "EOI - Rhetorical Synthesis":             ["Reading & Writing","sub","Expression of Ideas","Rhetorical Synthesis"],
+  "EOI - Transitions":                      ["Reading & Writing","sub","Expression of Ideas","Transitions"],
+  "SEC - Form Structure Sense":             ["Reading & Writing","sub","Standard English Conventions","Form, Structure, & Sense"],
+  "SEC - Boundaries":                       ["Reading & Writing","sub","Standard English Conventions","Boundaries"],
   // Math domains
-  "Algebra":{subject:"Math",kind:"domain",name:"Algebra"},
-  "Advanced Math":{subject:"Math",kind:"domain",name:"Advanced Math"},
-  "PSDA":{subject:"Math",kind:"domain",name:"Problem-Solving & Data Analysis"},
-  "Geometry & Trig":{subject:"Math",kind:"domain",name:"Geometry & Trigonometry"},
+  "Algebra":                       ["Math","domain","Algebra"],
+  "Advanced Math":                 ["Math","domain","Advanced Math"],
+  "PSDA":                          ["Math","domain","Problem-Solving & Data Analysis"],
+  "Geometry & Trig":               ["Math","domain","Geometry & Trigonometry"],
   // Math subdomains
-  "Alg- Linear Equations in One Variable":{subject:"Math",kind:"sub",domain:"Algebra",name:"Linear Equations (1 Variable)"},
-  "Alg- Linear Equations in Two Variables":{subject:"Math",kind:"sub",domain:"Algebra",name:"Linear Equations (2 Variables)"},
-  "Alg- Linear Functions":{subject:"Math",kind:"sub",domain:"Algebra",name:"Linear Functions"},
-  "Alg- Linear Inequalities":{subject:"Math",kind:"sub",domain:"Algebra",name:"Linear Inequalities"},
-  "Alg- Systems of Linear Equations":{subject:"Math",kind:"sub",domain:"Algebra",name:"Systems of Linear Equations"},
-  "AdvMath- Equivalent Expressions":{subject:"Math",kind:"sub",domain:"Advanced Math",name:"Equivalent Expressions"},
-  "AdvMath- Nonlinear Equations & SOEs":{subject:"Math",kind:"sub",domain:"Advanced Math",name:"Nonlinear Equations"},
-  "AdvMath- Nonlinear Functions":{subject:"Math",kind:"sub",domain:"Advanced Math",name:"Nonlinear Functions"},
-  "PSDA- Percentages":{subject:"Math",kind:"sub",domain:"Problem-Solving & Data Analysis",name:"Percentages"},
-  "PSDA- Ratios, Rates, Proportions, Units":{subject:"Math",kind:"sub",domain:"Problem-Solving & Data Analysis",name:"Ratios, Rates, Proportions, Units"},
-  "PSDA- One Var. Data Distributions":{subject:"Math",kind:"sub",domain:"Problem-Solving & Data Analysis",name:"One-Variable Data"},
-  "PSDA- Two-Variable Data":{subject:"Math",kind:"sub",domain:"Problem-Solving & Data Analysis",name:"Two-Variable Data"},
-  "PSDA- Probability & Conditional Probability":{subject:"Math",kind:"sub",domain:"Problem-Solving & Data Analysis",name:"Probability"},
-  "PSDA- Inference from Sample Data & Margin of Error":{subject:"Math",kind:"sub",domain:"Problem-Solving & Data Analysis",name:"Inference & Margin of Error"},
-  "PSDA- Evaluating Stat Claims in Obs Studies & Experiments":{subject:"Math",kind:"sub",domain:"Problem-Solving & Data Analysis",name:"Evaluating Statistical Claims"},
-  "Geo- Area & Volume":{subject:"Math",kind:"sub",domain:"Geometry & Trigonometry",name:"Area & Volume"},
-  "Geo- Circles":{subject:"Math",kind:"sub",domain:"Geometry & Trigonometry",name:"Circles"},
-  "Geo- Lines, Angles, & Triangles":{subject:"Math",kind:"sub",domain:"Geometry & Trigonometry",name:"Lines, Angles, & Triangles"},
-  "Geo- Right Triangles & Trigonometry":{subject:"Math",kind:"sub",domain:"Geometry & Trigonometry",name:"Right Triangles & Trigonometry"},
+  "Alg- Linear Equations in One Variable":  ["Math","sub","Algebra","Linear Equations (1 Variable)"],
+  "Alg- Linear Equations in Two Variables": ["Math","sub","Algebra","Linear Equations (2 Variables)"],
+  "Alg- Linear Functions":                  ["Math","sub","Algebra","Linear Functions"],
+  "Alg- Linear Inequalities":               ["Math","sub","Algebra","Linear Inequalities"],
+  "Alg- Systems of Linear Equations":       ["Math","sub","Algebra","Systems of Linear Equations"],
+  "AdvMath- Equivalent Expressions":        ["Math","sub","Advanced Math","Equivalent Expressions"],
+  "AdvMath- Nonlinear Equations & SOEs":    ["Math","sub","Advanced Math","Nonlinear Equations"],
+  "AdvMath- Nonlinear Functions":           ["Math","sub","Advanced Math","Nonlinear Functions"],
+  "PSDA- Percentages":                                         ["Math","sub","Problem-Solving & Data Analysis","Percentages"],
+  "PSDA- Ratios, Rates, Proportions, Units":                   ["Math","sub","Problem-Solving & Data Analysis","Ratios, Rates, Proportions, Units"],
+  "PSDA- One Var. Data Distributions":                         ["Math","sub","Problem-Solving & Data Analysis","One-Variable Data"],
+  "PSDA- Two-Variable Data":                                   ["Math","sub","Problem-Solving & Data Analysis","Two-Variable Data"],
+  "PSDA- Two Var. Data":                                       ["Math","sub","Problem-Solving & Data Analysis","Two-Variable Data"],
+  "PSDA- Probability & Conditional Probability":               ["Math","sub","Problem-Solving & Data Analysis","Probability"],
+  "PSDA- Probability":                                         ["Math","sub","Problem-Solving & Data Analysis","Probability"],
+  "PSDA- Inference from Sample Data & Margin of Error":        ["Math","sub","Problem-Solving & Data Analysis","Inference & Margin of Error"],
+  "PSDA- Inference & Margin of Error":                         ["Math","sub","Problem-Solving & Data Analysis","Inference & Margin of Error"],
+  "PSDA- Evaluating Stat Claims in Obs Studies & Experiments": ["Math","sub","Problem-Solving & Data Analysis","Evaluating Statistical Claims"],
+  "PSDA- Evaluating Statistical Claims":                       ["Math","sub","Problem-Solving & Data Analysis","Evaluating Statistical Claims"],
+  "Geo- Area & Volume":                     ["Math","sub","Geometry & Trigonometry","Area & Volume"],
+  "Geo- Circles":                           ["Math","sub","Geometry & Trigonometry","Circles"],
+  "Geo- Lines, Angles, & Triangles":        ["Math","sub","Geometry & Trigonometry","Lines, Angles, & Triangles"],
+  "Geo- Right Triangles & Trigonometry":    ["Math","sub","Geometry & Trigonometry","Right Triangles & Trigonometry"],
 };
+// Normalizer: lowercase, collapse non-alphanumeric to nothing, so tag lookup is tolerant
+const normTag = (s)=>s.toLowerCase().replace(/\(2024\)/g,"").replace(/[^a-z0-9]/g,"");
+const TAG_MAP = {};
+Object.entries(_rawTagMap).forEach(([k,v])=>{
+  const obj = v[1]==="domain" ? {subject:v[0],kind:"domain",name:v[2]} : {subject:v[0],kind:"sub",domain:v[2],name:v[3]};
+  TAG_MAP[normTag(k)] = obj;
+});
 
-// Build a student's diagnostic profile from parsed tag rows
+// Build a student's diagnostic profile from parsed results.
+// Math module 1 + module 2 are merged into one Math section; Reading is its own.
 function buildDiagnosticProfile(parsedList){
   const domains={}, subs={};
+  const sectionTotals = {"Reading & Writing":{earn:0,poss:0,count:0},"Math":{earn:0,poss:0,count:0}};
   parsedList.forEach(res=>{
-    res.tags.forEach(t=>{
-      const map = TAG_MAP[t.tag];
+    if(res.subject && sectionTotals[res.subject] && res.earned!=null && res.possible!=null){
+      sectionTotals[res.subject].earn += res.earned;
+      sectionTotals[res.subject].poss += res.possible;
+      sectionTotals[res.subject].count += 1;
+    }
+    (res.tags||[]).forEach(t=>{
+      const map = TAG_MAP[normTag(t.tag)];
       if(!map) return;
       const slot = map.kind==="domain"?domains:subs;
-      const key = map.kind==="domain"?map.name:`${map.domain}|${map.name}`;
-      if(!slot[key]) slot[key]={earn:0,poss:0,subject:map.subject};
+      const key = map.kind==="domain"?`${map.subject}|${map.name}`:`${map.subject}|${map.domain}|${map.name}`;
+      if(!slot[key]) slot[key]={earn:0,poss:0,subject:map.subject,domain:map.domain||map.name,name:map.name};
       slot[key].earn += t.earn;
       slot[key].poss += t.poss;
     });
   });
   const fmt=(rec)=>({...rec,pct:rec.poss?Math.round((rec.earn/rec.poss)*100):null});
-  const domainArr = Object.entries(domains).map(([k,v])=>({name:k,...fmt(v)}));
-  const subArr = Object.entries(subs).map(([k,v])=>{const[d,s]=k.split("|");return{domain:d,name:s,...fmt(v)};});
-  return {domains:domainArr,subs:subArr};
+  const domainArr = Object.values(domains).map(fmt);
+  const subArr    = Object.values(subs).map(fmt);
+
+  // Compute section/total scores if we have section totals
+  const rw = sectionTotals["Reading & Writing"];
+  const m  = sectionTotals["Math"];
+  let rwScore=null, mathScore=null, totalLower=null, totalUpper=null;
+  if(rw.count>0){ const s = scaleRW(rw.earn); rwScore = {earn:rw.earn,poss:rw.poss,lower:s[0],upper:s[1]}; }
+  if(m.count>0){  const s = scaleMath(m.earn); mathScore = {earn:m.earn,poss:m.poss,lower:s[0],upper:s[1]}; }
+  if(rwScore && mathScore){ totalLower = rwScore.lower + mathScore.lower; totalUpper = rwScore.upper + mathScore.upper; }
+  return {domains:domainArr,subs:subArr,rwScore,mathScore,totalLower,totalUpper};
 }
 
 /* ============ HEAT COLORS ============ */
@@ -304,94 +345,63 @@ function App(){
   /* ============ GENERATE OUTPUT ============ */
   const generate = ()=>{
     const lines = [];
-    lines.push("===============================================================");
-    lines.push(`  PSM ASSIGNMENT${curStudent?` - ${curStudent.name}`:""}`);
-    lines.push(`  Generated: ${new Date().toLocaleDateString("en-US",{weekday:"long",year:"numeric",month:"long",day:"numeric"})}`);
-    if(examType==="PSAT") lines.push(`  Test Type: PSAT`);
-    lines.push("===============================================================\n");
-
-    // Intro paragraphs (always)
+    // Intro paragraphs (always). Plain text, no decorative borders.
     lines.push(INTRO_A);
     lines.push("");
-    lines.push(INTRO_B);
-
-    if(oneNote){lines.push("");lines.push(ONENOTE_TXT);}
-    if(timeDrill){lines.push("");lines.push(TIME_TXT);}
-    if(weDomEn && selWeDom.length){lines.push("");lines.push(WED_TXT);}
-    if(vocabEn && selVocab.length){lines.push("");lines.push(VOCAB_TXT);}
+    lines.push(fmtInstr(INTRO_B));
+    if(oneNote){ lines.push(""); lines.push(fmtInstr(ONENOTE_TXT)); }
+    if(timeDrill){ lines.push(""); lines.push(fmtInstr(TIME_TXT)); }
+    if(weDomEn && selWeDom.length){ lines.push(""); lines.push(fmtInstr(WED_TXT)); }
+    if(vocabEn && selVocab.length){ lines.push(""); lines.push(fmtInstr(VOCAB_TXT)); }
 
     // WellEd Domain Assignments block
     if(weDomEn && selWeDom.length){
-      lines.push("\nWellEd Domain Assignments:");
-      selWeDom.forEach(i=>lines.push(`${i.label}`));
+      lines.push("");
+      lines.push("**WellEd Domain Assignments:**");
+      selWeDom.forEach(i=>lines.push(i.label));
     }
-
     // Vocab block
     if(vocabEn && selVocab.length){
-      lines.push("\nVocab Assignments:");
-      selVocab.forEach(i=>lines.push(`${i.label}`));
+      lines.push("");
+      lines.push("**Vocab Assignments:**");
+      selVocab.forEach(i=>lines.push(i.label));
     }
-
     // Practice Exams block
     if(addBB||addWE){
-      lines.push("\nPractice Exams:");
+      lines.push("");
+      lines.push("**Practice Exams:**");
       if(addBB){
-        // Determine next BlueBook number for this student
         const bbNums = nextExamNumbers(curStudent,"BlueBook",bbCnt);
-        bbNums.forEach((n,idx)=>{
+        bbNums.forEach(n=>{
           lines.push(`Please complete Practice Exam # ${n} on BlueBook (College Board) using the instructions for BlueBook (College Board) practice exams located in your Wise "Full Practice Exam Instructions" Module -  https://bluebook.app.collegeboard.org/.  Be sure to follow instructions regarding screenshots of missed questions!`);
         });
       }
       if(addWE){
         const weNums = nextExamNumbers(curStudent,"WellEd",weCnt);
-        weNums.forEach((n,idx)=>{
+        weNums.forEach(n=>{
           lines.push(`Please complete Practice Exam # ${n} on WellEd Labs using the instructions for WellEd Labs practice exams located in your Wise "Full Practice Exam Instructions" Module - https://ats.practicetest.io/sign-in.`);
         });
       }
     }
 
-    // Worksheet section (grouped by domain)
+    // Student Forms (flat list, STU_ prefix, .pdf suffix, URL appended)
     if(selWS.length>0){
-      lines.push("\nWorksheets:");
-      // Group by subject -> domain
-      const bySubj={};
+      lines.push("");
+      lines.push("**Student Forms:**");
       selWS.forEach(ws=>{
-        if(!bySubj[ws.subject])bySubj[ws.subject]={};
-        if(!bySubj[ws.subject][ws.domain])bySubj[ws.subject][ws.domain]=[];
-        bySubj[ws.subject][ws.domain].push(ws);
+        const eo = evenOdd[ws.id] ? ` (${evenOdd[ws.id]})` : "";
+        const tl = timeDrill && timeLims[ws.id] ? `(${timeLims[ws.id]} min) ` : "";
+        lines.push(`${tl}STU_${ws.title}.pdf${eo} - ${ws.stu||"[LINK PENDING]"}`);
       });
-      Object.entries(bySubj).forEach(([subj,doms])=>{
-        lines.push(`\n--- ${subj.toUpperCase()} ---`);
-        Object.entries(doms).forEach(([dom,arr])=>{
-          lines.push(`\n* ${dom} *`);
-          arr.forEach(ws=>{
-            const eo = evenOdd[ws.id]?` (${evenOdd[ws.id]})`:"";
-            const tl = timeDrill&&timeLims[ws.id]?`(${timeLims[ws.id]} min) `:"";
-            lines.push(`  ${tl}${ws.title}${eo}`);
-          });
-        });
-      });
-    }
 
-    // Answer Keys (always last section when worksheets present)
-    if(selWS.length>0){
-      lines.push("\nAnswer Keys:");
+      // Answer Keys
+      lines.push("");
+      lines.push("**Answer Keys:**");
       selWS.forEach(ws=>{
-        const keyName = `KEY_${ws.title}.pdf`;
-        lines.push(`${keyName} - ${ws.key||"[LINK PENDING]"}`);
+        lines.push(`KEY_${ws.title}.pdf - ${ws.key||"[LINK PENDING]"}`);
       });
     }
 
-    if(weDomEn && selWeDom.length){
-      lines.push("\nNote: WellEd Labs domain assignments will be auto-graded on the platform.");
-    }
-    if(vocabEn && selVocab.length){
-      lines.push("\nNote: WellEd Labs vocab quizzes will be auto-graded on the platform.");
-    }
-
-    lines.push("\n===============================================================");
-    lines.push("  Questions? Aidan Meyers - ameyers@affordabletutoringsolutions.org - (321) 341-9820");
-    lines.push("===============================================================");
     setOutput(lines.join("\n"));
 
     // Save to student profile
@@ -455,14 +465,14 @@ function App(){
   const delAsg=(aid)=>{const upd=students.map(st=>st.id===profile.id?{...st,assignments:st.assignments.filter(a=>a.id!==aid)}:st);setStudents(upd);setProfile(upd.find(st=>st.id===profile.id));};
   const delStudent=(id)=>{if(!confirm("Delete this student and all their data?"))return;setStudents(prev=>prev.filter(st=>st.id!==id));if(profile?.id===id)setProfile(null);};
 
-  // Update a WellEd exam score in assignment history
-  const setExamScore = (aid,examIdx,score)=>{
+  // Update a practice exam in assignment history — accepts a patch object
+  const setExamScore = (aid,examIdx,patch)=>{
     const upd = students.map(st=>{
       if(st.id!==profile.id) return st;
       return {...st, assignments: st.assignments.map(a=>{
         if(a.id!==aid) return a;
         const ex = [...(a.practiceExams||[])];
-        ex[examIdx] = {...ex[examIdx], score};
+        ex[examIdx] = {...ex[examIdx], ...patch};
         return {...a, practiceExams: ex};
       })};
     });
@@ -611,7 +621,7 @@ function App(){
           handleDiagUpload,clearDiagnostics,diagInputRef,diagProfile,
         }}/>}
 
-        {tab==="heatmap"&&<HeatMapTab {...{students,heatDoms,getHV,heatC,openProfile}}/>}
+        {tab==="heatmap"&&<HeatMapTab {...{students,openProfile}}/>}
 
         {tab==="scores"&&<ScoresTab {...{students,openProfile}}/>}
       </div>
@@ -797,8 +807,10 @@ function GeneratorTab(props){
         </div>
       </div>
 
-      {/* MIDDLE: WORKSHEET PICKER */}
-      <div style={{...CARD,display:"flex",flexDirection:"column",overflow:"hidden",maxHeight:"calc(100vh - 188px)"}}>
+      {/* MIDDLE: STUDENT SUMMARY (when selected) + WORKSHEET PICKER */}
+      <div style={{display:"flex",flexDirection:"column",gap:12,overflow:"hidden",maxHeight:"calc(100vh - 188px)"}}>
+      {curStudent && <StudentSummaryCard student={curStudent}/>}
+      <div style={{...CARD,display:"flex",flexDirection:"column",overflow:"hidden",flex:1,minHeight:0}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexShrink:0}}>
           <div style={{fontSize:14,fontWeight:800,color:B2}}>Worksheets <span style={{fontSize:12,fontWeight:500,color:"#94a3b8"}}>({Object.values(grouped).reduce((n,doms)=>n+Object.values(doms).reduce((m,subs)=>m+Object.values(subs).reduce((k,arr)=>k+arr.length,0),0),0)} shown)</span></div>
           <div style={{display:"flex",gap:6}}>
@@ -827,8 +839,10 @@ function GeneratorTab(props){
                             <div key={ws.id} onClick={()=>setChk(prev=>({...prev,[ws.id]:!prev[ws.id]}))} style={{display:"flex",alignItems:"center",padding:"6px 10px",cursor:"pointer",borderRadius:7,marginBottom:2,background:ck?"#eff6ff":"transparent",border:ck?"1.5px solid #bfdbfe":"1.5px solid transparent"}}>
                               <input type="checkbox" checked={ck} onChange={()=>{}} onClick={e=>e.stopPropagation()} style={{marginRight:9,cursor:"pointer"}}/>
                               <div style={{flex:1,minWidth:0}}>
-                                <div style={{fontSize:12,fontWeight:ck?700:400,color:"#1e293b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ws.title}</div>
-                                {lastDate&&<div style={{fontSize:9,color:"#a16207",fontWeight:700,marginTop:1}}>✓ Previously assigned {lastDate}</div>}
+                                <div style={{fontSize:12,fontWeight:ck?700:400,color:"#1e293b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                                  {ws.title}
+                                  {lastDate&&<span style={{fontSize:9,color:"#fff",background:"#dc2626",padding:"1px 6px",borderRadius:4,marginLeft:6,fontWeight:800}}>✓ ASSIGNED {lastDate}</span>}
+                                </div>
                               </div>
                               {ws.qs>0&&<span style={{...mkPill("#eff6ff","#1e40af"),marginRight:4}}>{ws.qs}Q</span>}
                               {cnt>0&&<span style={{...mkPill("#fef3c7","#92400e"),marginRight:4,flexShrink:0}}>×{cnt}</span>}
@@ -851,6 +865,7 @@ function GeneratorTab(props){
           })}
         </div>
       </div>
+      </div>
 
       {/* RIGHT: OUTPUT */}
       <div style={{display:"flex",flexDirection:"column",gap:10}}>
@@ -863,6 +878,90 @@ function GeneratorTab(props){
           <textarea readOnly value={output||"Generate an assignment to see output here..."} style={{flex:1,border:"1.5px solid #e2e8f0",borderRadius:8,padding:12,fontSize:11,fontFamily:"monospace",color:output?"#1e293b":"#94a3b8",resize:"none",background:"#f8fafc",lineHeight:1.6,minHeight:260}}/>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ============ STUDENT SUMMARY CARD (Generator) ============ */
+function StudentSummaryCard({student}){
+  const counts = buildHeatCounts(student);
+  const diagProfile = useMemo(()=>student.diagnostics?.length?buildDiagnosticProfile(student.diagnostics):null,[student]);
+  const lastAsg = [...(student.assignments||[])].reverse().find(a=>!a.preAssigned) || [...(student.assignments||[])].reverse()[0];
+  const allAsg = (student.assignments||[]);
+  // Latest practice exam score
+  let latestPractice = null;
+  allAsg.forEach(a=>(a.practiceExams||[]).forEach(ex=>{
+    if(ex.score && (!latestPractice || (a.date||"")>=latestPractice.date)){
+      latestPractice = {date:a.date,platform:ex.platform,number:ex.number,score:ex.score,type:ex.type};
+    }
+  }));
+
+  return(
+    <div style={{...CARD,padding:14,background:"#fafbfc",border:"1.5px solid #dbeafe"}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+        <div style={{width:34,height:34,borderRadius:9,background:B2,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:15}}>{student.name.charAt(0).toUpperCase()}</div>
+        <div>
+          <div style={{fontSize:15,fontWeight:800,color:B2}}>{student.name}</div>
+          <div style={{fontSize:10,color:"#64748b"}}>Quick reference while assigning</div>
+        </div>
+        <div style={{marginLeft:"auto",display:"flex",gap:6,flexWrap:"wrap"}}>
+          {diagProfile?.totalLower!=null && <Tag c="#fdf2f8" t="#be185d">Diagnostic: {diagProfile.totalLower}–{diagProfile.totalUpper}</Tag>}
+          {latestPractice && <Tag c="#eff6ff" t="#1e40af">Last Exam: {latestPractice.score}</Tag>}
+          <Tag c="#f1f5f9" t="#475569">{allAsg.length} session{allAsg.length!==1?"s":""}</Tag>
+        </div>
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        {/* Left: mini heat map (worksheets+WellEd) */}
+        <div>
+          <div style={{fontSize:9,fontWeight:800,color:"#64748b",textTransform:"uppercase",letterSpacing:.5,marginBottom:4}}>Coverage (worksheets + WellEd)</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:3}}>
+            {ALL_DOMAINS.map(d=>{
+              const total = DIFFS.reduce((n,diff)=>n+(counts[`${d}|${diff}`]||0),0);
+              const short = d.replace(/Problem-Solving & Data Analysis/,"PSDA").replace(/Standard English Conventions/,"SEC").replace(/Information & Ideas/,"Info").replace(/Craft & Structure/,"C&S").replace(/Expression of Ideas/,"EOI").replace(/Advanced Math/,"Adv Math").replace(/Geometry & Trigonometry/,"Geo");
+              return(
+                <div key={d} title={`${d}: ${total}`} style={{background:heatCellColor(total),borderRadius:5,padding:"4px 3px",textAlign:"center"}}>
+                  <div style={{fontSize:8,color:total>=3?"#fff":"#475569",fontWeight:700,lineHeight:1}}>{short}</div>
+                  <div style={{fontSize:14,fontWeight:900,color:total>=3?"#fff":total>0?"#1e3a5f":"#cbd5e1"}}>{total||"·"}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        {/* Right: diagnostic weakest areas */}
+        <div>
+          <div style={{fontSize:9,fontWeight:800,color:"#64748b",textTransform:"uppercase",letterSpacing:.5,marginBottom:4}}>Diagnostic — Weakest Areas</div>
+          {diagProfile?.subs?.length ? (
+            <div style={{display:"flex",flexDirection:"column",gap:2}}>
+              {[...diagProfile.subs].sort((a,b)=>(a.pct||0)-(b.pct||0)).slice(0,4).map(s=>(
+                <div key={s.domain+s.name} style={{display:"flex",alignItems:"center",gap:6,fontSize:10}}>
+                  <div style={{width:34,height:16,background:heatColorPct(s.pct),color:"#fff",borderRadius:3,fontSize:9,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center"}}>{s.pct}%</div>
+                  <div style={{flex:1,color:"#475569",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{fontSize:10,color:"#94a3b8",fontStyle:"italic"}}>No diagnostic uploaded yet</div>
+          )}
+        </div>
+      </div>
+
+      {/* Last PSM set */}
+      {lastAsg && <div style={{marginTop:10,paddingTop:10,borderTop:"1px dashed #cbd5e1"}}>
+        <div style={{fontSize:9,fontWeight:800,color:"#64748b",textTransform:"uppercase",letterSpacing:.5,marginBottom:4}}>Last PSM Set — {lastAsg.date}</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+          {(lastAsg.worksheets||[]).slice(0,6).map((w,i)=>(
+            <span key={i} style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:5,padding:"2px 7px",fontSize:10,color:"#475569"}}>{w.title}</span>
+          ))}
+          {(lastAsg.worksheets||[]).length>6 && <span style={{fontSize:10,color:"#94a3b8",fontStyle:"italic"}}>+{lastAsg.worksheets.length-6} more</span>}
+          {(lastAsg.welledDomain||[]).map((w,i)=>(
+            <span key={`w${i}`} style={{background:"#ecfdf5",border:"1px solid #a7f3d0",color:"#065f46",borderRadius:5,padding:"2px 7px",fontSize:10}}>{w.label}</span>
+          ))}
+          {(lastAsg.practiceExams||[]).map((ex,i)=>(
+            <span key={`p${i}`} style={{background:"#eff6ff",border:"1px solid #bfdbfe",color:"#1e40af",borderRadius:5,padding:"2px 7px",fontSize:10}}>📘 {ex.platform} #{ex.number}</span>
+          ))}
+        </div>
+      </div>}
     </div>
   );
 }
@@ -1033,13 +1132,16 @@ function StudentProfile({p,setProfile,ptab,setPtab,paChk,setPaChk,paSubj,setPaSu
                   </div>
                   {(asg.welledDomain||[]).length>0&&<div style={{marginTop:8,padding:8,background:"#f0fdf4",borderRadius:6}}>
                     <div style={{fontSize:10,fontWeight:800,color:"#065f46",marginBottom:4}}>WELLED DOMAIN ASSIGNMENTS</div>
-                    {asg.welledDomain.map((i,idx)=>(
+                    {asg.welledDomain.map((i,idx)=>{
+                      const wMax = i.subject==="Math"?22:27;
+                      return(
                       <div key={idx} style={{display:"flex",alignItems:"center",gap:8,fontSize:11,marginBottom:4}}>
                         <span style={{flex:1,color:"#065f46",fontWeight:600}}>{i.label}</span>
                         <span style={{fontSize:10,color:"#94a3b8"}}>Score:</span>
-                        <input type="text" placeholder={`/${i.qs}`} value={i.score||""} onChange={e=>setWelledDomainScore(asg.id,idx,e.target.value)} style={{width:70,padding:"3px 6px",border:"1px solid #86efac",borderRadius:4,fontSize:11}}/>
+                        <input type="number" min="0" max={wMax} placeholder="0" value={i.score||""} onChange={e=>setWelledDomainScore(asg.id,idx,e.target.value)} style={{width:50,padding:"3px 6px",border:"1px solid #86efac",borderRadius:4,fontSize:11,textAlign:"right"}}/>
+                        <span style={{fontSize:10,color:"#065f46",fontWeight:700,minWidth:24}}>/{wMax}</span>
                       </div>
-                    ))}
+                    );})}
                   </div>}
                   {(asg.vocab||[]).length>0&&<div style={{marginTop:8,padding:8,background:"#faf5ff",borderRadius:6}}>
                     <div style={{fontSize:10,fontWeight:800,color:"#6b21a8",marginBottom:4}}>VOCAB</div>
@@ -1049,13 +1151,33 @@ function StudentProfile({p,setProfile,ptab,setPtab,paChk,setPaChk,paSubj,setPaSu
                   </div>}
                   {(asg.practiceExams||[]).length>0&&<div style={{marginTop:8,padding:8,background:"#eff6ff",borderRadius:6}}>
                     <div style={{fontSize:10,fontWeight:800,color:"#1e40af",marginBottom:4}}>PRACTICE EXAMS</div>
-                    {asg.practiceExams.map((ex,idx)=>(
-                      <div key={idx} style={{display:"flex",alignItems:"center",gap:8,fontSize:11,marginBottom:4}}>
-                        <span style={{flex:1,fontWeight:600,color:"#1e40af"}}>📘 {ex.platform} Practice Test #{ex.number||"?"} {ex.type==="section"?" (Section)":""}</span>
-                        <span style={{fontSize:10,color:"#94a3b8"}}>Score:</span>
-                        <input type="text" placeholder="e.g. 1200" value={ex.score||""} onChange={e=>setExamScore(asg.id,idx,e.target.value)} style={{width:80,padding:"3px 6px",border:"1px solid #93c5fd",borderRadius:4,fontSize:11}}/>
+                    {asg.practiceExams.map((ex,idx)=>{
+                      const isFull = ex.type!=="section";
+                      const rw = ex.rwScore||"", math = ex.mathScore||"";
+                      const total = (Number(rw)||0)+(Number(math)||0);
+                      return(
+                      <div key={idx} style={{display:"flex",alignItems:"center",gap:8,fontSize:11,marginBottom:6,flexWrap:"wrap"}}>
+                        <span style={{flex:"1 1 180px",fontWeight:600,color:"#1e40af"}}>📘 {ex.platform} Practice Test #{ex.number||"?"}{isFull?"":" (Section)"}</span>
+                        {isFull ? (<>
+                          <span style={{fontSize:10,color:"#94a3b8"}}>R&amp;W:</span>
+                          <input type="number" min="0" max="800" placeholder="0" value={rw} onChange={e=>setExamScore(asg.id,idx,{rwScore:e.target.value})} style={{width:56,padding:"3px 6px",border:"1px solid #93c5fd",borderRadius:4,fontSize:11,textAlign:"right"}}/>
+                          <span style={{fontSize:10,color:"#1e40af",fontWeight:700}}>/800</span>
+                          <span style={{fontSize:10,color:"#94a3b8"}}>Math:</span>
+                          <input type="number" min="0" max="800" placeholder="0" value={math} onChange={e=>setExamScore(asg.id,idx,{mathScore:e.target.value})} style={{width:56,padding:"3px 6px",border:"1px solid #93c5fd",borderRadius:4,fontSize:11,textAlign:"right"}}/>
+                          <span style={{fontSize:10,color:"#1e40af",fontWeight:700}}>/800</span>
+                          {(rw||math) && <span style={{fontSize:11,fontWeight:800,color:"#1e40af",marginLeft:4}}>= {total}/1600</span>}
+                        </>) : (<>
+                          <select value={ex.sectionSubject||""} onChange={e=>setExamScore(asg.id,idx,{sectionSubject:e.target.value})} style={{padding:"3px 6px",border:"1px solid #93c5fd",borderRadius:4,fontSize:11}}>
+                            <option value="">Section…</option>
+                            <option value="R&W">R&amp;W</option>
+                            <option value="Math">Math</option>
+                          </select>
+                          <span style={{fontSize:10,color:"#94a3b8"}}>Score:</span>
+                          <input type="number" min="0" max="800" placeholder="0" value={ex.score||""} onChange={e=>setExamScore(asg.id,idx,{score:e.target.value})} style={{width:56,padding:"3px 6px",border:"1px solid #93c5fd",borderRadius:4,fontSize:11,textAlign:"right"}}/>
+                          <span style={{fontSize:10,color:"#1e40af",fontWeight:700}}>/800</span>
+                        </>)}
                       </div>
-                    ))}
+                    );})}
                   </div>}
                 </div>
               ))}
@@ -1250,98 +1372,240 @@ function StudentProfile({p,setProfile,ptab,setPtab,paChk,setPaChk,paSubj,setPaSu
   );
 }
 
+/* ============ HEAT MAP HELPERS ============ */
+// Count worksheet + WellEd Domain assignments per {domain, difficulty}
+// Only worksheets and WellEd domain assignments count toward the heat map (not practice exams, not vocab).
+function buildHeatCounts(student){
+  const counts = {}; // key: domain|difficulty → count
+  (student?.assignments||[]).forEach(a=>{
+    (a.worksheets||[]).forEach(w=>{
+      const k = `${w.domain}|${w.difficulty}`;
+      counts[k] = (counts[k]||0)+1;
+    });
+    (a.welledDomain||[]).forEach(w=>{
+      const k = `${w.domain}|${w.difficulty}`;
+      counts[k] = (counts[k]||0)+1;
+    });
+  });
+  return counts;
+}
+// Count practice exams — non-colored breakdown
+function buildPracticeCounts(student){
+  const out = {full:0, math:0, reading:0};
+  (student?.assignments||[]).forEach(a=>{
+    (a.practiceExams||[]).forEach(ex=>{
+      if(ex.type==="full") out.full++;
+      else if(ex.type==="math") out.math++;
+      else if(ex.type==="reading"||ex.type==="rw") out.reading++;
+      else out.full++;
+    });
+  });
+  return out;
+}
+const heatCellColor = (v)=>{
+  if(!v) return "#f1f5f9";
+  if(v>=10) return "#1d4ed8";
+  if(v>=6)  return "#3b82f6";
+  if(v>=3)  return "#60a5fa";
+  return "#bfdbfe";
+};
+const DOMAINS_RW = ["Information & Ideas","Craft & Structure","Expression of Ideas","Standard English Conventions"];
+const DOMAINS_M  = ["Algebra","Advanced Math","Problem-Solving & Data Analysis","Geometry & Trigonometry"];
+const ALL_DOMAINS = [...DOMAINS_RW, ...DOMAINS_M];
+const DIFFS = ["easy","medium","hard","comprehensive"];
+
 /* ============ HEAT MAP TAB ============ */
-function HeatMapTab({students,heatDoms,getHV,heatC,openProfile}){
+function HeatMapTab({students,openProfile}){
+  const[selSt,setSelSt]=useState(students[0]?.id||"");
+  const st = students.find(s=>s.id===selSt) || students[0];
+  const counts = st ? buildHeatCounts(st) : {};
+  const pract = st ? buildPracticeCounts(st) : {full:0,math:0,reading:0};
+
+  const diffLabel = {easy:"Easy",medium:"Medium",hard:"Hard",comprehensive:"Comprehensive"};
+  const diffColor = {easy:"#16a34a",medium:"#d97706",hard:"#dc2626",comprehensive:"#7c3aed"};
+
   return(
     <div>
       <div style={{fontSize:20,fontWeight:800,color:B2,marginBottom:4}}>Assignment Coverage Heat Map</div>
-      <div style={{fontSize:13,color:"#64748b",marginBottom:14}}>Worksheets from each domain assigned per student. Click a name to view their profile.</div>
-      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,fontSize:11,color:"#475569"}}>
-        <span>None</span>{["#f1f5f9","#bfdbfe","#60a5fa","#3b82f6","#1d4ed8"].map((c,i)=><div key={i} style={{width:22,height:22,borderRadius:4,background:c,border:"1px solid #e2e8f0"}}/>)}<span>Most</span>
-      </div>
-      {students.length===0?(
+      <div style={{fontSize:13,color:"#64748b",marginBottom:14}}>Counts only worksheets &amp; WellEd domain assignments. Split by difficulty.</div>
+
+      {students.length===0 ? (
         <div style={{...CARD,padding:40,textAlign:"center",color:"#94a3b8"}}>No students enrolled yet.</div>
-      ):(
-        <div style={{...CARD,overflowX:"auto"}}>
-          <table style={{borderCollapse:"collapse",fontSize:12}}>
-            <thead>
-              <tr>
-                <th style={{padding:"8px 14px",textAlign:"left",color:"#475569",fontWeight:700,fontSize:11,minWidth:140,borderRight:"2px solid #e2e8f0"}}>Student</th>
-                {heatDoms.map(d=><th key={d} style={{padding:"4px 2px",textAlign:"center",fontSize:9,color:"#64748b",fontWeight:700,width:64}}><div style={{writingMode:"vertical-lr",transform:"rotate(180deg)",height:110,overflow:"hidden"}}>{d}</div></th>)}
-                <th style={{padding:"8px 12px",textAlign:"center",color:"#475569",fontWeight:700,fontSize:11,borderLeft:"2px solid #e2e8f0"}}>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {students.map((st,i)=>{
-                const total=(st.assignments||[]).reduce((n,a)=>n+(a.worksheets||[]).length,0);
-                return(
-                  <tr key={st.id} style={{borderBottom:"1px solid #f1f5f9",background:i%2===0?"#fff":"#f9fafb"}}>
-                    <td style={{padding:"8px 14px",borderRight:"2px solid #e2e8f0"}}>
-                      <button onClick={()=>openProfile(st)} style={{background:"none",border:"none",color:B2,fontWeight:700,cursor:"pointer",fontSize:13,padding:0}}>{st.name}</button>
-                      {st.grade&&<span style={{...mkPill("#f1f5f9","#64748b"),marginLeft:6}}>{st.grade}</span>}
-                    </td>
-                    {heatDoms.map(d=>{const v=getHV(st,d);return(
-                      <td key={d} style={{padding:3,textAlign:"center"}}>
-                        <div style={{width:34,height:34,borderRadius:7,background:heatC(v),display:"flex",alignItems:"center",justifyContent:"center",fontWeight:v>0?800:400,color:v>0?"#1e3a5f":"#e2e8f0",fontSize:12,margin:"0 auto"}} title={`${st.name}: ${v} in ${d}`}>{v||"·"}</div>
-                      </td>
-                    );})}
-                    <td style={{padding:"8px 12px",textAlign:"center",fontWeight:800,color:total>0?B2:"#94a3b8",fontSize:14,borderLeft:"2px solid #e2e8f0"}}>{total}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      ) : (<>
+        <div style={{...CARD,marginBottom:14,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+          <div style={{fontSize:11,fontWeight:700,color:"#64748b"}}>STUDENT</div>
+          <select value={selSt} onChange={e=>setSelSt(e.target.value)} style={{...INP,width:260}}>
+            {students.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+          {st && <button onClick={()=>openProfile(st)} style={{...mkBtn("#eff6ff",B2),padding:"6px 14px",fontSize:12}}>View Profile</button>}
+          <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center",fontSize:11,color:"#475569"}}>
+            <span>Low</span>{["#f1f5f9","#bfdbfe","#60a5fa","#3b82f6","#1d4ed8"].map((c,i)=><div key={i} style={{width:20,height:20,borderRadius:4,background:c,border:"1px solid #e2e8f0"}}/>)}<span>High</span>
+          </div>
         </div>
-      )}
+
+        {/* Practice Exam counts (non-colored) */}
+        <div style={{...CARD,marginBottom:14}}>
+          <div style={{fontSize:13,fontWeight:800,color:B2,marginBottom:10}}>Practice Exams Assigned</div>
+          <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
+            {[["Full",pract.full,"📘"],["Math Only",pract.math,"🧮"],["Reading Only",pract.reading,"📖"]].map(([l,v,icon])=>(
+              <div key={l} style={{background:"#f8fafc",border:"1.5px solid #e2e8f0",borderRadius:10,padding:"12px 20px",minWidth:140}}>
+                <div style={{fontSize:11,color:"#64748b",fontWeight:700}}>{icon} {l}</div>
+                <div style={{fontSize:26,fontWeight:900,color:B2,marginTop:4}}>{v}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* 4 heat maps by difficulty */}
+        {DIFFS.map(d=>{
+          const total = ALL_DOMAINS.reduce((n,dom)=>n+(counts[`${dom}|${d}`]||0),0);
+          return(
+            <div key={d} style={{...CARD,marginBottom:14}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+                <div style={{width:6,height:22,background:diffColor[d],borderRadius:3}}/>
+                <div style={{fontSize:14,fontWeight:800,color:B2}}>{diffLabel[d]} Difficulty</div>
+                <Tag c="#f1f5f9" t="#64748b">{total} assigned</Tag>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(8, 1fr)",gap:6}}>
+                {ALL_DOMAINS.map(dom=>{
+                  const v = counts[`${dom}|${d}`]||0;
+                  const isRW = DOMAINS_RW.includes(dom);
+                  return(
+                    <div key={dom} style={{background:heatCellColor(v),borderRadius:8,padding:"10px 8px",textAlign:"center",border:`2px solid ${isRW?"#6366f1":"#06b6d4"}`,minHeight:72,display:"flex",flexDirection:"column",justifyContent:"space-between"}}>
+                      <div style={{fontSize:9,fontWeight:700,color:v>=3?"#fff":"#475569",lineHeight:1.2}}>{dom}</div>
+                      <div style={{fontSize:20,fontWeight:900,color:v>=3?"#fff":v>0?"#1e3a5f":"#cbd5e1"}}>{v||"·"}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </>)}
     </div>
   );
 }
 
+/* ============ SCORE DATA AGGREGATOR ============ */
+// Merges all score sources for a student into one flat list:
+//   1. Diagnostic section scores + total (first, at parsedAt date)
+//   2. Manual scores from student.scores
+//   3. Practice exam scores from assignment history
+//   4. WellEd Domain scores from assignment history (split by E/M/H)
+// Each point: {date, category, subcategory, score, max, source, note, difficulty?}
+function allScoreDataPoints(student){
+  const pts = [];
+  // 1. Diagnostic → section + total scores
+  if(student.diagnostics?.length){
+    const diag = buildDiagnosticProfile(student.diagnostics);
+    const dd = student.diagnostics[0]?.parsedAt || todayStr();
+    if(diag.rwScore)   pts.push({date:dd,category:"R&W Section",subcategory:"R&W Section",score:Math.round((diag.rwScore.lower+diag.rwScore.upper)/2),max:800,source:"diagnostic",note:`Range: ${diag.rwScore.lower}–${diag.rwScore.upper}`});
+    if(diag.mathScore) pts.push({date:dd,category:"Math Section",subcategory:"Math Section",score:Math.round((diag.mathScore.lower+diag.mathScore.upper)/2),max:800,source:"diagnostic",note:`Range: ${diag.mathScore.lower}–${diag.mathScore.upper}`});
+    if(diag.totalLower!=null) pts.push({date:dd,category:"Total SAT",subcategory:"Total SAT",score:Math.round((diag.totalLower+diag.totalUpper)/2),max:1600,source:"diagnostic",note:`Range: ${diag.totalLower}–${diag.totalUpper}`});
+    // Domain-level diagnostic %s
+    (diag.domains||[]).forEach(d=>{
+      pts.push({date:dd,category:`${d.subject} — ${d.name}`,subcategory:d.name,score:d.earn,max:d.poss,source:"diagnostic",pct:d.pct});
+    });
+  }
+  // 2. Manual scores
+  (student.scores||[]).forEach(sc=>{
+    pts.push({date:sc.date,category:sc.testType,subcategory:sc.testType,score:Number(sc.score)||0,max:Number(sc.maxScore)||null,source:"manual",note:sc.notes||"",_id:sc.id});
+  });
+  // 3 & 4. Assignment history — practice exam scores + WellEd domain scores
+  (student.assignments||[]).forEach(a=>{
+    (a.practiceExams||[]).forEach(ex=>{
+      const isFull = ex.type!=="section";
+      if(isFull){
+        const rw = Number(ex.rwScore)||0, math = Number(ex.mathScore)||0;
+        if(ex.rwScore || ex.mathScore){
+          if(ex.rwScore)   pts.push({date:a.date,category:`${ex.platform} Practice #${ex.number||"?"} — R&W`,subcategory:`${ex.platform} Full — R&W`,score:rw,max:800,source:"history_exam"});
+          if(ex.mathScore) pts.push({date:a.date,category:`${ex.platform} Practice #${ex.number||"?"} — Math`,subcategory:`${ex.platform} Full — Math`,score:math,max:800,source:"history_exam"});
+          if(ex.rwScore && ex.mathScore) pts.push({date:a.date,category:`${ex.platform} Practice #${ex.number||"?"} — Total`,subcategory:`${ex.platform} Full — Total`,score:rw+math,max:1600,source:"history_exam"});
+        } else if(ex.score){
+          pts.push({date:a.date,category:`${ex.platform} Practice #${ex.number||"?"}`,subcategory:`${ex.platform} Full — Total`,score:Number(ex.score)||0,max:1600,source:"history_exam"});
+        }
+      } else if(ex.score && ex.score!==""){
+        const subj = ex.sectionSubject ? ` — ${ex.sectionSubject}` : "";
+        pts.push({date:a.date,category:`${ex.platform} Practice #${ex.number||"?"} Section${subj}`,subcategory:`${ex.platform} Section${subj}`,score:Number(ex.score)||0,max:800,source:"history_exam"});
+      }
+    });
+    (a.welledDomain||[]).forEach(w=>{
+      if(w.score && w.score!==""){
+        const cat = `${w.subject} — ${w.domain}`;
+        pts.push({date:a.date,category:cat,subcategory:w.domain,score:Number(w.score)||0,max:w.qs||(w.subject==="Math"?22:27),source:"history_welled",difficulty:w.difficulty});
+      }
+    });
+  });
+  return pts.sort((a,b)=>(a.date||"").localeCompare(b.date||""));
+}
+
 /* ============ SCORES TAB ============ */
 function ScoresTab({students,openProfile}){
+  const[selSt,setSelSt]=useState(students[0]?.id||"");
+  const st = students.find(s=>s.id===selSt)||students[0];
+  const pts = st?allScoreDataPoints(st):[];
+
+  // Group by subcategory. For WellEd domain entries, further split by difficulty.
+  const groups = useMemo(()=>{
+    const g = {};
+    pts.forEach(p=>{
+      const key = p.source==="history_welled" && p.difficulty ? `${p.subcategory} (${p.difficulty})` : p.subcategory;
+      if(!g[key]) g[key]={key,points:[],source:p.source,difficulty:p.difficulty};
+      g[key].points.push(p);
+    });
+    return g;
+  },[pts]);
+
   return(
     <div>
       <div style={{fontSize:20,fontWeight:800,color:B2,marginBottom:4}}>Score Tracking Overview</div>
-      <div style={{fontSize:13,color:"#64748b",marginBottom:16}}>Latest scores and trends. Add scores from each student's profile.</div>
-      {students.every(st=>!(st.scores?.length))?(
-        <div style={{...CARD,padding:50,textAlign:"center",color:"#94a3b8"}}><div style={{fontSize:32,marginBottom:8}}>📊</div><div style={{fontSize:16,fontWeight:600}}>No scores recorded yet</div></div>
-      ):(
-        <div style={{display:"flex",flexDirection:"column",gap:14}}>
-          {students.filter(st=>st.scores?.length>0).map(st=>{
-            const byType=st.scores.reduce((acc,sc)=>{if(!acc[sc.testType])acc[sc.testType]=[];acc[sc.testType].push({date:sc.date,score:Number(sc.score),max:Number(sc.maxScore)});return acc;},{});
-            const latest=[...st.scores].sort((a,b)=>b.date.localeCompare(a.date))[0];
-            return(
-              <div key={st.id} style={{...CARD}}>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-                  <div style={{display:"flex",alignItems:"center",gap:10}}>
-                    <div style={{width:36,height:36,borderRadius:10,background:B2,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:16}}>{st.name.charAt(0)}</div>
-                    <div><div style={{fontSize:16,fontWeight:800,color:B2}}>{st.name}</div><div style={{fontSize:11,color:"#94a3b8"}}>Last score: {latest?.date}</div></div>
-                  </div>
-                  <button onClick={()=>openProfile(st)} style={{...mkBtn("#eff6ff",B2),padding:"6px 14px",fontSize:12}}>View Profile</button>
-                </div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(175px,1fr))",gap:10}}>
-                  {Object.entries(byType).map(([type,entries])=>{
-                    const lv=entries[entries.length-1];
-                    const pct=lv.max?Math.round((lv.score/lv.max)*100):null;
-                    const improvement=entries.length>1?lv.score-entries[0].score:null;
-                    const pColor=pct===null?"#64748b":pct>=75?"#15803d":pct>=60?"#d97706":"#dc2626";
-                    return(
-                      <div key={type} style={{background:"#f8fafc",borderRadius:10,padding:14,border:"1.5px solid #e2e8f0",position:"relative",overflow:"hidden"}}>
-                        <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:pct===null?B2:pct>=75?"#22c55e":pct>=60?"#f59e0b":"#ef4444"}}/>
-                        <div style={{fontSize:9,fontWeight:800,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.7,marginBottom:6,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{type}</div>
-                        <div style={{fontSize:24,fontWeight:900,color:B2,lineHeight:1}}>{lv.score}</div>
-                        {pct!==null&&<div style={{fontSize:13,color:pColor,fontWeight:700,marginTop:4}}>{pct}%</div>}
-                        {improvement!==null&&<div style={{fontSize:11,color:improvement>0?"#15803d":improvement<0?"#dc2626":"#64748b",marginTop:5,fontWeight:600}}>{improvement>0?"▲ +":improvement<0?"▼ ":"→ "}{Math.abs(improvement)} since start</div>}
-                        <div style={{fontSize:10,color:"#94a3b8",marginTop:4}}>{entries.length} score{entries.length!==1?"s":""} on record</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
+      <div style={{fontSize:13,color:"#64748b",marginBottom:16}}>Diagnostic results, manual scores, and scores entered in assignment history. Domains split by E/M/H.</div>
+
+      {students.length===0 ? (
+        <div style={{...CARD,padding:50,textAlign:"center",color:"#94a3b8"}}>No students enrolled yet.</div>
+      ) : (<>
+        <div style={{...CARD,marginBottom:14,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+          <div style={{fontSize:11,fontWeight:700,color:"#64748b"}}>STUDENT</div>
+          <select value={selSt} onChange={e=>setSelSt(e.target.value)} style={{...INP,width:260}}>
+            {students.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+          {st && <button onClick={()=>openProfile(st)} style={{...mkBtn("#eff6ff",B2),padding:"6px 14px",fontSize:12}}>View Profile</button>}
+          <div style={{marginLeft:"auto",fontSize:11,color:"#64748b"}}>{pts.length} data points</div>
         </div>
-      )}
+
+        {pts.length===0 ? (
+          <div style={{...CARD,padding:40,textAlign:"center",color:"#94a3b8"}}>
+            <div style={{fontSize:28,marginBottom:8}}>📊</div>
+            <div style={{fontSize:14,fontWeight:600}}>No scores recorded yet for {st?.name||"this student"}</div>
+            <div style={{fontSize:12,marginTop:4}}>Upload a diagnostic PDF or enter scores in assignment history to populate this view.</div>
+          </div>
+        ) : (
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:12}}>
+            {Object.values(groups).sort((a,b)=>a.key.localeCompare(b.key)).map(grp=>{
+              const sorted = [...grp.points].sort((a,b)=>(a.date||"").localeCompare(b.date||""));
+              const first = sorted[0];
+              const last  = sorted[sorted.length-1];
+              const firstPct = first.max?Math.round((first.score/first.max)*100):first.pct||null;
+              const lastPct  = last.max?Math.round((last.score/last.max)*100):last.pct||null;
+              const delta = firstPct!=null && lastPct!=null ? (lastPct-firstPct) : null;
+              const pColor = lastPct===null?"#64748b":lastPct>=75?"#15803d":lastPct>=60?"#d97706":"#dc2626";
+              const diffColor = {easy:"#16a34a",medium:"#d97706",hard:"#dc2626",comprehensive:"#7c3aed"};
+              const accent = grp.difficulty && diffColor[grp.difficulty] ? diffColor[grp.difficulty] : B2;
+              return(
+                <div key={grp.key} style={{background:"#f8fafc",borderRadius:10,padding:14,border:"1.5px solid #e2e8f0",position:"relative",overflow:"hidden"}}>
+                  <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:accent}}/>
+                  <div style={{fontSize:10,fontWeight:800,color:"#475569",textTransform:"uppercase",letterSpacing:.6,marginBottom:6,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{grp.key}</div>
+                  <div style={{fontSize:22,fontWeight:900,color:B2,lineHeight:1}}>{last.score}{last.max?<span style={{fontSize:13,color:"#94a3b8",fontWeight:600}}>/{last.max}</span>:null}</div>
+                  {lastPct!=null && <div style={{fontSize:12,color:pColor,fontWeight:700,marginTop:3}}>{lastPct}%</div>}
+                  {delta!=null && sorted.length>1 && <div style={{fontSize:11,color:delta>0?"#15803d":delta<0?"#dc2626":"#64748b",marginTop:4,fontWeight:600}}>{delta>0?"▲ +":delta<0?"▼ ":"→ "}{Math.abs(delta)}% since first</div>}
+                  <div style={{fontSize:9,color:"#94a3b8",marginTop:6}}>{sorted.length} data point{sorted.length!==1?"s":""} · Latest {last.date}</div>
+                  {grp.source==="diagnostic" && first===last && <div style={{fontSize:9,color:"#be185d",marginTop:3,fontWeight:700}}>DIAGNOSTIC BASELINE</div>}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </>)}
     </div>
   );
 }
