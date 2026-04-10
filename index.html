@@ -182,16 +182,23 @@ async function parseDiagnosticPdf(file){
   // Extract tag rows. The section layout is:
   //   <tag name possibly wrapped across lines> <space> <earn> <poss> <pct>
   // We collapse whitespace/newlines then scan for sequences starting with "!SAT".
-  const tagSection = fullText.split(/TAGGED\s*QUESTIONS\s*&?\s*QUIZ/i)[1] || "";
+  // Some PDFs use "TAGGED QUESTIONS & QUIZ" or "TAGGED QUESTIONS" or similar header.
+  const tagSplitIdx = fullText.search(/TAGGED\s*QUESTIONS/i);
+  const tagSection = tagSplitIdx>=0 ? fullText.slice(tagSplitIdx) : "";
   const cleaned = tagSection.replace(/\s+/g," ").trim();
   const rows = [];
   const chunks = cleaned.split(/(?=!SAT\s)/g).filter(c=>c.trim().startsWith("!SAT"));
   for(const chunk of chunks){
-    const m = chunk.match(/^(!SAT\s+.+?)\s+(\d+)\s+(\d+)\s+([\d.]+)\s*$/);
+    // Relaxed regex: allow fractional pct, optional trailing text, and different spacing
+    const m = chunk.match(/^(!SAT\s+.+?)\s+(\d+)\s+(\d+)\s+([\d.]+)/);
     if(!m) continue;
-    let name = m[1].replace(/^!SAT\s+/,"").replace(/\s*\(2024\)\s*$/,"").replace(/\s+/g," ").trim();
+    let name = m[1].replace(/^!SAT\s+/,"").replace(/\s*\(\d{4}\)\s*$/,"").replace(/\s+/g," ").trim();
+    // Skip domain-only summary rows (they duplicate subskill roll-ups)
+    // Only skip if we also found subskill rows for that domain
     rows.push({tag:name,earn:Number(m[2]),poss:Number(m[3]),pct:Number(m[4])});
   }
+  // Debug: log parsed tags for troubleshooting
+  if(rows.length) console.log("[PSM Parser] Extracted", rows.length, "tags:", rows.map(r=>`"${r.tag}" ${r.earn}/${r.poss}`));
   return {
     subject, module,
     percentCorrect: pctMatch?Number(pctMatch[1]):null,
@@ -210,46 +217,128 @@ const _rawTagMap = {
   "Information & Ideas":           ["Reading & Writing","domain","Information & Ideas"],
   "Expression of Ideas":           ["Reading & Writing","domain","Expression of Ideas"],
   "Standard English Conventions":  ["Reading & Writing","domain","Standard English Conventions"],
-  // R&W subdomains
+  // R&W subdomains — multiple alternate forms
   "C&S - Cross-Text Connections":           ["Reading & Writing","sub","Craft & Structure","Cross Text Connections"],
+  "C&S- Cross-Text Connections":            ["Reading & Writing","sub","Craft & Structure","Cross Text Connections"],
+  "Cross-Text Connections":                 ["Reading & Writing","sub","Craft & Structure","Cross Text Connections"],
+  "Cross Text Connections":                 ["Reading & Writing","sub","Craft & Structure","Cross Text Connections"],
   "C&S - Text Structure & Purpose":         ["Reading & Writing","sub","Craft & Structure","Text Structure & Purpose"],
+  "C&S- Text Structure & Purpose":          ["Reading & Writing","sub","Craft & Structure","Text Structure & Purpose"],
+  "Text Structure & Purpose":               ["Reading & Writing","sub","Craft & Structure","Text Structure & Purpose"],
+  "Text Structure and Purpose":             ["Reading & Writing","sub","Craft & Structure","Text Structure & Purpose"],
   "C&S - Words in Context":                 ["Reading & Writing","sub","Craft & Structure","Words in Context"],
+  "C&S- Words in Context":                  ["Reading & Writing","sub","Craft & Structure","Words in Context"],
+  "Words in Context":                       ["Reading & Writing","sub","Craft & Structure","Words in Context"],
   "Info/Ideas - Central Idea & Details":    ["Reading & Writing","sub","Information & Ideas","Central Ideas & Details"],
+  "Info/Ideas- Central Idea & Details":     ["Reading & Writing","sub","Information & Ideas","Central Ideas & Details"],
+  "Info/Ideas - Central Ideas & Details":   ["Reading & Writing","sub","Information & Ideas","Central Ideas & Details"],
+  "Central Ideas & Details":                ["Reading & Writing","sub","Information & Ideas","Central Ideas & Details"],
+  "Central Ideas and Details":              ["Reading & Writing","sub","Information & Ideas","Central Ideas & Details"],
+  "Central Idea & Details":                 ["Reading & Writing","sub","Information & Ideas","Central Ideas & Details"],
   "Info/Ideas - Command of Evidence":       ["Reading & Writing","sub","Information & Ideas","Command of Evidence"],
+  "Info/Ideas- Command of Evidence":        ["Reading & Writing","sub","Information & Ideas","Command of Evidence"],
+  "Command of Evidence":                    ["Reading & Writing","sub","Information & Ideas","Command of Evidence"],
   "Info/Ideas - Inferences":                ["Reading & Writing","sub","Information & Ideas","Inferences"],
+  "Info/Ideas- Inferences":                 ["Reading & Writing","sub","Information & Ideas","Inferences"],
+  "Inferences":                             ["Reading & Writing","sub","Information & Ideas","Inferences"],
   "EOI - Rhetorical Synthesis":             ["Reading & Writing","sub","Expression of Ideas","Rhetorical Synthesis"],
+  "EOI- Rhetorical Synthesis":              ["Reading & Writing","sub","Expression of Ideas","Rhetorical Synthesis"],
+  "Rhetorical Synthesis":                   ["Reading & Writing","sub","Expression of Ideas","Rhetorical Synthesis"],
   "EOI - Transitions":                      ["Reading & Writing","sub","Expression of Ideas","Transitions"],
+  "EOI- Transitions":                       ["Reading & Writing","sub","Expression of Ideas","Transitions"],
+  "Transitions":                            ["Reading & Writing","sub","Expression of Ideas","Transitions"],
   "SEC - Form Structure Sense":             ["Reading & Writing","sub","Standard English Conventions","Form, Structure, & Sense"],
+  "SEC- Form Structure Sense":              ["Reading & Writing","sub","Standard English Conventions","Form, Structure, & Sense"],
+  "SEC - Form, Structure, and Sense":       ["Reading & Writing","sub","Standard English Conventions","Form, Structure, & Sense"],
+  "Form, Structure, & Sense":               ["Reading & Writing","sub","Standard English Conventions","Form, Structure, & Sense"],
+  "Form Structure and Sense":               ["Reading & Writing","sub","Standard English Conventions","Form, Structure, & Sense"],
   "SEC - Boundaries":                       ["Reading & Writing","sub","Standard English Conventions","Boundaries"],
+  "SEC- Boundaries":                        ["Reading & Writing","sub","Standard English Conventions","Boundaries"],
+  "Boundaries":                             ["Reading & Writing","sub","Standard English Conventions","Boundaries"],
   // Math domains
   "Algebra":                       ["Math","domain","Algebra"],
   "Advanced Math":                 ["Math","domain","Advanced Math"],
   "PSDA":                          ["Math","domain","Problem-Solving & Data Analysis"],
   "Geometry & Trig":               ["Math","domain","Geometry & Trigonometry"],
-  // Math subdomains
+  // Math subdomains — multiple alternate forms for ZipGrade tag name variations
   "Alg- Linear Equations in One Variable":  ["Math","sub","Algebra","Linear Equations (1 Variable)"],
+  "Alg - Linear Equations in One Variable": ["Math","sub","Algebra","Linear Equations (1 Variable)"],
+  "Alg- Linear Eq in 1 Variable":          ["Math","sub","Algebra","Linear Equations (1 Variable)"],
+  "Alg- Linear Eq. in 1 Variable":         ["Math","sub","Algebra","Linear Equations (1 Variable)"],
+  "Linear Equations in One Variable":       ["Math","sub","Algebra","Linear Equations (1 Variable)"],
+  "Linear Equations in 1 Variable":         ["Math","sub","Algebra","Linear Equations (1 Variable)"],
   "Alg- Linear Equations in Two Variables": ["Math","sub","Algebra","Linear Equations (2 Variables)"],
+  "Alg - Linear Equations in Two Variables":["Math","sub","Algebra","Linear Equations (2 Variables)"],
+  "Alg- Linear Eq in 2 Variables":          ["Math","sub","Algebra","Linear Equations (2 Variables)"],
+  "Linear Equations in Two Variables":      ["Math","sub","Algebra","Linear Equations (2 Variables)"],
+  "Linear Equations in 2 Variables":        ["Math","sub","Algebra","Linear Equations (2 Variables)"],
   "Alg- Linear Functions":                  ["Math","sub","Algebra","Linear Functions"],
+  "Alg - Linear Functions":                 ["Math","sub","Algebra","Linear Functions"],
+  "Linear Functions":                       ["Math","sub","Algebra","Linear Functions"],
   "Alg- Linear Inequalities":               ["Math","sub","Algebra","Linear Inequalities"],
+  "Alg - Linear Inequalities":              ["Math","sub","Algebra","Linear Inequalities"],
+  "Linear Inequalities":                    ["Math","sub","Algebra","Linear Inequalities"],
   "Alg- Systems of Linear Equations":       ["Math","sub","Algebra","Systems of Linear Equations"],
+  "Alg - Systems of Linear Equations":      ["Math","sub","Algebra","Systems of Linear Equations"],
+  "Systems of Linear Equations":            ["Math","sub","Algebra","Systems of Linear Equations"],
   "AdvMath- Equivalent Expressions":        ["Math","sub","Advanced Math","Equivalent Expressions"],
+  "AdvMath - Equivalent Expressions":       ["Math","sub","Advanced Math","Equivalent Expressions"],
+  "Adv Math- Equivalent Expressions":       ["Math","sub","Advanced Math","Equivalent Expressions"],
+  "Equivalent Expressions":                 ["Math","sub","Advanced Math","Equivalent Expressions"],
   "AdvMath- Nonlinear Equations & SOEs":    ["Math","sub","Advanced Math","Nonlinear Equations"],
+  "AdvMath - Nonlinear Equations & SOEs":   ["Math","sub","Advanced Math","Nonlinear Equations"],
+  "Adv Math- Nonlinear Equations":          ["Math","sub","Advanced Math","Nonlinear Equations"],
+  "AdvMath- Nonlinear Equations":           ["Math","sub","Advanced Math","Nonlinear Equations"],
+  "Nonlinear Equations":                    ["Math","sub","Advanced Math","Nonlinear Equations"],
+  "Nonlinear Equations & SOEs":             ["Math","sub","Advanced Math","Nonlinear Equations"],
   "AdvMath- Nonlinear Functions":           ["Math","sub","Advanced Math","Nonlinear Functions"],
+  "AdvMath - Nonlinear Functions":          ["Math","sub","Advanced Math","Nonlinear Functions"],
+  "Adv Math- Nonlinear Functions":          ["Math","sub","Advanced Math","Nonlinear Functions"],
+  "Nonlinear Functions":                    ["Math","sub","Advanced Math","Nonlinear Functions"],
   "PSDA- Percentages":                                         ["Math","sub","Problem-Solving & Data Analysis","Percentages"],
+  "PSDA - Percentages":                                        ["Math","sub","Problem-Solving & Data Analysis","Percentages"],
+  "Percentages":                                               ["Math","sub","Problem-Solving & Data Analysis","Percentages"],
   "PSDA- Ratios, Rates, Proportions, Units":                   ["Math","sub","Problem-Solving & Data Analysis","Ratios, Rates, Proportions, Units"],
+  "PSDA - Ratios, Rates, Proportions, Units":                  ["Math","sub","Problem-Solving & Data Analysis","Ratios, Rates, Proportions, Units"],
+  "Ratios, Rates, Proportional Relationships, and Units":      ["Math","sub","Problem-Solving & Data Analysis","Ratios, Rates, Proportions, Units"],
+  "Ratios Rates Proportions Units":                            ["Math","sub","Problem-Solving & Data Analysis","Ratios, Rates, Proportions, Units"],
   "PSDA- One Var. Data Distributions":                         ["Math","sub","Problem-Solving & Data Analysis","One-Variable Data"],
+  "PSDA - One Var. Data Distributions":                        ["Math","sub","Problem-Solving & Data Analysis","One-Variable Data"],
+  "PSDA- One-Variable Data: Distributions and Measures":       ["Math","sub","Problem-Solving & Data Analysis","One-Variable Data"],
+  "One-Variable Data":                                         ["Math","sub","Problem-Solving & Data Analysis","One-Variable Data"],
+  "One Var Data Distributions":                                ["Math","sub","Problem-Solving & Data Analysis","One-Variable Data"],
   "PSDA- Two-Variable Data":                                   ["Math","sub","Problem-Solving & Data Analysis","Two-Variable Data"],
+  "PSDA - Two-Variable Data":                                  ["Math","sub","Problem-Solving & Data Analysis","Two-Variable Data"],
   "PSDA- Two Var. Data":                                       ["Math","sub","Problem-Solving & Data Analysis","Two-Variable Data"],
+  "Two-Variable Data":                                         ["Math","sub","Problem-Solving & Data Analysis","Two-Variable Data"],
   "PSDA- Probability & Conditional Probability":               ["Math","sub","Problem-Solving & Data Analysis","Probability"],
+  "PSDA - Probability & Conditional Probability":              ["Math","sub","Problem-Solving & Data Analysis","Probability"],
   "PSDA- Probability":                                         ["Math","sub","Problem-Solving & Data Analysis","Probability"],
+  "Probability & Conditional Probability":                     ["Math","sub","Problem-Solving & Data Analysis","Probability"],
+  "Probability":                                               ["Math","sub","Problem-Solving & Data Analysis","Probability"],
   "PSDA- Inference from Sample Data & Margin of Error":        ["Math","sub","Problem-Solving & Data Analysis","Inference & Margin of Error"],
+  "PSDA - Inference from Sample Data & Margin of Error":       ["Math","sub","Problem-Solving & Data Analysis","Inference & Margin of Error"],
   "PSDA- Inference & Margin of Error":                         ["Math","sub","Problem-Solving & Data Analysis","Inference & Margin of Error"],
+  "Inference from Sample Statistics and Margin of Error":      ["Math","sub","Problem-Solving & Data Analysis","Inference & Margin of Error"],
   "PSDA- Evaluating Stat Claims in Obs Studies & Experiments": ["Math","sub","Problem-Solving & Data Analysis","Evaluating Statistical Claims"],
+  "PSDA - Evaluating Stat Claims in Obs Studies & Experiments":["Math","sub","Problem-Solving & Data Analysis","Evaluating Statistical Claims"],
   "PSDA- Evaluating Statistical Claims":                       ["Math","sub","Problem-Solving & Data Analysis","Evaluating Statistical Claims"],
+  "Evaluating Statistical Claims":                             ["Math","sub","Problem-Solving & Data Analysis","Evaluating Statistical Claims"],
+  "Evaluating Stat. Claims: Obs. Studies & Experiments":       ["Math","sub","Problem-Solving & Data Analysis","Evaluating Statistical Claims"],
   "Geo- Area & Volume":                     ["Math","sub","Geometry & Trigonometry","Area & Volume"],
+  "Geo - Area & Volume":                    ["Math","sub","Geometry & Trigonometry","Area & Volume"],
+  "Area & Volume":                          ["Math","sub","Geometry & Trigonometry","Area & Volume"],
+  "Area and Volume":                        ["Math","sub","Geometry & Trigonometry","Area & Volume"],
   "Geo- Circles":                           ["Math","sub","Geometry & Trigonometry","Circles"],
+  "Geo - Circles":                          ["Math","sub","Geometry & Trigonometry","Circles"],
+  "Circles":                                ["Math","sub","Geometry & Trigonometry","Circles"],
   "Geo- Lines, Angles, & Triangles":        ["Math","sub","Geometry & Trigonometry","Lines, Angles, & Triangles"],
+  "Geo - Lines, Angles, & Triangles":       ["Math","sub","Geometry & Trigonometry","Lines, Angles, & Triangles"],
+  "Lines, Angles, and Triangles":           ["Math","sub","Geometry & Trigonometry","Lines, Angles, & Triangles"],
   "Geo- Right Triangles & Trigonometry":    ["Math","sub","Geometry & Trigonometry","Right Triangles & Trigonometry"],
+  "Geo - Right Triangles & Trigonometry":   ["Math","sub","Geometry & Trigonometry","Right Triangles & Trigonometry"],
+  "Right Triangles & Trigonometry":         ["Math","sub","Geometry & Trigonometry","Right Triangles & Trigonometry"],
+  "Right Triangles and Trigonometry":       ["Math","sub","Geometry & Trigonometry","Right Triangles & Trigonometry"],
 };
 // Normalizer: lowercase, collapse non-alphanumeric to nothing, so tag lookup is tolerant
 const normTag = (s)=>s.toLowerCase().replace(/\(2024\)/g,"").replace(/[^a-z0-9]/g,"");
@@ -316,6 +405,15 @@ function lookupTag(raw){
 function buildDiagnosticProfile(parsedList){
   const domains={}, subs={};
   const sectionTotals = {"Reading & Writing":{earn:0,poss:0,count:0},"Math":{earn:0,poss:0,count:0}};
+  // Track which domains have subskill data, so we can skip duplicate domain-level summary rows
+  const domainsWithSubs = new Set();
+  // First pass: identify which tags map to subskills
+  parsedList.forEach(res=>{
+    (res.tags||[]).forEach(t=>{
+      const map = lookupTag(t.tag);
+      if(map && map.kind==="sub") domainsWithSubs.add(`${map.subject}|${map.domain}`);
+    });
+  });
   parsedList.forEach(res=>{
     if(res.subject && sectionTotals[res.subject] && res.earned!=null && res.possible!=null){
       sectionTotals[res.subject].earn += res.earned;
@@ -324,7 +422,7 @@ function buildDiagnosticProfile(parsedList){
     }
     (res.tags||[]).forEach(t=>{
       const map = lookupTag(t.tag);
-      if(!map){ console.warn("Unmapped diagnostic tag:", t.tag); return; }
+      if(!map){ console.warn("[PSM Parser] Unmapped diagnostic tag:", t.tag, `(${t.earn}/${t.poss})`); return; }
       // Add to subdomain slot AND roll up to domain slot
       if(map.kind==="sub"){
         const sKey = `${map.subject}|${map.domain}|${map.name}`;
@@ -336,7 +434,12 @@ function buildDiagnosticProfile(parsedList){
         domains[dKey].earn += t.earn;
         domains[dKey].poss += t.poss;
       } else {
+        // Only use domain-level row if we have NO sub-level data for it (avoids double-counting)
         const dKey = `${map.subject}|${map.name}`;
+        if(domainsWithSubs.has(dKey)){
+          console.log("[PSM Parser] Skipping domain-summary row (subs exist):", t.tag, t.earn+"/"+t.poss);
+          return;
+        }
         if(!domains[dKey]) domains[dKey]={earn:0,poss:0,subject:map.subject,domain:map.name,name:map.name};
         domains[dKey].earn += t.earn;
         domains[dKey].poss += t.poss;
@@ -587,31 +690,69 @@ function App(){
       navigator.clipboard.writeText(plain).then(()=>showToast("Copied (plain)"));
     }
   };
-  const downloadPdf=()=>{
+  const downloadPdf=async()=>{
     if(!output){showToast("Nothing to export");return;}
     if(!window.jspdf){showToast("PDF library not loaded");return;}
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({unit:"pt",format:"letter"});
     const margin = 54, pageW = doc.internal.pageSize.getWidth(), pageH = doc.internal.pageSize.getHeight();
     const wrapW = pageW - margin*2;
+    // ATS brand colors
+    const ATS_NAVY = [0,74,121]; // #004a79
+    const ATS_BLUE = [0,74,151]; // #004a97
+    const ATS_GRAY = [100,116,139]; // #64748b
+    const ATS_TEXT = [30,41,59]; // #1e293b
     let y = margin;
-    // Header
-    doc.setFontSize(16); doc.setFont("helvetica","bold");
-    doc.setTextColor(0,50,88);
-    doc.text("Affordable Tutoring Solutions", margin, y); y += 20;
-    doc.setFontSize(11); doc.setFont("helvetica","normal"); doc.setTextColor(100,116,139);
+    // Try to load the ATS logo
+    let logoData = null;
+    try{
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      await new Promise((resolve,reject)=>{
+        img.onload=resolve; img.onerror=reject;
+        img.src="https://www.affordabletutoringsolutions.org/__static/jdj5jdewjge5r21lmvdyu0vwztrzwdzy/ATS-Horiz-Logo(2)";
+        setTimeout(reject, 4000);
+      });
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+      canvas.getContext("2d").drawImage(img,0,0);
+      logoData = canvas.toDataURL("image/png");
+    }catch(e){console.log("Logo fetch skipped:",e);}
+
+    // ── Header on first page ──
+    // Navy header bar
+    doc.setFillColor(...ATS_NAVY);
+    doc.rect(0, 0, pageW, 72, "F");
+    // Logo or text fallback
+    if(logoData){
+      try{doc.addImage(logoData,"PNG",margin,12,160,48);}catch(e){
+        doc.setFontSize(18); doc.setFont("helvetica","bold"); doc.setTextColor(255,255,255);
+        doc.text("Affordable Tutoring Solutions", margin, 42);
+      }
+    } else {
+      doc.setFontSize(18); doc.setFont("helvetica","bold"); doc.setTextColor(255,255,255);
+      doc.text("Affordable Tutoring Solutions", margin, 42);
+    }
+    // Tagline on right
+    doc.setFontSize(8); doc.setFont("helvetica","italic"); doc.setTextColor(200,220,240);
+    doc.text("Making Quality Education Accessible to All", pageW-margin, 30, {align:"right"});
+    // Student info below bar
+    y = 92;
     const studentName = curStudent?.name || "";
-    doc.text(`${studentName ? studentName + " — " : ""}PSM Assignment`, margin, y); y += 8;
-    doc.text(todayStr(), margin, y); y += 16;
-    doc.setDrawColor(226,232,240); doc.line(margin, y, pageW-margin, y); y += 14;
-    // Body
-    doc.setTextColor(30,41,59);
+    doc.setFontSize(13); doc.setFont("helvetica","bold"); doc.setTextColor(...ATS_NAVY);
+    doc.text(`${studentName ? studentName + " — " : ""}PSM Assignment`, margin, y); y += 16;
+    doc.setFontSize(10); doc.setFont("helvetica","normal"); doc.setTextColor(...ATS_GRAY);
+    doc.text(`Date: ${todayStr()}`, margin, y); y += 14;
+    // Decorative navy rule
+    doc.setDrawColor(...ATS_NAVY); doc.setLineWidth(1.5);
+    doc.line(margin, y, pageW-margin, y); y += 16;
+
+    // ── Body ──
+    doc.setTextColor(...ATS_TEXT);
     const paras = output.split("\n");
     paras.forEach(raw=>{
       if(raw.trim()===""){ y += 6; return; }
-      // Detect bold: **X** segments; render bold headers as larger
       const isHeader = /^\*\*[^*]+\*\*\s*$/.test(raw.trim()) || /^\*\*[^*]+:\*\*/.test(raw.trim());
-      // Strip bold asterisks for PDF rendering (we'll set font weight based on detection)
       const segments = [];
       const rx = /\*\*([^*]+)\*\*/g;
       let lastIdx = 0, m;
@@ -621,35 +762,41 @@ function App(){
         lastIdx = m.index + m[0].length;
       }
       if(lastIdx<raw.length) segments.push({bold:false,text:raw.slice(lastIdx)});
-      // Join segments into a rendered string; use wrapping based on full text
       const fullText = segments.map(s=>s.text).join("");
       doc.setFontSize(isHeader?12:10);
       doc.setFont("helvetica", isHeader?"bold":"normal");
+      if(isHeader) doc.setTextColor(...ATS_NAVY);
+      else doc.setTextColor(...ATS_TEXT);
       const lines = doc.splitTextToSize(fullText, wrapW);
       lines.forEach(line=>{
-        if(y > pageH - margin){ doc.addPage(); y = margin; }
-        // If line contains bold fragments, render segment-by-segment
+        if(y > pageH - 60){ doc.addPage(); y = margin; }
         if(segments.some(s=>s.bold) && lines.length===1){
           let x = margin;
           segments.forEach(seg=>{
             doc.setFont("helvetica", seg.bold?"bold":"normal");
+            if(seg.bold) doc.setTextColor(...ATS_NAVY); else doc.setTextColor(...ATS_TEXT);
             doc.text(seg.text, x, y);
             x += doc.getTextWidth(seg.text);
           });
         } else {
           doc.text(line, margin, y);
         }
-        y += isHeader?14:13;
+        y += isHeader?15:13;
       });
       y += 2;
     });
-    // Footer
+
+    // ── Footer on every page ──
     const pageCount = doc.getNumberOfPages();
     for(let i=1;i<=pageCount;i++){
       doc.setPage(i);
-      doc.setFontSize(8); doc.setFont("helvetica","normal"); doc.setTextColor(148,163,184);
-      doc.text(`Affordable Tutoring Solutions · Aidan Meyers · ameyers@affordabletutoringsolutions.org`, margin, pageH-24);
-      doc.text(`Page ${i} / ${pageCount}`, pageW-margin-40, pageH-24);
+      // Navy footer bar
+      doc.setFillColor(...ATS_NAVY);
+      doc.rect(0, pageH-36, pageW, 36, "F");
+      doc.setFontSize(7.5); doc.setFont("helvetica","normal"); doc.setTextColor(255,255,255);
+      doc.text("Affordable Tutoring Solutions Inc.  ·  Melbourne, FL  ·  Winter Park, FL  ·  Baltimore, MD", margin, pageH-16);
+      doc.text("+1 (321) 341-9820  ·  support@affordabletutoringsolutions.org", margin, pageH-8);
+      doc.text(`Page ${i} / ${pageCount}`, pageW-margin, pageH-12, {align:"right"});
     }
     const safeName = (studentName||"student").replace(/[^a-zA-Z0-9-_]/g,"_");
     doc.save(`PSM_${safeName}_${todayStr()}.pdf`);
@@ -1533,6 +1680,28 @@ function StudentProfile({p,setProfile,ptab,setPtab,paChk,setPaChk,paSubj,setPaSu
               ))}
             </div>
 
+            {/* Diagnostic Section & Total Scores */}
+            {diagProfile&&(diagProfile.rwScore||diagProfile.mathScore)&&<div style={{...CARD,marginBottom:14}}>
+              <div style={{fontSize:13,fontWeight:800,color:B2,marginBottom:12}}>📋 Diagnostic Baseline Scores</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:10}}>
+                {diagProfile.rwScore&&<div style={{background:"linear-gradient(135deg,#eef2ff,#e0e7ff)",padding:"14px 16px",borderRadius:10,borderLeft:`5px solid #4338ca`}}>
+                  <div style={{fontSize:10,fontWeight:700,color:"#6366f1",textTransform:"uppercase",letterSpacing:0.8}}>R&W Section</div>
+                  <div style={{fontSize:26,fontWeight:900,color:"#4338ca",marginTop:4}}>{diagProfile.rwScore.lower}–{diagProfile.rwScore.upper}</div>
+                  <div style={{fontSize:11,color:"#64748b",marginTop:2}}>Raw: {diagProfile.rwScore.earn}/{diagProfile.rwScore.poss}</div>
+                </div>}
+                {diagProfile.mathScore&&<div style={{background:"linear-gradient(135deg,#ecfeff,#cffafe)",padding:"14px 16px",borderRadius:10,borderLeft:`5px solid #0e7490`}}>
+                  <div style={{fontSize:10,fontWeight:700,color:"#06b6d4",textTransform:"uppercase",letterSpacing:0.8}}>Math Section</div>
+                  <div style={{fontSize:26,fontWeight:900,color:"#0e7490",marginTop:4}}>{diagProfile.mathScore.lower}–{diagProfile.mathScore.upper}</div>
+                  <div style={{fontSize:11,color:"#64748b",marginTop:2}}>Raw: {diagProfile.mathScore.earn}/{diagProfile.mathScore.poss}</div>
+                </div>}
+                {diagProfile.totalLower!=null&&<div style={{background:"linear-gradient(135deg,#f0f9ff,#e0f2fe)",padding:"14px 16px",borderRadius:10,borderLeft:`5px solid ${B2}`}}>
+                  <div style={{fontSize:10,fontWeight:700,color:B2,textTransform:"uppercase",letterSpacing:0.8}}>Total SAT (Est.)</div>
+                  <div style={{fontSize:26,fontWeight:900,color:B2,marginTop:4}}>{diagProfile.totalLower}–{diagProfile.totalUpper}</div>
+                  <div style={{fontSize:11,color:"#64748b",marginTop:2}}>out of 1600</div>
+                </div>}
+              </div>
+            </div>}
+
             {/* Domain heat map */}
             {diagProfile&&<div style={{...CARD,marginBottom:14}}>
               <div style={{fontSize:13,fontWeight:800,color:B2,marginBottom:10}}>📊 Diagnostic Performance Heat Map</div>
@@ -1854,10 +2023,15 @@ function ScoreHistoryPanel({p, sfm, setSfm, addScore, delScore, addWelledLog, de
     const last = ptsArr[ptsArr.length-1], first=ptsArr[0];
     const lastPct = pctOf(last), firstPct = pctOf(first);
     const delta = lastPct!=null&&firstPct!=null?lastPct-firstPct:null;
-    const chartPoints = ptsArr.map((pt,i)=>({x:i,y:pctOf(pt)??0,label:pt.date}));
+    const chartPoints = ptsArr.map((pt,i)=>({x:i,y:pctOf(pt)??0,label:`${pt.date}${pt.source==="diagnostic"?" (Diagnostic)":""}`}));
+    const hasDiag = ptsArr.some(p=>p.source==="diagnostic");
+    const srcLabels = [...new Set(ptsArr.map(p=>({diagnostic:"Diagnostic",manual:"Manual",history_exam:"Practice",history_welled:"WellEd Asg",welled_log:"WellEd Log"}[p.source]||p.source)))];
     return(
       <div key={key} style={{background:"#fff",borderRadius:10,padding:11,border:`1.5px solid ${accent}25`,borderLeft:`4px solid ${accent}`}}>
-        <div style={{fontSize:11,fontWeight:800,color:"#334155",marginBottom:5,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={title}>{title}</div>
+        <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:5}}>
+          <div style={{fontSize:11,fontWeight:800,color:"#334155",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}} title={title}>{title}</div>
+          {hasDiag&&<span style={{...mkPill("#fef3c7","#92400e"),fontSize:8,letterSpacing:0.3}}>DIAG</span>}
+        </div>
         <div style={{display:"flex",alignItems:"baseline",gap:6,marginBottom:5}}>
           <div style={{fontSize:19,fontWeight:900,color:accent}}>{last.score}</div>
           {last.max && <div style={{fontSize:11,color:"#94a3b8",fontWeight:600}}>/{last.max}</div>}
@@ -1865,7 +2039,7 @@ function ScoreHistoryPanel({p, sfm, setSfm, addScore, delScore, addWelledLog, de
           {delta!=null&&ptsArr.length>1&&<div style={{fontSize:10,color:delta>0?"#15803d":delta<0?"#dc2626":"#64748b",fontWeight:700,marginLeft:"auto"}}>{delta>0?"▲+":delta<0?"▼":"→"}{Math.abs(delta)}%</div>}
         </div>
         <LineChart points={chartPoints} color={accent} max={100} height={60} width={230}/>
-        <div style={{fontSize:9,color:"#94a3b8",marginTop:4}}>{ptsArr.length} pt{ptsArr.length!==1?"s":""} · {last.date}</div>
+        <div style={{fontSize:9,color:"#94a3b8",marginTop:4}}>{ptsArr.length} pt{ptsArr.length!==1?"s":""} · {last.date} · {srcLabels.join(", ")}</div>
       </div>
     );
   };
