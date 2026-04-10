@@ -668,6 +668,17 @@ function App(){
   };
   const addScore=()=>{if(!sfm.testType||!sfm.score)return;const entry={...sfm,id:uid()};const upd=students.map(st=>st.id===profile.id?{...st,scores:[...(st.scores||[]),entry]}:st);setStudents(upd);setProfile(upd.find(st=>st.id===profile.id));setSfm({date:todayStr(),testType:"",score:"",maxScore:"",notes:""});showToast("Score recorded");};
   const delScore=(sid)=>{const upd=students.map(st=>st.id===profile.id?{...st,scores:st.scores.filter(sc=>sc.id!==sid)}:st);setStudents(upd);setProfile(upd.find(st=>st.id===profile.id));};
+  // Standalone WellEd Domain score logs — continuous tracking per subdomain outside of assignment history
+  const addWelledLog=(log)=>{
+    const entry = {...log,id:uid()};
+    const upd = students.map(st=>st.id===profile.id?{...st,welledLogs:[...(st.welledLogs||[]),entry]}:st);
+    setStudents(upd); setProfile(upd.find(st=>st.id===profile.id));
+    showToast("WellEd domain score logged");
+  };
+  const delWelledLog=(lid)=>{
+    const upd = students.map(st=>st.id===profile.id?{...st,welledLogs:(st.welledLogs||[]).filter(l=>l.id!==lid)}:st);
+    setStudents(upd); setProfile(upd.find(st=>st.id===profile.id));
+  };
   const delAsg=(aid)=>{const upd=students.map(st=>st.id===profile.id?{...st,assignments:st.assignments.filter(a=>a.id!==aid)}:st);setStudents(upd);setProfile(upd.find(st=>st.id===profile.id));};
   const delStudent=(id)=>{if(!confirm("Delete this student and all their data?"))return;setStudents(prev=>prev.filter(st=>st.id!==id));if(profile?.id===id)setProfile(null);};
 
@@ -824,6 +835,7 @@ function App(){
         {tab==="students"&&profile&&p&&<StudentProfile {...{p,setProfile,ptab,setPtab,
           paChk,setPaChk,paSubj,setPaSubj,paSrch,setPaSrch,savePreAssign,
           sfm,setSfm,addScore,delScore,delAsg,setExamScore,setWelledDomainScore,
+          addWelledLog,delWelledLog,
           handleDiagUpload,clearDiagnostics,diagInputRef,diagProfile,showToast,
         }}/>}
 
@@ -1347,7 +1359,7 @@ function StudentsList({students,showAdd,setShowAdd,newS,setNewS,addStudent,openP
 }
 
 /* ============ STUDENT PROFILE ============ */
-function StudentProfile({p,setProfile,ptab,setPtab,paChk,setPaChk,paSubj,setPaSubj,paSrch,setPaSrch,savePreAssign,sfm,setSfm,addScore,delScore,delAsg,setExamScore,setWelledDomainScore,handleDiagUpload,clearDiagnostics,diagInputRef,diagProfile,showToast}){
+function StudentProfile({p,setProfile,ptab,setPtab,paChk,setPaChk,paSubj,setPaSubj,paSrch,setPaSrch,savePreAssign,sfm,setSfm,addScore,delScore,delAsg,setExamScore,setWelledDomainScore,addWelledLog,delWelledLog,handleDiagUpload,clearDiagnostics,diagInputRef,diagProfile,showToast}){
   const paFiltered = useMemo(()=>ALL_WS.filter(ws=>{
     if(paSubj!=="All"&&ws.subject!==paSubj)return false;
     if(paSrch&&!ws.title.toLowerCase().includes(paSrch.toLowerCase()))return false;
@@ -1597,7 +1609,7 @@ function StudentProfile({p,setProfile,ptab,setPtab,paChk,setPaChk,paSubj,setPaSu
 
       {/* SCORE HISTORY (aggregated from all sources) */}
       {ptab==="scores"&&(
-        <ScoreHistoryPanel p={p} sfm={sfm} setSfm={setSfm} addScore={addScore} delScore={delScore}/>
+        <ScoreHistoryPanel p={p} sfm={sfm} setSfm={setSfm} addScore={addScore} delScore={delScore} addWelledLog={addWelledLog} delWelledLog={delWelledLog}/>
       )}
     </div>
   );
@@ -1752,126 +1764,323 @@ function LineChart({points, color="#004a79", max, height=80, width=260}){
 }
 
 /* ============ SCORE HISTORY PANEL (inside StudentProfile) ============ */
-function ScoreHistoryPanel({p, sfm, setSfm, addScore, delScore}){
+function ScoreHistoryPanel({p, sfm, setSfm, addScore, delScore, addWelledLog, delWelledLog}){
   const pts = allScoreDataPoints(p);
-  // Group by subcategory. WellEd domain entries further split by difficulty.
-  const groups = useMemo(()=>{
-    const g = {};
+  const [expanded,setExpanded] = useState({}); // {domainKey: true}
+  const [diffFilter,setDiffFilter] = useState("all"); // all|easy|medium|hard|comprehensive
+  const [wlog,setWlog] = useState({date:todayStr(),subject:"Reading & Writing",domain:"Information & Ideas",difficulty:"medium",score:"",notes:""});
+
+  // Split points into (A) full practice, (B) domain-level, (C) subskill-level, (D) other
+  const { fullPts, domainPts, subPts, otherPts } = useMemo(()=>{
+    const full=[], dom=[], sub=[], oth=[];
     pts.forEach(pt=>{
-      const key = pt.source==="history_welled" && pt.difficulty ? `${pt.subcategory} (${pt.difficulty})` : pt.subcategory;
-      if(!g[key]) g[key]={key,pts:[],source:pt.source,level:pt.level,difficulty:pt.difficulty};
+      const catStr = pt.category||"";
+      const isFull = /Total SAT|R&W Section|Math Section|Full —|Section —|Practice|Official SAT|Full Practice|BlueBook|WellEd Full/i.test(catStr);
+      if(isFull && pt.level!=="domain" && pt.level!=="sub") full.push(pt);
+      else if(pt.level==="sub") sub.push(pt);
+      else if(pt.level==="domain") dom.push(pt);
+      else oth.push(pt);
+    });
+    return {fullPts:full,domainPts:dom,subPts:sub,otherPts:oth};
+  },[pts]);
+
+  // Group full practice by subcategory
+  const fullGroups = useMemo(()=>{
+    const g={};
+    fullPts.forEach(pt=>{
+      const key = pt.subcategory||pt.category;
+      if(!g[key]) g[key]={key,pts:[]};
       g[key].pts.push(pt);
     });
     Object.values(g).forEach(grp=>grp.pts.sort((a,b)=>(a.date||"").localeCompare(b.date||"")));
-    return g;
-  },[pts]);
+    return Object.values(g);
+  },[fullPts]);
 
-  // Categorize groups for display
-  const sectionGroups = [], domainGroups = [], subGroups = [], fullPracticeGroups = [], otherGroups = [];
-  Object.values(groups).forEach(grp=>{
-    if(/Total SAT|R&W Section|Math Section|Full —|Section —|Practice|Official SAT|Full Practice/i.test(grp.key)) fullPracticeGroups.push(grp);
-    else if(grp.level==="sub") subGroups.push(grp);
-    else if(grp.level==="domain") domainGroups.push(grp);
-    else if(grp.source==="history_welled") domainGroups.push(grp);
-    else sectionGroups.push(grp);
-  });
+  // Build domain structure: {subject|domain: {subject, domain, pts, byDiff:{easy:[],...}, subskills:{name:[pts]}}}
+  const domainCards = useMemo(()=>{
+    const m = {};
+    const addDomain = (subject,domain)=>{
+      const k = `${subject}|${domain}`;
+      if(!m[k]) m[k]={subject,domain,key:k,pts:[],byDiff:{easy:[],medium:[],hard:[],comprehensive:[]},subskills:{}};
+      return m[k];
+    };
+    domainPts.forEach(pt=>{
+      const subj = pt.subject || (pt.category||"").split(" — ")[0] || "Unknown";
+      const dom = pt.domain || pt.subcategory;
+      const d = addDomain(subj,dom);
+      d.pts.push(pt);
+      const diff = (pt.difficulty||"").toLowerCase();
+      if(d.byDiff[diff]) d.byDiff[diff].push(pt);
+    });
+    subPts.forEach(pt=>{
+      const subj = pt.subject || "Unknown";
+      const dom = pt.domain || "Unknown";
+      const name = pt.subskill || pt.subcategory;
+      const d = addDomain(subj,dom);
+      if(!d.subskills[name]) d.subskills[name]=[];
+      d.subskills[name].push(pt);
+    });
+    // Sort pts in each
+    Object.values(m).forEach(d=>{
+      d.pts.sort((a,b)=>(a.date||"").localeCompare(b.date||""));
+      Object.values(d.byDiff).forEach(arr=>arr.sort((a,b)=>(a.date||"").localeCompare(b.date||"")));
+      Object.values(d.subskills).forEach(arr=>arr.sort((a,b)=>(a.date||"").localeCompare(b.date||"")));
+    });
+    // Order: R&W first, then Math, then alpha by domain within
+    return Object.values(m).sort((a,b)=>{
+      if(a.subject!==b.subject) return a.subject==="Reading & Writing"?-1:1;
+      return a.domain.localeCompare(b.domain);
+    });
+  },[domainPts,subPts]);
 
-  const renderGroup = (grp)=>{
-    const last = grp.pts[grp.pts.length-1];
-    const first = grp.pts[0];
-    const lastPct = last.max?Math.round((last.score/last.max)*100):last.pct||null;
-    const firstPct = first.max?Math.round((first.score/first.max)*100):first.pct||null;
+  // Filtered by difficulty
+  const filterPts = (arr)=>{
+    if(diffFilter==="all") return arr;
+    return arr.filter(pt=>(pt.difficulty||"").toLowerCase()===diffFilter);
+  };
+
+  const pctOf = (pt)=> pt.max?Math.round((pt.score/pt.max)*100):(pt.pct??null);
+  const avgPct = (arr)=>{
+    const vals = arr.map(pctOf).filter(v=>v!=null);
+    if(!vals.length) return null;
+    return Math.round(vals.reduce((a,b)=>a+b,0)/vals.length);
+  };
+  const pctColor = (v)=> v==null?"#64748b":v>=80?"#15803d":v>=65?"#d97706":"#dc2626";
+  const pctBg = (v)=> v==null?"#f1f5f9":v>=80?"#dcfce7":v>=65?"#fef3c7":"#fee2e2";
+
+  // Small sparkline card (used for full practice & subskills)
+  const miniCard = (key,title,ptsArr,accent)=>{
+    if(!ptsArr.length) return null;
+    const last = ptsArr[ptsArr.length-1], first=ptsArr[0];
+    const lastPct = pctOf(last), firstPct = pctOf(first);
     const delta = lastPct!=null&&firstPct!=null?lastPct-firstPct:null;
-    const pColor = lastPct===null?"#64748b":lastPct>=75?"#15803d":lastPct>=60?"#d97706":"#dc2626";
-    // Chart y-values: use pct if available, else raw
-    const chartPoints = grp.pts.map((pt,i)=>({x:i,y:pt.max?Math.round((pt.score/pt.max)*100):(pt.pct||pt.score||0),label:pt.date}));
+    const chartPoints = ptsArr.map((pt,i)=>({x:i,y:pctOf(pt)??0,label:pt.date}));
     return(
-      <div key={grp.key} style={{background:"#f8fafc",borderRadius:10,padding:12,border:"1.5px solid #e2e8f0"}}>
-        <div style={{fontSize:11,fontWeight:800,color:"#475569",marginBottom:6,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{grp.key}</div>
-        <div style={{display:"flex",alignItems:"baseline",gap:6,marginBottom:6}}>
-          <div style={{fontSize:20,fontWeight:900,color:B2}}>{last.score}</div>
+      <div key={key} style={{background:"#fff",borderRadius:10,padding:11,border:`1.5px solid ${accent}25`,borderLeft:`4px solid ${accent}`}}>
+        <div style={{fontSize:11,fontWeight:800,color:"#334155",marginBottom:5,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={title}>{title}</div>
+        <div style={{display:"flex",alignItems:"baseline",gap:6,marginBottom:5}}>
+          <div style={{fontSize:19,fontWeight:900,color:accent}}>{last.score}</div>
           {last.max && <div style={{fontSize:11,color:"#94a3b8",fontWeight:600}}>/{last.max}</div>}
-          {lastPct!=null && <div style={{fontSize:12,color:pColor,fontWeight:700,marginLeft:4}}>{lastPct}%</div>}
-          {delta!=null&&grp.pts.length>1&&<div style={{fontSize:10,color:delta>0?"#15803d":delta<0?"#dc2626":"#64748b",fontWeight:700,marginLeft:"auto"}}>{delta>0?"▲ +":delta<0?"▼ ":"→ "}{Math.abs(delta)}%</div>}
+          {lastPct!=null && <span style={{...mkPill(pctBg(lastPct),pctColor(lastPct)),marginLeft:4}}>{lastPct}%</span>}
+          {delta!=null&&ptsArr.length>1&&<div style={{fontSize:10,color:delta>0?"#15803d":delta<0?"#dc2626":"#64748b",fontWeight:700,marginLeft:"auto"}}>{delta>0?"▲+":delta<0?"▼":"→"}{Math.abs(delta)}%</div>}
         </div>
-        <LineChart points={chartPoints} color={B2} max={100} height={70} width={240}/>
-        <div style={{fontSize:9,color:"#94a3b8",marginTop:4}}>{grp.pts.length} point{grp.pts.length!==1?"s":""} · Latest {last.date}</div>
+        <LineChart points={chartPoints} color={accent} max={100} height={60} width={230}/>
+        <div style={{fontSize:9,color:"#94a3b8",marginTop:4}}>{ptsArr.length} pt{ptsArr.length!==1?"s":""} · {last.date}</div>
       </div>
     );
   };
 
-  return(
-    <div>
-      <div style={{display:"grid",gridTemplateColumns:"310px 1fr",gap:16}}>
-        {/* Left: manual add */}
-        <div style={{...CARD}}>
-          <div style={{fontSize:14,fontWeight:800,color:B2,marginBottom:14}}>+ Add Score Manually</div>
-          <div style={{display:"flex",flexDirection:"column",gap:10}}>
-            <div><div style={{fontSize:10,color:"#64748b",marginBottom:4,fontWeight:600}}>DATE</div><input type="date" value={sfm.date} onChange={e=>setSfm(prev=>({...prev,date:e.target.value}))} style={INP}/></div>
-            <div>
-              <div style={{fontSize:10,color:"#64748b",marginBottom:4,fontWeight:600}}>TEST / SECTION</div>
-              <select value={sfm.testType} onChange={e=>setSfm(prev=>({...prev,testType:e.target.value}))} style={INP}>
-                <option value="">Select test type…</option>
-                <optgroup label="Full Practice Tests">
-                  <option>WellEd Full Practice Test</option>
-                  <option>BlueBook Full Practice Test</option>
-                  <option>Official SAT / PSAT</option>
-                </optgroup>
-                <optgroup label="Sections (out of 800)">
-                  <option>R&amp;W Section</option>
-                  <option>Math Section</option>
-                </optgroup>
-                <option value="Other">Other (see notes)</option>
-              </select>
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-              <div><div style={{fontSize:10,color:"#64748b",marginBottom:4,fontWeight:600}}>SCORE</div><input type="number" value={sfm.score} onChange={e=>setSfm(prev=>({...prev,score:e.target.value}))} placeholder="e.g. 1250" style={INP}/></div>
-              <div><div style={{fontSize:10,color:"#64748b",marginBottom:4,fontWeight:600}}>MAX</div><input type="number" value={sfm.maxScore} onChange={e=>setSfm(prev=>({...prev,maxScore:e.target.value}))} placeholder="e.g. 1600" style={INP}/></div>
-            </div>
-            <div><div style={{fontSize:10,color:"#64748b",marginBottom:4,fontWeight:600}}>NOTES</div><input value={sfm.notes} onChange={e=>setSfm(prev=>({...prev,notes:e.target.value}))} placeholder="Optional notes…" style={INP}/></div>
-            <button onClick={addScore} style={{...mkBtn(B2,"#fff"),padding:10,fontSize:13}}>+ Add Score</button>
-            <div style={{fontSize:10,color:"#64748b",lineHeight:1.5,padding:8,background:"#f1f5f9",borderRadius:6}}>💡 Scores from Assignment History (practice exams + WellEd domain assignments) are automatically tracked here. Diagnostic section/total scores from uploaded PDFs also appear as baseline data points.</div>
+  // Big domain card
+  const renderDomainCard = (d)=>{
+    const color = DOMAIN_COLOR[d.domain]||B2;
+    const filtered = filterPts(d.pts);
+    if(filtered.length===0 && diffFilter!=="all") return null;
+    const avg = avgPct(filtered);
+    const last = filtered[filtered.length-1];
+    const first = filtered[0];
+    const delta = last && first && filtered.length>1 ? pctOf(last)-pctOf(first) : null;
+    const chartPoints = filtered.map((pt,i)=>({x:i,y:pctOf(pt)??0,label:`${pt.date} (${pt.difficulty||"—"})`}));
+    const isOpen = expanded[d.key];
+    const subskillNames = Object.keys(d.subskills);
+    const subjBg = SUBJ_COLOR[d.subject]?.bg||"#f8fafc";
+
+    return(
+      <div key={d.key} style={{background:"#fff",borderRadius:14,border:`2px solid ${color}25`,borderLeft:`6px solid ${color}`,overflow:"hidden",boxShadow:"0 1px 4px rgba(0,0,0,.05)"}}>
+        {/* Header bar */}
+        <div style={{background:subjBg,padding:"10px 14px",borderBottom:`1px solid ${color}22`,display:"flex",alignItems:"center",gap:10}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:10,fontWeight:800,color:"#64748b",textTransform:"uppercase",letterSpacing:0.8}}>{d.subject}</div>
+            <div style={{fontSize:15,fontWeight:900,color}}>{d.domain}</div>
           </div>
+          {avg!=null && <div style={{textAlign:"right"}}>
+            <div style={{fontSize:22,fontWeight:900,color:pctColor(avg)}}>{avg}%</div>
+            <div style={{fontSize:9,color:"#94a3b8",fontWeight:700}}>AVG · {filtered.length} pt{filtered.length!==1?"s":""}</div>
+          </div>}
+          {delta!=null && <div style={{fontSize:11,color:delta>0?"#15803d":delta<0?"#dc2626":"#64748b",fontWeight:800,background:"#fff",padding:"3px 8px",borderRadius:12,border:`1px solid ${color}33`}}>{delta>0?"▲ +":delta<0?"▼ ":"→ "}{Math.abs(delta)}%</div>}
         </div>
 
-        {/* Right: aggregated view */}
+        {/* Body: chart + difficulty breakdown */}
+        <div style={{padding:14}}>
+          {filtered.length>0 ? (
+            <div style={{display:"grid",gridTemplateColumns:"1fr 180px",gap:14,alignItems:"center"}}>
+              <LineChart points={chartPoints} color={color} max={100} height={110} width={400}/>
+              <div style={{display:"flex",flexDirection:"column",gap:5}}>
+                <div style={{fontSize:9,fontWeight:800,color:"#94a3b8",textTransform:"uppercase",letterSpacing:0.8,marginBottom:2}}>By Difficulty</div>
+                {DIFF_ORDER.map(diff=>{
+                  const diffPts = d.byDiff[diff]||[];
+                  if(diffPts.length===0) return null;
+                  const a = avgPct(diffPts);
+                  const lastD = diffPts[diffPts.length-1];
+                  return(
+                    <div key={diff} style={{display:"flex",alignItems:"center",gap:6,fontSize:11}}>
+                      <div style={{width:10,height:10,borderRadius:3,background:DC[diff]}}/>
+                      <div style={{flex:1,color:"#475569",fontWeight:600,textTransform:"capitalize"}}>{diff}</div>
+                      <div style={{fontSize:10,color:"#94a3b8"}}>{lastD.score}/{lastD.max}</div>
+                      <span style={{...mkPill(pctBg(a),pctColor(a)),minWidth:38,textAlign:"center"}}>{a}%</span>
+                    </div>
+                  );
+                })}
+                {DIFF_ORDER.every(diff=>(d.byDiff[diff]||[]).length===0) && <div style={{fontSize:10,color:"#94a3b8",fontStyle:"italic"}}>No difficulty breakdown available (diagnostic only)</div>}
+              </div>
+            </div>
+          ) : <div style={{fontSize:11,color:"#94a3b8",fontStyle:"italic",textAlign:"center",padding:10}}>No data at this difficulty filter</div>}
+
+          {/* Expand subskills toggle */}
+          {subskillNames.length>0 && <button onClick={()=>setExpanded(prev=>({...prev,[d.key]:!prev[d.key]}))} style={{...mkBtn(isOpen?`${color}15`:"#f1f5f9",color),marginTop:12,width:"100%",padding:"8px 12px",fontSize:11,fontWeight:700,border:`1px solid ${color}33`}}>
+            {isOpen?"▲ Hide":"▼ Show"} {subskillNames.length} subskill{subskillNames.length!==1?"s":""}
+          </button>}
+
+          {isOpen && subskillNames.length>0 && <div style={{marginTop:12,padding:12,background:`${color}08`,borderRadius:8,border:`1px dashed ${color}33`}}>
+            <div style={{fontSize:9,fontWeight:800,color:"#64748b",textTransform:"uppercase",letterSpacing:0.8,marginBottom:8}}>🔬 Subskill Performance Over Time</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:10}}>
+              {subskillNames.map(name=>miniCard(`${d.key}|${name}`,name,d.subskills[name],color))}
+            </div>
+          </div>}
+        </div>
+      </div>
+    );
+  };
+
+  // WellEd log form helpers
+  const wlogDomainOptions = WELLED_DOMAIN.filter(e=>e.subject===wlog.subject);
+  const wlogCurrentEntry = WELLED_DOMAIN.find(e=>e.subject===wlog.subject && e.domain===wlog.domain);
+  const wlogMax = wlog.subject==="Math"?22:27;
+  const wlogSubmit = ()=>{
+    if(!wlog.score || !wlog.domain){return;}
+    addWelledLog({date:wlog.date,subject:wlog.subject,domain:wlog.domain,difficulty:wlog.difficulty,score:Number(wlog.score),max:wlogMax,notes:wlog.notes});
+    setWlog({...wlog,score:"",notes:""});
+  };
+
+  return(
+    <div>
+      <div style={{display:"grid",gridTemplateColumns:"320px 1fr",gap:16}}>
+        {/* ========== LEFT: Quick Add ========== */}
         <div style={{display:"flex",flexDirection:"column",gap:14}}>
+          {/* WellEd domain logger */}
+          <div style={{...CARD,borderLeft:`4px solid ${B2}`}}>
+            <div style={{fontSize:13,fontWeight:800,color:B2,marginBottom:12,display:"flex",alignItems:"center",gap:6}}>📚 Log WellEd Domain Score</div>
+            <div style={{display:"flex",flexDirection:"column",gap:9}}>
+              <div><div style={{fontSize:9,color:"#64748b",marginBottom:3,fontWeight:700,letterSpacing:0.5}}>DATE</div><input type="date" value={wlog.date} onChange={e=>setWlog({...wlog,date:e.target.value})} style={INP}/></div>
+              <div><div style={{fontSize:9,color:"#64748b",marginBottom:3,fontWeight:700,letterSpacing:0.5}}>SUBJECT</div>
+                <select value={wlog.subject} onChange={e=>{
+                  const subj = e.target.value;
+                  const firstDom = WELLED_DOMAIN.find(x=>x.subject===subj);
+                  setWlog({...wlog,subject:subj,domain:firstDom?.domain||"",difficulty:firstDom?.diffs[0]||"easy"});
+                }} style={INP}>
+                  <option>Reading & Writing</option>
+                  <option>Math</option>
+                </select>
+              </div>
+              <div><div style={{fontSize:9,color:"#64748b",marginBottom:3,fontWeight:700,letterSpacing:0.5}}>DOMAIN</div>
+                <select value={wlog.domain} onChange={e=>{
+                  const entry = WELLED_DOMAIN.find(x=>x.subject===wlog.subject && x.domain===e.target.value);
+                  setWlog({...wlog,domain:e.target.value,difficulty:entry?.diffs.includes(wlog.difficulty)?wlog.difficulty:entry?.diffs[0]||"easy"});
+                }} style={INP}>
+                  {wlogDomainOptions.map(e=><option key={e.domain}>{e.domain}</option>)}
+                </select>
+              </div>
+              <div><div style={{fontSize:9,color:"#64748b",marginBottom:3,fontWeight:700,letterSpacing:0.5}}>DIFFICULTY</div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:5}}>
+                  {(wlogCurrentEntry?.diffs||["easy","medium","hard","comprehensive"]).concat(["comprehensive"]).filter((v,i,a)=>a.indexOf(v)===i).map(diff=>{
+                    const active = wlog.difficulty===diff;
+                    return <button key={diff} onClick={()=>setWlog({...wlog,difficulty:diff})} style={{...mkBtn(active?DC[diff]:"#f1f5f9",active?"#fff":"#475569"),padding:"6px 8px",fontSize:10,fontWeight:700,textTransform:"capitalize"}}>{diff}</button>;
+                  })}
+                </div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:6,alignItems:"end"}}>
+                <div><div style={{fontSize:9,color:"#64748b",marginBottom:3,fontWeight:700,letterSpacing:0.5}}>SCORE</div><input type="number" value={wlog.score} onChange={e=>setWlog({...wlog,score:e.target.value})} placeholder={`0-${wlogMax}`} max={wlogMax} min={0} style={INP}/></div>
+                <div style={{fontSize:12,color:"#94a3b8",fontWeight:700,paddingBottom:9}}>/ {wlogMax}</div>
+              </div>
+              <div><div style={{fontSize:9,color:"#64748b",marginBottom:3,fontWeight:700,letterSpacing:0.5}}>NOTES</div><input value={wlog.notes} onChange={e=>setWlog({...wlog,notes:e.target.value})} placeholder="Optional…" style={INP}/></div>
+              <button onClick={wlogSubmit} disabled={!wlog.score} style={{...mkBtn(wlog.score?B2:"#cbd5e1","#fff"),padding:10,fontSize:13,cursor:wlog.score?"pointer":"not-allowed"}}>+ Log Score</button>
+            </div>
+          </div>
+
+          {/* Manual full-test score */}
+          <div style={{...CARD,borderLeft:"4px solid #7c3aed"}}>
+            <div style={{fontSize:13,fontWeight:800,color:"#7c3aed",marginBottom:12}}>🎯 Log Full Test Score</div>
+            <div style={{display:"flex",flexDirection:"column",gap:9}}>
+              <div><div style={{fontSize:9,color:"#64748b",marginBottom:3,fontWeight:700,letterSpacing:0.5}}>DATE</div><input type="date" value={sfm.date} onChange={e=>setSfm(prev=>({...prev,date:e.target.value}))} style={INP}/></div>
+              <div>
+                <div style={{fontSize:9,color:"#64748b",marginBottom:3,fontWeight:700,letterSpacing:0.5}}>TEST / SECTION</div>
+                <select value={sfm.testType} onChange={e=>setSfm(prev=>({...prev,testType:e.target.value}))} style={INP}>
+                  <option value="">Select…</option>
+                  <optgroup label="Full Practice Tests">
+                    <option>WellEd Full Practice Test</option>
+                    <option>BlueBook Full Practice Test</option>
+                    <option>Official SAT / PSAT</option>
+                  </optgroup>
+                  <optgroup label="Sections">
+                    <option>R&amp;W Section</option>
+                    <option>Math Section</option>
+                  </optgroup>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+                <div><div style={{fontSize:9,color:"#64748b",marginBottom:3,fontWeight:700,letterSpacing:0.5}}>SCORE</div><input type="number" value={sfm.score} onChange={e=>setSfm(prev=>({...prev,score:e.target.value}))} placeholder="1250" style={INP}/></div>
+                <div><div style={{fontSize:9,color:"#64748b",marginBottom:3,fontWeight:700,letterSpacing:0.5}}>MAX</div><input type="number" value={sfm.maxScore} onChange={e=>setSfm(prev=>({...prev,maxScore:e.target.value}))} placeholder="1600" style={INP}/></div>
+              </div>
+              <div><div style={{fontSize:9,color:"#64748b",marginBottom:3,fontWeight:700,letterSpacing:0.5}}>NOTES</div><input value={sfm.notes} onChange={e=>setSfm(prev=>({...prev,notes:e.target.value}))} placeholder="Optional…" style={INP}/></div>
+              <button onClick={addScore} style={{...mkBtn("#7c3aed","#fff"),padding:10,fontSize:13}}>+ Add Score</button>
+            </div>
+          </div>
+
+          <div style={{fontSize:10,color:"#64748b",lineHeight:1.5,padding:10,background:"#f1f5f9",borderRadius:8}}>💡 Scores from Assignment History and diagnostic PDFs are automatically aggregated here. WellEd logs & manual scores persist independently.</div>
+        </div>
+
+        {/* ========== RIGHT: Aggregated view ========== */}
+        <div style={{display:"flex",flexDirection:"column",gap:16}}>
           {pts.length===0 && <div style={{...CARD,padding:40,textAlign:"center",color:"#94a3b8"}}>
             <div style={{fontSize:28,marginBottom:8}}>📊</div>
             <div style={{fontSize:14,fontWeight:600}}>No scores recorded yet</div>
-            <div style={{fontSize:11,marginTop:4}}>Upload a diagnostic PDF, enter scores in Assignment History, or add a manual entry.</div>
+            <div style={{fontSize:11,marginTop:4}}>Upload a diagnostic PDF, log a WellEd score, or enter scores in Assignment History.</div>
           </div>}
 
-          {fullPracticeGroups.length>0 && <div style={{...CARD}}>
-            <div style={{fontSize:13,fontWeight:800,color:B2,marginBottom:10}}>🎯 Full Practice Tests & Section Scores</div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(250px,1fr))",gap:10}}>
-              {fullPracticeGroups.map(renderGroup)}
+          {/* SECTION 1: Full practice tests */}
+          {fullGroups.length>0 && <div style={{...CARD,borderTop:"4px solid #7c3aed"}}>
+            <div style={{fontSize:14,fontWeight:800,color:"#7c3aed",marginBottom:12,display:"flex",alignItems:"center",gap:8}}>
+              🎯 Full Practice Tests & Section Scores
+              <div style={{fontSize:10,color:"#94a3b8",fontWeight:600,marginLeft:"auto"}}>{fullGroups.length} track{fullGroups.length!==1?"s":""}</div>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:10}}>
+              {fullGroups.map(g=>miniCard(g.key,g.key,g.pts,"#7c3aed"))}
             </div>
           </div>}
 
-          {domainGroups.length>0 && <div style={{...CARD}}>
-            <div style={{fontSize:13,fontWeight:800,color:B2,marginBottom:10}}>📚 Domain Progression</div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(250px,1fr))",gap:10}}>
-              {domainGroups.map(renderGroup)}
+          {/* SECTION 2: Domain Performance */}
+          {domainCards.length>0 && <div style={{...CARD}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,flexWrap:"wrap"}}>
+              <div style={{fontSize:14,fontWeight:800,color:B2}}>📚 Domain Performance · Expand for Subskills</div>
+              <div style={{marginLeft:"auto",display:"flex",gap:5,alignItems:"center"}}>
+                <div style={{fontSize:9,color:"#94a3b8",fontWeight:700,textTransform:"uppercase",letterSpacing:0.6}}>Filter:</div>
+                {["all","easy","medium","hard","comprehensive"].map(d=>{
+                  const active = diffFilter===d;
+                  const c = d==="all"?B2:DC[d];
+                  return <button key={d} onClick={()=>setDiffFilter(d)} style={{...mkBtn(active?c:"#f1f5f9",active?"#fff":"#475569"),padding:"4px 9px",fontSize:10,fontWeight:700,textTransform:"capitalize"}}>{d==="all"?"All":d}</button>;
+                })}
+              </div>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:12}}>
+              {domainCards.map(renderDomainCard)}
             </div>
           </div>}
 
-          {subGroups.length>0 && <div style={{...CARD}}>
-            <div style={{fontSize:13,fontWeight:800,color:B2,marginBottom:10}}>🔬 Subskill Progression</div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(250px,1fr))",gap:10}}>
-              {subGroups.map(renderGroup)}
+          {/* SECTION 3: Orphan subskills (no parent domain data) */}
+          {domainCards.length===0 && subPts.length>0 && <div style={{...CARD}}>
+            <div style={{fontSize:14,fontWeight:800,color:B2,marginBottom:12}}>🔬 Subskill Data</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:10}}>
+              {(()=>{
+                const sg={};
+                subPts.forEach(pt=>{const k=pt.subskill||pt.subcategory; if(!sg[k])sg[k]=[]; sg[k].push(pt);});
+                return Object.entries(sg).map(([k,arr])=>miniCard(k,k,arr.sort((a,b)=>(a.date||"").localeCompare(b.date||"")),B2));
+              })()}
             </div>
           </div>}
 
-          {sectionGroups.length>0 && <div style={{...CARD}}>
-            <div style={{fontSize:13,fontWeight:800,color:B2,marginBottom:10}}>📝 Manual Entries</div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(250px,1fr))",gap:10}}>
-              {sectionGroups.map(renderGroup)}
-            </div>
-          </div>}
-
+          {/* SECTION 4: Manual entries table */}
           {(p.scores||[]).length>0 && <div style={{...CARD}}>
-            <div style={{fontSize:13,fontWeight:800,color:B2,marginBottom:10}}>Manual Entry Table</div>
+            <div style={{fontSize:12,fontWeight:800,color:"#64748b",marginBottom:10,textTransform:"uppercase",letterSpacing:0.8}}>Manual Entry Log</div>
             <div style={{overflowX:"auto"}}>
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
                 <thead><tr style={{background:"#f1f5f9"}}>{["Date","Test","Score","Max","%","Notes",""].map(h=><th key={h} style={{padding:"6px 9px",textAlign:"left",fontSize:9,color:"#64748b",fontWeight:700}}>{h}</th>)}</tr></thead>
@@ -1884,9 +2093,38 @@ function ScoreHistoryPanel({p, sfm, setSfm, addScore, delScore}){
                         <td style={{padding:"6px 9px",fontWeight:700,color:B2}}>{sc.testType}</td>
                         <td style={{padding:"6px 9px",fontWeight:800}}>{sc.score}</td>
                         <td style={{padding:"6px 9px",color:"#94a3b8"}}>{sc.maxScore||"—"}</td>
-                        <td style={{padding:"6px 9px"}}>{pct!==null&&<span style={mkPill(pct>=75?"#f0fdf4":pct>=60?"#fffbeb":"#fef2f2",pct>=75?"#15803d":pct>=60?"#92400e":"#dc2626")}>{pct}%</span>}</td>
+                        <td style={{padding:"6px 9px"}}>{pct!==null&&<span style={mkPill(pctBg(pct),pctColor(pct))}>{pct}%</span>}</td>
                         <td style={{padding:"6px 9px",color:"#94a3b8"}}>{sc.notes||"—"}</td>
                         <td style={{padding:"6px 9px"}}><button onClick={()=>delScore(sc.id)} style={{...mkBtn("#fee2e2","#dc2626"),padding:"2px 8px",fontSize:10}}>✕</button></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>}
+
+          {/* SECTION 5: WellEd log table */}
+          {(p.welledLogs||[]).length>0 && <div style={{...CARD}}>
+            <div style={{fontSize:12,fontWeight:800,color:"#64748b",marginBottom:10,textTransform:"uppercase",letterSpacing:0.8}}>WellEd Domain Log</div>
+            <div style={{overflowX:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+                <thead><tr style={{background:"#f1f5f9"}}>{["Date","Subject","Domain","Difficulty","Score","%","Notes",""].map(h=><th key={h} style={{padding:"6px 9px",textAlign:"left",fontSize:9,color:"#64748b",fontWeight:700}}>{h}</th>)}</tr></thead>
+                <tbody>
+                  {[...(p.welledLogs||[])].sort((a,b)=>(b.date||"").localeCompare(a.date||"")).map(lg=>{
+                    const mx = lg.max||(lg.subject==="Math"?22:27);
+                    const pct = Math.round((Number(lg.score)/mx)*100);
+                    const dc = DOMAIN_COLOR[lg.domain]||B2;
+                    return(
+                      <tr key={lg.id} style={{borderBottom:"1px solid #f1f5f9"}}>
+                        <td style={{padding:"6px 9px",color:"#475569"}}>{lg.date}</td>
+                        <td style={{padding:"6px 9px",color:"#475569"}}>{lg.subject}</td>
+                        <td style={{padding:"6px 9px",fontWeight:700,color:dc}}>{lg.domain}</td>
+                        <td style={{padding:"6px 9px"}}><span style={mkPill(`${DC[lg.difficulty]||"#94a3b8"}22`,DC[lg.difficulty]||"#475569")}>{lg.difficulty}</span></td>
+                        <td style={{padding:"6px 9px",fontWeight:800}}>{lg.score}/{mx}</td>
+                        <td style={{padding:"6px 9px"}}><span style={mkPill(pctBg(pct),pctColor(pct))}>{pct}%</span></td>
+                        <td style={{padding:"6px 9px",color:"#94a3b8"}}>{lg.notes||"—"}</td>
+                        <td style={{padding:"6px 9px"}}><button onClick={()=>delWelledLog(lg.id)} style={{...mkBtn("#fee2e2","#dc2626"),padding:"2px 8px",fontSize:10}}>✕</button></td>
                       </tr>
                     );
                   })}
@@ -1918,11 +2156,11 @@ function allScoreDataPoints(student){
     if(diag.totalLower!=null) pts.push({date:dd,category:"Total SAT",subcategory:"Total SAT",score:Math.round((diag.totalLower+diag.totalUpper)/2),max:1600,source:"diagnostic",note:`Range: ${diag.totalLower}–${diag.totalUpper}`});
     // Domain-level diagnostic %s
     (diag.domains||[]).forEach(d=>{
-      pts.push({date:dd,category:`${d.subject} — ${d.name}`,subcategory:`${d.subject} — ${d.name}`,score:d.earn,max:d.poss,source:"diagnostic",pct:d.pct,level:"domain"});
+      pts.push({date:dd,category:`${d.subject} — ${d.name}`,subcategory:d.name,subject:d.subject,domain:d.name,score:d.earn,max:d.poss,source:"diagnostic",pct:d.pct,level:"domain"});
     });
     // Subdomain-level diagnostic %s
     (diag.subs||[]).forEach(s=>{
-      pts.push({date:dd,category:`${s.subject} — ${s.domain} — ${s.name}`,subcategory:`${s.subject} — ${s.domain} — ${s.name}`,score:s.earn,max:s.poss,source:"diagnostic",pct:s.pct,level:"sub"});
+      pts.push({date:dd,category:`${s.subject} — ${s.domain} — ${s.name}`,subcategory:s.name,subject:s.subject,domain:s.domain,subskill:s.name,score:s.earn,max:s.poss,source:"diagnostic",pct:s.pct,level:"sub"});
     });
   }
   // 2. Manual scores
@@ -1950,8 +2188,25 @@ function allScoreDataPoints(student){
     (a.welledDomain||[]).forEach(w=>{
       if(w.score && w.score!==""){
         const cat = `${w.subject} — ${w.domain}`;
-        pts.push({date:a.date,category:cat,subcategory:w.domain,score:Number(w.score)||0,max:w.qs||(w.subject==="Math"?22:27),source:"history_welled",difficulty:w.difficulty});
+        pts.push({date:a.date,category:cat,subcategory:w.domain,subject:w.subject,domain:w.domain,score:Number(w.score)||0,max:w.qs||(w.subject==="Math"?22:27),source:"history_welled",difficulty:w.difficulty,level:"domain"});
       }
+    });
+  });
+  // 5. Standalone WellEd domain logs (continuous tracking, not tied to an assignment)
+  (student.welledLogs||[]).forEach(log=>{
+    pts.push({
+      date:log.date,
+      category:`${log.subject} — ${log.domain}`,
+      subcategory:log.domain,
+      subject:log.subject,
+      domain:log.domain,
+      score:Number(log.score)||0,
+      max:Number(log.max)||(log.subject==="Math"?22:27),
+      source:"welled_log",
+      difficulty:log.difficulty,
+      level:"domain",
+      _id:log.id,
+      note:log.notes||""
     });
   });
   return pts.sort((a,b)=>(a.date||"").localeCompare(b.date||""));
