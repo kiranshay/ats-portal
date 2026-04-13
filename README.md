@@ -73,3 +73,4 @@ Firebase project is `psm-generator` (see `.firebaserc`). `firebase.json` serves 
 ## Support
 
 Aidan Meyers · ameyers@affordabletutoringsolutions.org · (321) 341-9820
+Kiran Shay   · kshay@affordabletutoringsolutions.org  
