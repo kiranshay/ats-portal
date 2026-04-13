@@ -126,7 +126,24 @@ window.db = firebase.firestore();
   button:not(:disabled):hover{ transform: translateY(-1px); }
   button:not(:disabled):active{ transform: translateY(0); }
   input,select,textarea{ font-family: var(--font-body); color: var(--ink); }
-  input:focus,select:focus,textarea:focus{ outline: 2px solid var(--brand); outline-offset: 1px; }
+  input::placeholder,textarea::placeholder{ color: var(--ink-mute); font-style: italic; }
+  input:focus,select:focus,textarea:focus{ outline: 2px solid var(--brand); outline-offset: 1px; border-color: var(--brand) !important; }
+  input[type="checkbox"]{ accent-color: var(--brand); cursor: pointer; }
+
+  /* Select — thin ink arrow, paper surface */
+  select{
+    appearance: none; -webkit-appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='7' viewBox='0 0 10 7'><path d='M1 1l4 4 4-4' stroke='%230F1A2E' stroke-width='1.5' fill='none' stroke-linecap='round'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 28px !important;
+  }
+
+  /* Number inputs — no spinners on specific inputs, cleaner look */
+  input[type="number"]{ font-variant-numeric: tabular-nums; }
+
+  /* Labels on click rows in the WellEd/Vocab pickers get a hover lift */
+  label:hover input[type="checkbox"]{ transform: scale(1.05); }
 
   /* Loading pulse */
   .pl{ animation: pl 1.2s ease-in-out infinite; }
