@@ -1,0 +1,37 @@
+{
+  "hosting": {
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      ".firebaserc",
+      "app.jsx",
+      "build_index.py",
+      "embed.js",
+      "shell_head.html",
+      "shell_tail.html",
+      ".git/**",
+      ".claude/**",
+      "node_modules/**",
+      "**/*.py",
+      "**/*.jsx",
+      "**/*.md"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ],
+    "headers": [
+      {
+        "source": "**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      }
+    ]
+  }
+}
