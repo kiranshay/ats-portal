@@ -1035,154 +1035,259 @@ function AppInner({authUser, onSignOut}){
     if(!window.jspdf){showToast("PDF library not loaded");return;}
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({unit:"pt",format:"letter"});
-    const margin = 54, pageW = doc.internal.pageSize.getWidth(), pageH = doc.internal.pageSize.getHeight();
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    const margin = 56;
     const wrapW = pageW - margin*2;
-    // ATS brand colors
-    const ATS_NAVY = [0,74,121]; // #004a79
-    const ATS_BLUE = [0,74,151]; // #004a97
-    const ATS_GRAY = [100,116,139]; // #64748b
-    const ATS_TEXT = [30,41,59]; // #1e293b
-    let y = margin;
-    // Try to load ATS logos (icon + horizontal)
-    let iconData = null, horizData = null;
-    const loadImg = (url)=>new Promise((resolve)=>{
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-      img.onload=()=>{
-        try{
-          const c = document.createElement("canvas");
-          c.width = img.naturalWidth; c.height = img.naturalHeight;
-          c.getContext("2d").drawImage(img,0,0);
-          resolve(c.toDataURL("image/png"));
-        }catch{resolve(null);}
-      };
-      img.onerror=()=>resolve(null);
-      img.src=url;
-      setTimeout(()=>resolve(null), 4000);
-    });
-    [iconData, horizData] = await Promise.all([
-      loadImg("https://www.affordabletutoringsolutions.org/__static/a5b47adc-5f67-4265-b84a-f8af839f6a17/image_desktop"),
-      loadImg("https://www.affordabletutoringsolutions.org/__static/jdj5jdewjge5r21lmvdyu0vwztrzwdzy/ATS-Horiz-Logo(2)")
-    ]);
 
-    // ── Header on first page ──
-    // Navy header bar
-    doc.setFillColor(...ATS_NAVY);
-    doc.rect(0, 0, pageW, 72, "F");
-    // Logo: prefer horizontal logo, fallback to icon + text, fallback to text only
-    let logoX = margin;
-    if(horizData){
-      try{doc.addImage(horizData,"PNG",margin,10,180,52); logoX=margin+186;}catch(e){}
-    }
-    if(logoX===margin && iconData){
-      try{doc.addImage(iconData,"PNG",margin,10,48,48); logoX=margin+54;}catch(e){}
-    }
-    if(logoX===margin){
-      // Pure text fallback
-      doc.setFontSize(18); doc.setFont("helvetica","bold"); doc.setTextColor(255,255,255);
-      doc.text("Affordable Tutoring Solutions", margin, 42);
-    } else {
-      // Add text beside logo
-      doc.setFontSize(14); doc.setFont("helvetica","bold"); doc.setTextColor(255,255,255);
-      doc.text("Affordable Tutoring Solutions", logoX, 34);
-      doc.setFontSize(9); doc.setFont("helvetica","normal"); doc.setTextColor(200,220,240);
-      doc.text("PSM Assignment", logoX, 48);
-    }
-    // Tagline on right
-    doc.setFontSize(8); doc.setFont("helvetica","italic"); doc.setTextColor(200,220,240);
-    doc.text("Making Quality Education Accessible to All", pageW-margin, 30, {align:"right"});
-    // Student info below bar
-    y = 92;
+    // Rehaul palette — mirrors the CSS tokens in build_index.py
+    const PAPER     = [250,247,242]; // --paper
+    const PAPER_ALT = [243,238,228]; // --paper-alt
+    const INK       = [15,26,46];    // --ink
+    const INK_SOFT  = [46,58,87];    // --ink-soft
+    const INK_MUTE  = [102,112,138]; // --ink-mute
+    const RULE      = [220,216,208]; // ~rgba(15,26,46,.12) on paper
+    const NAVY      = [0,74,121];    // --brand
+    const SIENNA    = [154,91,31];   // --accent
+    const LINK      = [0,102,166];   // --brand-light
+
     const studentName = curStudent?.name || "";
-    doc.setFontSize(13); doc.setFont("helvetica","bold"); doc.setTextColor(...ATS_NAVY);
-    doc.text(`${studentName ? studentName + " — " : ""}PSM Assignment`, margin, y); y += 16;
-    doc.setFontSize(10); doc.setFont("helvetica","normal"); doc.setTextColor(...ATS_GRAY);
-    doc.text(`Date: ${todayStr()}`, margin, y); y += 14;
-    // Total question count
-    doc.setFontSize(10); doc.setFont("helvetica","normal"); doc.setTextColor(...ATS_GRAY);
-    doc.text(`Total Questions: ${totalQs||"N/A"}`, margin, y); y += 14;
-    // Decorative navy rule
-    doc.setDrawColor(...ATS_NAVY); doc.setLineWidth(1.5);
-    doc.line(margin, y, pageW-margin, y); y += 16;
+    const safeName = (studentName||"student").replace(/[^a-zA-Z0-9-_]/g,"_");
 
-    // ── Body ──
-    doc.setTextColor(...ATS_TEXT);
-    const paras = output.split("\n");
-    paras.forEach(raw=>{
-      if(raw.trim()===""){ y += 6; return; }
-      const isHeader = /^\*\*[^*]+\*\*\s*$/.test(raw.trim()) || /^\*\*[^*]+:\*\*/.test(raw.trim());
-      const segments = [];
-      const rx = /\*\*([^*]+)\*\*/g;
-      let lastIdx = 0, m;
-      while((m = rx.exec(raw))!==null){
-        if(m.index>lastIdx) segments.push({bold:false,text:raw.slice(lastIdx,m.index)});
-        segments.push({bold:true,text:m[1]});
-        lastIdx = m.index + m[0].length;
-      }
-      if(lastIdx<raw.length) segments.push({bold:false,text:raw.slice(lastIdx)});
-      const fullText = segments.map(s=>s.text).join("");
-      doc.setFontSize(isHeader?12:10);
-      doc.setFont("helvetica", isHeader?"bold":"normal");
-      if(isHeader) doc.setTextColor(...ATS_NAVY);
-      else doc.setTextColor(...ATS_TEXT);
-      const lines = doc.splitTextToSize(fullText, wrapW);
-      lines.forEach(line=>{
-        if(y > pageH - 60){ doc.addPage(); y = margin; }
-        // Check for URLs in the line and render with clickable links
-        const urlRx = /(https?:\/\/[^\s]+)/g;
-        const urlMatch = line.match(urlRx);
-        if(urlMatch && lines.length<=2 && !segments.some(s=>s.bold)){
-          // Render line with clickable URL parts
-          let lx = margin;
-          let remaining = line;
-          let um;
-          const urlRx2 = /(https?:\/\/[^\s]+)/g;
-          let lastI = 0;
-          while((um=urlRx2.exec(remaining))!==null){
-            if(um.index>lastI){
-              const pre = remaining.slice(lastI,um.index);
-              doc.setTextColor(...ATS_TEXT);
-              doc.text(pre, lx, y);
-              lx += doc.getTextWidth(pre);
-            }
-            doc.setTextColor(0,102,204);
-            doc.textWithLink(um[1], lx, y, {url:um[1]});
-            lx += doc.getTextWidth(um[1]);
-            lastI = um.index + um[1].length;
-          }
-          if(lastI<remaining.length){
-            doc.setTextColor(...ATS_TEXT);
-            doc.text(remaining.slice(lastI), lx, y);
-          }
-        } else if(segments.some(s=>s.bold) && lines.length===1){
-          let x = margin;
-          segments.forEach(seg=>{
-            doc.setFont("helvetica", seg.bold?"bold":"normal");
-            if(seg.bold) doc.setTextColor(...ATS_NAVY); else doc.setTextColor(...ATS_TEXT);
-            doc.text(seg.text, x, y);
-            x += doc.getTextWidth(seg.text);
-          });
-        } else {
-          doc.text(line, margin, y);
-        }
-        y += isHeader?15:13;
+    // Every page gets a paper-toned background.
+    const paintPage = ()=>{
+      doc.setFillColor(...PAPER);
+      doc.rect(0,0,pageW,pageH,"F");
+    };
+    const newPage = ()=>{ doc.addPage(); paintPage(); return margin + 24; };
+
+    paintPage();
+
+    // ── Header (first page only) ──
+    let y = margin;
+    const logoData = window.ATS_LOGO_PNG || null;
+    const logoSize = 46;
+    if(logoData){
+      try{ doc.addImage(logoData,"PNG",margin,y,logoSize,logoSize); }catch(e){}
+    }
+    const titleX = margin + (logoData ? logoSize + 16 : 0);
+    // Eyebrow
+    doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(...INK_MUTE);
+    doc.setCharSpace(1.4);
+    doc.text("PSM ASSIGNMENT", titleX, y + 14);
+    doc.setCharSpace(0);
+    // Wordmark
+    doc.setFont("helvetica","bold"); doc.setFontSize(18); doc.setTextColor(...INK);
+    doc.text("Affordable Tutoring Solutions", titleX, y + 34);
+    // Date, right-aligned, mono-ish caption
+    doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(...INK_MUTE);
+    doc.text(todayStr().toUpperCase(), pageW - margin, y + 14, {align:"right"});
+
+    y += logoSize + 14;
+    // Sienna short rule — mirrors the CSS header ::after accent
+    doc.setDrawColor(...SIENNA); doc.setLineWidth(2);
+    doc.line(margin, y, margin + 72, y);
+    // Hairline continuation
+    doc.setDrawColor(...RULE); doc.setLineWidth(0.6);
+    doc.line(margin + 72, y, pageW - margin, y);
+    y += 22;
+
+    // Student block
+    if(studentName){
+      doc.setFont("helvetica","bold"); doc.setFontSize(20); doc.setTextColor(...INK);
+      doc.text(studentName, margin, y);
+      y += 20;
+    }
+    doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(...INK_MUTE);
+    const metaBits = [];
+    if(totalQs) metaBits.push(`${totalQs} questions`);
+    if(curStudent?.grade) metaBits.push(`Grade ${curStudent.grade}`);
+    if(curStudent?.tutor) metaBits.push(`Tutor: ${curStudent.tutor}`);
+    if(metaBits.length){ doc.text(metaBits.join("  ·  "), margin, y); y += 18; }
+    y += 6;
+
+    // ── Parse output into sections ──
+    // Intro: everything before the first "**Label:**" header line.
+    // Sections: each header line starts a section that runs to the next header.
+    const rawLines = output.split("\n");
+    const headerRx = /^\*\*([^*]+):\*\*\s*$/;
+    const intro = [];
+    const sections = [];
+    let cur = null;
+    rawLines.forEach(line=>{
+      const hm = line.match(headerRx);
+      if(hm){ cur = {title: hm[1].trim(), items: []}; sections.push(cur); return; }
+      if(cur) cur.items.push(line);
+      else intro.push(line);
+    });
+
+    // ── Helpers ──
+    const ensure = (needed)=>{ if(y + needed > pageH - 72){ y = newPage(); } };
+
+    const drawWrapped = (text, opts={})=>{
+      const { size=10, font="normal", color=INK_SOFT, lineH=13, indent=0 } = opts;
+      doc.setFont("helvetica",font); doc.setFontSize(size); doc.setTextColor(...color);
+      const lines = doc.splitTextToSize(text, wrapW - indent);
+      lines.forEach(ln=>{
+        ensure(lineH);
+        doc.text(ln, margin + indent, y);
+        y += lineH;
       });
+    };
+
+    // Render a line that may contain URLs: plain text in color, URLs as clickable LINK-colored.
+    const drawLineWithLinks = (text, opts={})=>{
+      const { size=10, font="normal", color=INK_SOFT, lineH=13, indent=0 } = opts;
+      doc.setFont("helvetica",font); doc.setFontSize(size);
+      const urlRx = /(https?:\/\/[^\s]+)/g;
+      // Naive wrap: split text into tokens, rebuild lines within wrapW-indent.
+      const maxW = wrapW - indent;
+      const tokens = text.split(/(\s+)/); // keep whitespace tokens
+      let buf = [], bufW = 0;
+      const flush = ()=>{
+        if(!buf.length) return;
+        ensure(lineH);
+        let x = margin + indent;
+        buf.forEach(tok=>{
+          if(urlRx.test(tok)){
+            urlRx.lastIndex = 0;
+            doc.setTextColor(...LINK);
+            doc.textWithLink(tok, x, y, {url: tok});
+          } else {
+            doc.setTextColor(...color);
+            doc.text(tok, x, y);
+          }
+          x += doc.getTextWidth(tok);
+        });
+        y += lineH;
+        buf = []; bufW = 0;
+      };
+      tokens.forEach(tok=>{
+        if(!tok) return;
+        const tw = doc.getTextWidth(tok);
+        if(bufW + tw > maxW && buf.length){ flush(); if(/^\s+$/.test(tok)) return; }
+        buf.push(tok); bufW += tw;
+      });
+      flush();
+    };
+
+    // Intro paragraphs — plain, no decoration. Support **bold** inline.
+    intro.forEach(raw=>{
+      if(raw.trim()===""){ y += 5; return; }
+      const hasBold = /\*\*[^*]+\*\*/.test(raw);
+      if(hasBold){
+        // Strip markers; render bold segments inline on a single (wrapped) line.
+        const segs = [];
+        const rx = /\*\*([^*]+)\*\*/g;
+        let li = 0, m;
+        while((m = rx.exec(raw))!==null){
+          if(m.index>li) segs.push({b:false,t:raw.slice(li,m.index)});
+          segs.push({b:true,t:m[1]});
+          li = m.index + m[0].length;
+        }
+        if(li<raw.length) segs.push({b:false,t:raw.slice(li)});
+        // Simple approach: render joined text; bold only applies if the whole line is bold.
+        const joined = segs.map(s=>s.t).join("");
+        drawWrapped(joined, {size:10, font:"normal", color:INK_SOFT, lineH:13});
+      } else {
+        drawWrapped(raw, {size:10, font:"normal", color:INK_SOFT, lineH:13});
+      }
       y += 2;
     });
 
-    // ── Footer on every page ──
+    // ── Sections ──
+    sections.forEach((sec)=>{
+      y += 12;
+      ensure(40);
+      // Sienna square marker + navy title + hairline to right margin
+      doc.setFillColor(...SIENNA);
+      doc.rect(margin, y - 7, 6, 6, "F");
+      doc.setFont("helvetica","bold"); doc.setFontSize(12); doc.setTextColor(...NAVY);
+      doc.text(sec.title, margin + 14, y);
+      const titleEndX = margin + 14 + doc.getTextWidth(sec.title) + 10;
+      doc.setDrawColor(...RULE); doc.setLineWidth(0.6);
+      if(titleEndX < pageW - margin){
+        doc.line(titleEndX, y - 3, pageW - margin, y - 3);
+      }
+      y += 14;
+
+      const isFormSection = /Student Forms|Answer Keys/i.test(sec.title);
+      const contentIndent = 14;
+
+      sec.items.forEach(item=>{
+        if(item.trim()===""){ y += 4; return; }
+
+        if(isFormSection){
+          // Two-line treatment: bold title on line 1, muted URL on line 2.
+          // Split on the LAST " - " so titles containing hyphens survive.
+          const sepIdx = item.lastIndexOf(" - ");
+          const label = sepIdx>=0 ? item.slice(0, sepIdx) : item;
+          const url = sepIdx>=0 ? item.slice(sepIdx + 3).trim() : "";
+          ensure(28);
+          doc.setFont("helvetica","bold"); doc.setFontSize(10); doc.setTextColor(...INK);
+          const labelLines = doc.splitTextToSize(label, wrapW - contentIndent);
+          labelLines.forEach(ln=>{
+            ensure(13);
+            doc.text(ln, margin + contentIndent, y);
+            y += 13;
+          });
+          if(url){
+            doc.setFont("helvetica","normal"); doc.setFontSize(8.5);
+            const isHttp = /^https?:\/\//.test(url);
+            if(isHttp){
+              doc.setTextColor(...LINK);
+              const urlLines = doc.splitTextToSize(url, wrapW - contentIndent);
+              urlLines.forEach((ln,i)=>{
+                ensure(11);
+                if(i===0) doc.textWithLink(ln, margin + contentIndent, y, {url});
+                else doc.text(ln, margin + contentIndent, y);
+                y += 11;
+              });
+            } else {
+              doc.setTextColor(...INK_MUTE);
+              doc.text(url, margin + contentIndent, y);
+              y += 11;
+            }
+          }
+          y += 4;
+        } else {
+          // WellEd / Vocab / Practice Exams / other — flowed, with clickable URLs.
+          // Render a sienna bullet for short label rows, inline-wrap for long rows.
+          const hasUrl = /https?:\/\//.test(item);
+          if(hasUrl){
+            drawLineWithLinks(item, {size:9.5, color:INK_SOFT, lineH:13, indent:contentIndent});
+            y += 2;
+          } else {
+            // Bullet row
+            ensure(13);
+            doc.setFillColor(...SIENNA);
+            doc.circle(margin + contentIndent - 6, y - 3, 1.4, "F");
+            doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(...INK_SOFT);
+            const lines = doc.splitTextToSize(item, wrapW - contentIndent);
+            lines.forEach((ln,i)=>{
+              if(i>0) ensure(13);
+              doc.text(ln, margin + contentIndent, y);
+              y += 13;
+            });
+          }
+        }
+      });
+    });
+
+    // ── Footer on every page: hairline rule + small caption + page number ──
     const pageCount = doc.getNumberOfPages();
     for(let i=1;i<=pageCount;i++){
       doc.setPage(i);
-      // Navy footer bar
-      doc.setFillColor(...ATS_NAVY);
-      doc.rect(0, pageH-36, pageW, 36, "F");
-      doc.setFontSize(7.5); doc.setFont("helvetica","normal"); doc.setTextColor(255,255,255);
-      doc.text("Affordable Tutoring Solutions Inc.  ·  Melbourne, FL  ·  Winter Park, FL  ·  Baltimore, MD", margin, pageH-16);
-      doc.text("+1 (321) 341-9820  ·  support@affordabletutoringsolutions.org", margin, pageH-8);
-      doc.text(`Page ${i} / ${pageCount}`, pageW-margin, pageH-12, {align:"right"});
+      const fy = pageH - 42;
+      doc.setDrawColor(...RULE); doc.setLineWidth(0.6);
+      doc.line(margin, fy, pageW - margin, fy);
+      doc.setFont("helvetica","normal"); doc.setFontSize(7.5); doc.setTextColor(...INK_MUTE);
+      doc.text("Affordable Tutoring Solutions  ·  Melbourne, FL  ·  Winter Park, FL  ·  Baltimore, MD", margin, fy + 14);
+      doc.text("support@affordabletutoringsolutions.org  ·  +1 (321) 341-9820", margin, fy + 25);
+      doc.setFont("helvetica","bold");
+      doc.text(`${i} / ${pageCount}`, pageW - margin, fy + 14, {align:"right"});
     }
-    const safeName = (studentName||"student").replace(/[^a-zA-Z0-9-_]/g,"_");
+
     doc.save(`PSM_${safeName}_${todayStr()}.pdf`);
     showToast("PDF downloaded");
   };

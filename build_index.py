@@ -1,5 +1,5 @@
 # Builds index.html by composing: HTML shell + embed.js data + app.jsx React code
-import os
+import os, base64
 shell_head = r'''<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -307,6 +307,10 @@ embed = open('embed.js',encoding='utf-8').read()
 
 app = open('app.jsx',encoding='utf-8').read()
 
+# Embed ATS logo as base64 so PDF export has no network dependency.
+logo_b64 = base64.b64encode(open('ats_logo.png','rb').read()).decode('ascii')
+logo_js = f'window.ATS_LOGO_PNG = "data:image/png;base64,{logo_b64}";\n'
+
 shell_tail = r'''
 ReactDOM.createRoot(document.getElementById("root")).render(<App />);
 </script>
@@ -314,7 +318,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(<App />);
 </html>
 '''
 
-full = shell_head + embed + '\n' + app + '\n' + shell_tail
+full = shell_head + logo_js + embed + '\n' + app + '\n' + shell_tail
 with open('index.html','w',encoding='utf-8') as f:
     f.write(full)
 print(f'index.html: {len(full)} bytes, {full.count(chr(10))+1} lines')
