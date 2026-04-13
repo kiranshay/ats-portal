@@ -1,0 +1,62 @@
+name: Deploy to Firebase Hosting
+
+on:
+  push:
+    branches: [main]
+
+# Only one deploy at a time — if two pushes land back-to-back, cancel the
+# older run so we never race the live site into an older build.
+concurrency:
+  group: firebase-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node (for esbuild parse check)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # ── Pre-deploy verification ────────────────────────────────────────
+      # Deploy is its own source of truth — it re-runs the parse + build
+      # checks itself rather than trusting that CI ran first. If these fail
+      # the job aborts before touching Firebase.
+      - name: Parse app.jsx (JSX syntax check)
+        run: npx --yes esbuild@0.24.0 app.jsx --jsx=transform --jsx-factory=React.createElement --jsx-fragment=React.Fragment --log-level=error > /dev/null
+
+      - name: Parse embed.js (JS syntax check)
+        run: npx --yes esbuild@0.24.0 embed.js --log-level=error > /dev/null
+
+      - name: Build index.html
+        run: python build_index.py
+
+      - name: Verify index.html is up-to-date with sources
+        run: |
+          if ! git diff --quiet -- index.html; then
+            echo "::error::index.html is out of date with its sources. Refusing to deploy."
+            git diff --stat -- index.html
+            exit 1
+          fi
+
+      # ── Deploy ─────────────────────────────────────────────────────────
+      # Using firebase-tools directly with a CI token. Org policy blocks
+      # service-account key creation, so the GoogleCloud-style action is
+      # unavailable; the token path is the documented fallback.
+      - name: Deploy to Firebase Hosting
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: |
+          npx --yes firebase-tools@13 deploy \
+            --only hosting \
+            --project psm-generator \
+            --token "$FIREBASE_TOKEN" \
+            --non-interactive

@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  build-and-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node (for esbuild JSX parse check)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Parse app.jsx (JSX syntax check)
+        # The repo has no bundler — JSX is transformed in-browser by Babel
+        # Standalone at runtime, so syntax errors only surface when a user
+        # loads the page. Running esbuild as a pure parser catches them in CI.
+        # Classic JSX runtime matches the in-browser Babel preset.
+        run: npx --yes esbuild@0.24.0 app.jsx --jsx=transform --jsx-factory=React.createElement --jsx-fragment=React.Fragment --log-level=error > /dev/null
+
+      - name: Parse embed.js (JS syntax check)
+        run: npx --yes esbuild@0.24.0 embed.js --log-level=error > /dev/null
+
+      - name: Build index.html
+        run: python build_index.py
+
+      - name: Verify index.html is up-to-date with sources
+        # Catches the "forgot to rebuild before committing" footgun. If
+        # build_index.py produces a different index.html than the one checked
+        # in, the PR is stale and needs a rebuild + recommit.
+        run: |
+          if ! git diff --quiet -- index.html; then
+            echo "::error::index.html is out of date with its sources (app.jsx / embed.js / build_index.py)."
+            echo "Run 'python build_index.py' locally, commit the result, and push again."
+            git diff --stat -- index.html
+            exit 1
+          fi

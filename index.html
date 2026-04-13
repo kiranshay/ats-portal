@@ -983,13 +983,45 @@ function SignInScreen({onSignIn, error, busy}){
   );
 }
 
+// ── Dev bypass (Option C) ──────────────────────────────────────────────────
+// Localhost-only escape hatch: if the page is served from localhost/127.0.0.1
+// AND the URL contains ?dev=1, skip SignInScreen and stub a fake authUser so
+// Claude (or any dev) can visually verify UI changes without the Google
+// workspace gate. BOTH conditions are required — production hostnames ignore
+// the flag entirely. The Firestore security rules are the real data gate and
+// are untouched by this bypass: writes will be rejected server-side and the
+// app falls back to localStorage automatically. This ONLY hides the client-
+// side SignInScreen; it does not weaken any security boundary.
+const DEV_BYPASS = (()=>{
+  if(typeof window === "undefined" || typeof location === "undefined") return false;
+  const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1";
+  if(!isLocal) return false;
+  try{
+    return new URLSearchParams(location.search).get("dev") === "1";
+  }catch{ return false; }
+})();
+const DEV_FAKE_USER = {
+  email: "dev@localhost",
+  displayName: "Dev User",
+  photoURL: null,
+  emailVerified: true,
+  uid: "dev-local",
+};
+
 function App(){
-  const [authUser, setAuthUser] = useState(()=>window.auth ? window.auth.currentUser : null);
-  const [authReady, setAuthReady] = useState(false);
+  const [authUser, setAuthUser] = useState(()=>{
+    if(DEV_BYPASS) return DEV_FAKE_USER;
+    return window.auth ? window.auth.currentUser : null;
+  });
+  const [authReady, setAuthReady] = useState(DEV_BYPASS);
   const [signInError, setSignInError] = useState("");
   const [signInBusy, setSignInBusy] = useState(false);
 
   useEffect(()=>{
+    if(DEV_BYPASS){
+      console.warn("[psm-generator] DEV_BYPASS active — auth gate skipped (localhost only).");
+      return;
+    }
     if(!window.auth){ setAuthReady(true); return; }
     const unsub = window.auth.onAuthStateChanged((u)=>{
       if(u){
@@ -1029,6 +1061,13 @@ function App(){
   };
 
   const handleSignOut = ()=>{
+    if(DEV_BYPASS){
+      // Drop the ?dev=1 flag and reload — that's the real way out of dev mode.
+      const url = new URL(location.href);
+      url.searchParams.delete("dev");
+      location.href = url.toString();
+      return;
+    }
     if(!window.auth) return;
     window.auth.signOut();
   };
