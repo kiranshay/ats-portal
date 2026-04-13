@@ -32,6 +32,12 @@ jobs:
       - name: Parse embed.js (JS syntax check)
         run: npx --yes esbuild@0.24.0 embed.js --log-level=error > /dev/null
 
+      - name: Run unit tests (node:test)
+        # Tests live in tests/*.mjs and exercise the pure diagnostic-parser
+        # module at lib/diagnostic.mjs. Zero dependencies — Node's built-in
+        # test runner and assert are all we need.
+        run: node --test tests/*.mjs
+
       - name: Build index.html
         run: python build_index.py
 
