@@ -16,6 +16,10 @@ const ALL_WS = WS_RAW.map(([subject,domain,subdomain,difficulty,qs,title,stu,key
   id:`${subject}|${domain}|${subdomain}|${difficulty}|${title}`,
   isComprehensiveGroup: subdomain.startsWith("Comprehensive "),
 }));
+// Ensure "Circles - Easy" exists (missing from WS_RAW)
+if(!ALL_WS.find(ws=>ws.subdomain==="Circles"&&ws.difficulty==="easy")){
+  ALL_WS.push({subject:"Math",domain:"Geometry & Trigonometry",subdomain:"Circles",difficulty:"easy",qs:0,title:"Circles - Easy (Inactive)",stu:"",key:"",id:"Math|Geometry & Trigonometry|Circles|easy|Circles - Easy (Inactive)",isComprehensiveGroup:false});
+}
 
 /* ============ WELLED DOMAIN ASSIGNMENTS ============ */
 // R&W: 27 Qs each. Math: 22 Qs. Geo & PSDA only Easy/Hard.
@@ -34,6 +38,9 @@ WELLED_DOMAIN.forEach(e=>e.diffs.forEach(d=>{
   const label=`${e.domain} - ${d[0].toUpperCase()+d.slice(1)} (${e.qs}Qs)`;
   WE_DOMAIN_ITEMS.push({id:`WED|${e.subject}|${e.domain}|${d}`,subject:e.subject,domain:e.domain,difficulty:d,qs:e.qs,label,kind:"welled_domain"});
 }));
+
+const WELLED_PRACTICE_TESTS = Array.from({length:46},(_,i)=>i+1); // Tests 1-46
+const BLUEBOOK_PRACTICE_TESTS = Array.from({length:6},(_,i)=>i+1); // Tests 1-6
 
 /* ============ VOCAB ITEMS ============ */
 const VOCAB_ITEMS = [];
@@ -422,6 +429,68 @@ function buildDiagnosticProfile(parsedList){
   return {domains:domainArr,subs:subArr,rwScore,mathScore,totalLower,totalUpper};
 }
 
+/* ============ WELLED SCORE REPORT PARSER ============ */
+async function parseWelledReport(file){
+  if(!window.pdfjsLib) throw new Error("pdf.js not loaded");
+  const buf = await file.arrayBuffer();
+  const pdf = await window.pdfjsLib.getDocument({data:buf}).promise;
+  let fullText = "";
+  for(let i=1;i<=pdf.numPages;i++){
+    const page = await pdf.getPage(i);
+    const tc = await page.getTextContent();
+    fullText += tc.items.map(it=>it.str).join(" ") + "\n";
+  }
+  const result = {fileName:file.name, raw:fullText, testName:null, testNumber:null, testedOn:null, totalScore:null, rwScore:null, mathScore:null, rawScores:{}, subskills:[], type:"full"};
+
+  // Test name and number
+  const tnMatch = fullText.match(/Test name[:\s]*(.+?)(?:\n|Tested)/i);
+  if(tnMatch){
+    result.testName = tnMatch[1].trim();
+    const numMatch = result.testName.match(/Practice Test\s*#?\s*(\d+)/i);
+    if(numMatch) result.testNumber = parseInt(numMatch[1]);
+  }
+  // Tested on date
+  const tdMatch = fullText.match(/Tested on[:\s]*([\d\/\-]+)/i);
+  if(tdMatch) result.testedOn = tdMatch[1].trim();
+
+  // Total score
+  const totalMatch = fullText.match(/TOTAL SCORE\s+(\d{3,4})/i);
+  if(totalMatch) result.totalScore = parseInt(totalMatch[1]);
+
+  // Section scores
+  const rwMatch = fullText.match(/Reading and Writing\s+(\d{3})/i);
+  if(rwMatch) result.rwScore = parseInt(rwMatch[1]);
+  const mathMatch = fullText.match(/Math\s+(\d{3})/i);
+  if(mathMatch) result.mathScore = parseInt(mathMatch[1]);
+
+  // Determine type
+  if(result.rwScore && !result.mathScore) result.type = "rw-only";
+  else if(result.mathScore && !result.rwScore) result.type = "math-only";
+  else result.type = "full";
+
+  // Raw scores per module
+  const modRx = /Module\s*(\d)\s*(?:\(([^)]+)\))?\s*:\s*(\d+)\s*\/\s*(\d+)/gi;
+  let mm;
+  while((mm=modRx.exec(fullText))!==null){
+    const key = `Module ${mm[1]}${mm[2]?" ("+mm[2]+")":""}`;
+    result.rawScores[key] = {correct:parseInt(mm[3]),total:parseInt(mm[4])};
+  }
+  const totalRaw = fullText.match(/Total\s*:\s*(\d+)\s*\/\s*(\d+)/i);
+  if(totalRaw) result.rawScores["Total"] = {correct:parseInt(totalRaw[1]),total:parseInt(totalRaw[2])};
+
+  // Subskill breakdown: "Words in Context 10/12" pattern
+  const skillRx = /([A-Z][A-Za-z &\-,]+?)\s+(\d+)\s*\/\s*(\d+)/g;
+  let sm;
+  const skipPatterns = /^(Module|Total|Reading|Math|TOTAL|SECTION|Raw|Test|Name|Tested)/;
+  while((sm=skillRx.exec(fullText))!==null){
+    const name = sm[1].trim();
+    if(!skipPatterns.test(name) && name.length>3 && name.length<60){
+      result.subskills.push({name, earn:parseInt(sm[2]), poss:parseInt(sm[3])});
+    }
+  }
+  return result;
+}
+
 /* ============ HEAT COLORS ============ */
 const heatColorPct = (pct)=>{
   if(pct===null||pct===undefined) return "#f1f5f9";
@@ -472,10 +541,18 @@ function App(){
   const[paChk,setPaChk]=useState({});
   const[paSubj,setPaSubj]=useState("All");
   const[paSrch,setPaSrch]=useState("");
+  const[paDate,setPaDate]=useState(todayStr());
+  const[paWeChk,setPaWeChk]=useState({});   // pre-assign WellEd domain checks
+  const[paBBNums,setPaBBNums]=useState("");  // comma-separated BlueBook test numbers
+  const[paWENums,setPaWENums]=useState("");  // comma-separated WellEd test numbers
   const[sfm,setSfm]=useState({date:todayStr(),testType:"",score:"",maxScore:"",notes:""});
   const[toast,setToast]=useState("");
   const[parsing,setParsing]=useState(false);
   const diagInputRef = useRef(null);
+  const welledInputRef = useRef(null);
+  // Custom assignments
+  const[customAssignments,setCustomAssignments]=useState(()=>sLoad("psm_custom_asg",[]));
+  useEffect(()=>{sSave("psm_custom_asg",customAssignments);},[customAssignments]);
 
   useEffect(()=>{sSave("psm_v4",students);},[students]);
 
@@ -705,6 +782,9 @@ function App(){
     doc.text(`${studentName ? studentName + " — " : ""}PSM Assignment`, margin, y); y += 16;
     doc.setFontSize(10); doc.setFont("helvetica","normal"); doc.setTextColor(...ATS_GRAY);
     doc.text(`Date: ${todayStr()}`, margin, y); y += 14;
+    // Total question count
+    doc.setFontSize(10); doc.setFont("helvetica","normal"); doc.setTextColor(...ATS_GRAY);
+    doc.text(`Total Questions: ${totalQs||"N/A"}`, margin, y); y += 14;
     // Decorative navy rule
     doc.setDrawColor(...ATS_NAVY); doc.setLineWidth(1.5);
     doc.line(margin, y, pageW-margin, y); y += 16;
@@ -732,7 +812,33 @@ function App(){
       const lines = doc.splitTextToSize(fullText, wrapW);
       lines.forEach(line=>{
         if(y > pageH - 60){ doc.addPage(); y = margin; }
-        if(segments.some(s=>s.bold) && lines.length===1){
+        // Check for URLs in the line and render with clickable links
+        const urlRx = /(https?:\/\/[^\s]+)/g;
+        const urlMatch = line.match(urlRx);
+        if(urlMatch && lines.length<=2 && !segments.some(s=>s.bold)){
+          // Render line with clickable URL parts
+          let lx = margin;
+          let remaining = line;
+          let um;
+          const urlRx2 = /(https?:\/\/[^\s]+)/g;
+          let lastI = 0;
+          while((um=urlRx2.exec(remaining))!==null){
+            if(um.index>lastI){
+              const pre = remaining.slice(lastI,um.index);
+              doc.setTextColor(...ATS_TEXT);
+              doc.text(pre, lx, y);
+              lx += doc.getTextWidth(pre);
+            }
+            doc.setTextColor(0,102,204);
+            doc.textWithLink(um[1], lx, y, {url:um[1]});
+            lx += doc.getTextWidth(um[1]);
+            lastI = um.index + um[1].length;
+          }
+          if(lastI<remaining.length){
+            doc.setTextColor(...ATS_TEXT);
+            doc.text(remaining.slice(lastI), lx, y);
+          }
+        } else if(segments.some(s=>s.bold) && lines.length===1){
           let x = margin;
           segments.forEach(seg=>{
             doc.setFont("helvetica", seg.bold?"bold":"normal");
@@ -769,11 +875,20 @@ function App(){
 
   const savePreAssign=()=>{
     const ids=Object.keys(paChk).filter(k=>paChk[k]);
-    if(!ids.length)return;
+    const weIds=Object.keys(paWeChk).filter(k=>paWeChk[k]);
+    const bbArr=(paBBNums||"").split(/[,\s]+/).map(Number).filter(n=>n>0);
+    const weArr=(paWENums||"").split(/[,\s]+/).map(Number).filter(n=>n>0);
+    if(!ids.length&&!weIds.length&&!bbArr.length&&!weArr.length)return;
     const sheets=ALL_WS.filter(ws=>ids.includes(ws.id));
-    const entry={id:uid(),date:todayStr(),preAssigned:true,examType,worksheets:sheets.map(ws=>({id:ws.id,title:ws.title,subject:ws.subject,domain:ws.domain,subdomain:ws.subdomain,difficulty:ws.difficulty,qs:ws.qs})),welledDomain:[],vocab:[],practiceExams:[],timeDrill:false,oneNote:false};
+    const weEntries=WE_DOMAIN_ITEMS.filter(i=>weIds.includes(i.id)).map(i=>({kind:"welled_domain",subject:i.subject,domain:i.domain,difficulty:i.difficulty,label:i.label,qs:i.qs}));
+    const practiceExams=[
+      ...bbArr.map(n=>({platform:"BlueBook",type:"full",number:n,examType})),
+      ...weArr.map(n=>({platform:"WellEd",type:"full",number:n,examType})),
+    ];
+    const entry={id:uid(),date:paDate||todayStr(),preAssigned:true,examType,worksheets:sheets.map(ws=>({id:ws.id,title:ws.title,subject:ws.subject,domain:ws.domain,subdomain:ws.subdomain,difficulty:ws.difficulty,qs:ws.qs})),welledDomain:weEntries,vocab:[],practiceExams,timeDrill:false,oneNote:false};
     const upd=students.map(st=>st.id===profile.id?{...st,assignments:[...(st.assignments||[]),entry]}:st);
-    setStudents(upd);setProfile(upd.find(st=>st.id===profile.id));setPaChk({});showToast(`${ids.length} worksheets pre-assigned`);
+    const totalItems=ids.length+weIds.length+bbArr.length+weArr.length;
+    setStudents(upd);setProfile(upd.find(st=>st.id===profile.id));setPaChk({});setPaWeChk({});setPaBBNums("");setPaWENums("");showToast(`${totalItems} item(s) pre-assigned`);
   };
   const addScore=()=>{if(!sfm.testType||!sfm.score)return;const entry={...sfm,id:uid()};const upd=students.map(st=>st.id===profile.id?{...st,scores:[...(st.scores||[]),entry]}:st);setStudents(upd);setProfile(upd.find(st=>st.id===profile.id));setSfm({date:todayStr(),testType:"",score:"",maxScore:"",notes:""});showToast("Score recorded");};
   const delScore=(sid)=>{const upd=students.map(st=>st.id===profile.id?{...st,scores:st.scores.filter(sc=>sc.id!==sid)}:st);setStudents(upd);setProfile(upd.find(st=>st.id===profile.id));};
@@ -866,6 +981,38 @@ function App(){
     setStudents(upd); setProfile(upd.find(st=>st.id===profile.id));
   };
 
+  /* ============ WELLED REPORT UPLOAD ============ */
+  const handleWelledUpload = async(files)=>{
+    if(!files||!files.length||!profile) return;
+    setParsing(true);
+    try{
+      for(const f of files){
+        try{
+          const r = await parseWelledReport(f);
+          // Log scores to student's score history
+          const scoreEntry = {
+            id:uid(), date:r.testedOn||todayStr(),
+            testType:`WellEd Practice Test ${r.testNumber||"?"}`,
+            score:r.totalScore||((r.rwScore||0)+(r.mathScore||0))||"",
+            maxScore:"1600",
+            notes:`R&W: ${r.rwScore||"N/A"}, Math: ${r.mathScore||"N/A"}. Type: ${r.type}. ${r.subskills.length} subskills parsed.`,
+            welledReport:r,
+          };
+          const upd = students.map(st=>{
+            if(st.id!==profile.id) return st;
+            return {...st, scores:[...(st.scores||[]), scoreEntry]};
+          });
+          setStudents(upd);
+          setProfile(upd.find(st=>st.id===profile.id));
+          showToast(`WellEd report parsed: Test #${r.testNumber||"?"} — ${r.totalScore||"N/A"}`);
+        }catch(err){
+          console.error("WellEd parse error",f.name,err);
+          showToast(`Failed to parse ${f.name}: ${err.message}`);
+        }
+      }
+    } finally { setParsing(false); }
+  };
+
   const p = profile && (students.find(st=>st.id===profile.id)||profile);
   const diagProfile = useMemo(()=>p?.diagnostics?.length?buildDiagnosticProfile(p.diagnostics):null,[p]);
 
@@ -892,7 +1039,8 @@ function App(){
       {/* HEADER */}
       <div style={{background:`linear-gradient(135deg,${B1} 0%,${B2} 55%,${B3} 100%)`,color:"#fff",padding:"0 24px",display:"flex",alignItems:"center",justifyContent:"space-between",height:58,flexShrink:0}}>
         <div style={{display:"flex",alignItems:"center",gap:12}}>
-          <div style={{width:36,height:36,borderRadius:10,background:"rgba(255,255,255,.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>📐</div>
+          <img src="https://www.affordabletutoringsolutions.org/__static/a5b47adc-5f67-4265-b84a-f8af839f6a17/image_desktop" alt="ATS" style={{height:32,borderRadius:6}} onError={e=>{e.target.style.display="none";e.target.nextSibling.style.display="flex";}}/>
+          <div style={{width:36,height:36,borderRadius:10,background:"rgba(255,255,255,.15)",display:"none",alignItems:"center",justifyContent:"center",fontSize:18}}>📐</div>
           <div>
             <div style={{fontSize:16,fontWeight:800}}>Affordable Tutoring Solutions</div>
             <div style={{fontSize:10,opacity:.75,letterSpacing:.5}}>PSM GENERATOR &amp; STUDENT TRACKING SYSTEM</div>
@@ -904,6 +1052,8 @@ function App(){
               <button key={t} onClick={()=>setExamType(t)} style={{background:examType===t?"#fff":"transparent",color:examType===t?B2:"#fff",border:"none",borderRadius:5,padding:"4px 12px",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t}</button>
             ))}
           </div>
+          <a href="https://tutor.thesatcrashcourse.com/" target="_blank" rel="noopener noreferrer" style={{background:"rgba(255,255,255,.15)",border:"none",color:"#fff",borderRadius:6,padding:"5px 10px",fontSize:11,cursor:"pointer",fontWeight:600,textDecoration:"none"}}>WellEd</a>
+          <a href="https://ats.wise.live/get-started" target="_blank" rel="noopener noreferrer" style={{background:"rgba(255,255,255,.15)",border:"none",color:"#fff",borderRadius:6,padding:"5px 10px",fontSize:11,cursor:"pointer",fontWeight:600,textDecoration:"none"}}>Wise</a>
           <span>👤 {students.length}</span>
           <span>📋 {students.reduce((n,st)=>n+(st.assignments||[]).reduce((m,a)=>m+(a.worksheets||[]).length,0),0)}</span>
           <button onClick={exportData} title="Export data" style={{background:"rgba(255,255,255,.15)",border:"none",color:"#fff",borderRadius:6,padding:"5px 10px",fontSize:11,cursor:"pointer",fontWeight:600}}>⬇ Export</button>
@@ -937,15 +1087,20 @@ function App(){
           selWS,selWeDom,selVocab,totalQs,examType,
           generate,output,copyOut,copyRichOut,downloadPdf,copied,
           lastAssignedDate,
+          customAssignments,setCustomAssignments,showToast,
         }}/>}
 
         {tab==="students"&&!profile&&<StudentsList {...{students,showAdd,setShowAdd,newS,setNewS,addStudent,openProfile,delStudent}}/>}
 
         {tab==="students"&&profile&&p&&<StudentProfile {...{p,setProfile,ptab,setPtab,
           paChk,setPaChk,paSubj,setPaSubj,paSrch,setPaSrch,savePreAssign,
+          paDate,setPaDate,paWeChk,setPaWeChk,paBBNums,setPaBBNums,paWENums,setPaWENums,
           sfm,setSfm,addScore,delScore,delAsg,setExamScore,setWelledDomainScore,
           addWelledLog,delWelledLog,
           handleDiagUpload,clearDiagnostics,diagInputRef,diagProfile,showToast,
+          students,setStudents,examType,
+          handleWelledUpload,welledInputRef,
+          customAssignments,setCustomAssignments,
         }}/>}
 
         {tab==="heatmap"&&<HeatMapTab {...{students,openProfile}}/>}
@@ -972,14 +1127,20 @@ function GeneratorTab(props){
     addBB,setAddBB,bbType,setBbType,bbCnt,setBbCnt,
     addWE,setAddWE,weType,setWeType,weCnt,setWeCnt,
     selWS,selWeDom,selVocab,totalQs,examType,
-    generate,output,copyOut,copyRichOut,downloadPdf,copied,lastAssignedDate} = props;
+    generate,output,copyOut,copyRichOut,downloadPdf,copied,lastAssignedDate,
+    customAssignments,setCustomAssignments,showToast} = props;
+
+  const[showCustomForm,setShowCustomForm]=useState(false);
+  const[customName,setCustomName]=useState("");
+  const[customSubj,setCustomSubj]=useState("Reading & Writing");
+  const[customQs,setCustomQs]=useState(27);
 
   const totalSelected = selWS.length + selWeDom.length + selVocab.length + (addBB?1:0) + (addWE?1:0);
 
   return(
-    <div style={{display:"grid",gridTemplateColumns:"275px 1fr 345px",gap:14,minHeight:"calc(100vh - 188px)"}}>
+    <div style={{display:"grid",gridTemplateColumns:"275px 1fr 345px",gap:14,minHeight:"calc(100vh - 140px)"}}>
       {/* LEFT SIDEBAR */}
-      <div style={{display:"flex",flexDirection:"column",gap:10,paddingRight:2,overflowY:"auto",maxHeight:"calc(100vh - 188px)"}}>
+      <div style={{display:"flex",flexDirection:"column",gap:10,paddingRight:2,overflowY:"auto",maxHeight:"calc(100vh - 140px)"}}>
         <div style={{...CARD}}>
           <SH>Assign To</SH>
           <select value={selSt} onChange={e=>setSelSt(e.target.value)} style={INP}>
@@ -1069,16 +1230,54 @@ function GeneratorTab(props){
                   {e.diffs.map(d=>{
                     const it = WE_DOMAIN_ITEMS.find(x=>x.subject===e.subject&&x.domain===e.domain&&x.difficulty===d);
                     const ck=!!weChk[it.id];
+                    const wedAssigned = curStudent && (curStudent.assignments||[]).some(a=>(a.welledDomain||[]).some(w=>w.subject===e.subject&&w.domain===e.domain&&w.difficulty===d));
                     return(
-                      <label key={d} style={{display:"flex",alignItems:"center",gap:6,fontSize:11,padding:"3px 6px",cursor:"pointer",background:ck?"#dcfce7":"transparent",borderRadius:4,marginBottom:2}}>
+                      <label key={d} style={{display:"flex",alignItems:"center",gap:6,fontSize:11,padding:"3px 6px",cursor:"pointer",background:ck?"#dcfce7":wedAssigned?"#fefce8":"transparent",borderRadius:4,marginBottom:2}}>
                         <input type="checkbox" checked={ck} onChange={()=>setWeChk(prev=>({...prev,[it.id]:!prev[it.id]}))}/>
                         <span style={{color:"#065f46",fontWeight:600}}>{d[0].toUpperCase()+d.slice(1)}</span>
+                        {wedAssigned&&<span style={{fontSize:8,fontWeight:800,color:"#a16207",background:"#fef3c7",padding:"1px 5px",borderRadius:3}}>ASSIGNED</span>}
                         <span style={{color:"#94a3b8",marginLeft:"auto"}}>{e.qs}Qs</span>
                       </label>
                     );
                   })}
                 </div>
               ))}
+              {/* Custom assignments */}
+              {customAssignments&&customAssignments.length>0&&<div style={{marginTop:8,borderTop:"1px solid #d1fae5",paddingTop:8}}>
+                <div style={{fontSize:10,fontWeight:800,color:"#7c3aed",marginBottom:4}}>CUSTOM ASSIGNMENTS</div>
+                {customAssignments.map(ca=>{
+                  const caId=`CUSTOM|${ca.id}`;
+                  const caCk=!!weChk[caId];
+                  return(
+                    <label key={ca.id} style={{display:"flex",alignItems:"center",gap:6,fontSize:11,padding:"3px 6px",cursor:"pointer",background:caCk?"#dcfce7":"transparent",borderRadius:4,marginBottom:2}}>
+                      <input type="checkbox" checked={caCk} onChange={()=>setWeChk(prev=>({...prev,[caId]:!prev[caId]}))}/>
+                      <span style={{color:"#065f46",fontWeight:600}}>{ca.name}</span>
+                      <span style={{color:"#94a3b8",marginLeft:"auto"}}>{ca.qs}Qs</span>
+                      <button onClick={e=>{e.preventDefault();e.stopPropagation();setCustomAssignments(prev=>prev.filter(x=>x.id!==ca.id));}} style={{background:"none",border:"none",color:"#dc2626",cursor:"pointer",fontSize:10,padding:"0 2px"}}>✕</button>
+                    </label>
+                  );
+                })}
+              </div>}
+              <div style={{marginTop:8,borderTop:"1px solid #d1fae5",paddingTop:6}}>
+                {!showCustomForm ? (
+                  <button onClick={()=>setShowCustomForm(true)} style={{...mkBtn("#f0fdf4","#065f46"),padding:"4px 10px",fontSize:10,width:"100%"}}>+ Add Custom Assignment</button>
+                ) : (
+                  <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                    <input placeholder="Assignment name" value={customName} onChange={e=>setCustomName(e.target.value)} style={{...INP,fontSize:11}}/>
+                    <div style={{display:"flex",gap:4}}>
+                      <select value={customSubj} onChange={e=>{setCustomSubj(e.target.value);setCustomQs(e.target.value==="Math"?22:27);}} style={{...INP,fontSize:11,flex:1}}>
+                        <option value="Reading & Writing">R&W</option>
+                        <option value="Math">Math</option>
+                      </select>
+                      <input type="number" min={1} value={customQs} onChange={e=>setCustomQs(Number(e.target.value))} placeholder="Qs" style={{...INP,fontSize:11,width:50,textAlign:"center"}}/>
+                    </div>
+                    <div style={{display:"flex",gap:4}}>
+                      <button onClick={()=>{if(!customName.trim())return;setCustomAssignments(prev=>[...prev,{id:uid(),name:customName.trim(),subject:customSubj,qs:customQs}]);setCustomName("");setShowCustomForm(false);showToast("Custom assignment added");}} style={{...mkBtn("#065f46","#fff"),padding:"4px 10px",fontSize:10,flex:1}}>Save</button>
+                      <button onClick={()=>{setShowCustomForm(false);setCustomName("");}} style={{...mkBtn("#f1f5f9","#475569"),padding:"4px 10px",fontSize:10}}>Cancel</button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>}
         </div>
@@ -1102,12 +1301,15 @@ function GeneratorTab(props){
               <span style={{fontSize:12,fontWeight:700,color:"#1e40af"}}>📘 BlueBook</span>
               <input type="checkbox" checked={addBB} onChange={e=>setAddBB(e.target.checked)} style={{cursor:"pointer"}}/>
             </div>
-            {addBB&&<div style={{display:"grid",gridTemplateColumns:"1fr 54px",gap:6}}>
-              <select value={bbType} onChange={e=>setBbType(e.target.value)} style={{...INP,fontSize:11}}>
-                <option value="full">Full Test</option>
-                <option value="section">Section</option>
-              </select>
-              <input type="number" min={1} max={10} value={bbCnt} onChange={e=>setBbCnt(Number(e.target.value))} style={{...INP,fontSize:12,textAlign:"center"}}/>
+            {addBB&&<div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 54px",gap:6,marginBottom:6}}>
+                <select value={bbType} onChange={e=>setBbType(e.target.value)} style={{...INP,fontSize:11}}>
+                  <option value="full">Full Test</option>
+                  <option value="section">Section</option>
+                </select>
+                <input type="number" min={1} max={10} value={bbCnt} onChange={e=>setBbCnt(Number(e.target.value))} style={{...INP,fontSize:12,textAlign:"center"}}/>
+              </div>
+              {curStudent&&(()=>{const used=new Set();(curStudent.assignments||[]).forEach(a=>(a.practiceExams||[]).forEach(ex=>{if(ex.platform==="BlueBook")used.add(ex.number);}));return used.size>0?<div style={{display:"flex",flexWrap:"wrap",gap:3,marginTop:4}}>{BLUEBOOK_PRACTICE_TESTS.map(n=><span key={n} style={{fontSize:9,padding:"1px 5px",borderRadius:3,fontWeight:700,background:used.has(n)?"#fef3c7":"#f1f5f9",color:used.has(n)?"#a16207":"#94a3b8",border:used.has(n)?"1px solid #fde68a":"1px solid #e2e8f0"}}>{n}{used.has(n)?" ✓":""}</span>)}</div>:null;})()}
             </div>}
           </div>
           <div style={{padding:10,background:"#f8fafc",borderRadius:8}}>
@@ -1115,12 +1317,15 @@ function GeneratorTab(props){
               <span style={{fontSize:12,fontWeight:700,color:"#065f46"}}>🌿 WellEd Labs</span>
               <input type="checkbox" checked={addWE} onChange={e=>setAddWE(e.target.checked)} style={{cursor:"pointer"}}/>
             </div>
-            {addWE&&<div style={{display:"grid",gridTemplateColumns:"1fr 54px",gap:6}}>
-              <select value={weType} onChange={e=>setWeType(e.target.value)} style={{...INP,fontSize:11}}>
-                <option value="full">Full Test</option>
-                <option value="section">Section</option>
-              </select>
-              <input type="number" min={1} max={10} value={weCnt} onChange={e=>setWeCnt(Number(e.target.value))} style={{...INP,fontSize:12,textAlign:"center"}}/>
+            {addWE&&<div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 54px",gap:6,marginBottom:6}}>
+                <select value={weType} onChange={e=>setWeType(e.target.value)} style={{...INP,fontSize:11}}>
+                  <option value="full">Full Test</option>
+                  <option value="section">Section</option>
+                </select>
+                <input type="number" min={1} max={10} value={weCnt} onChange={e=>setWeCnt(Number(e.target.value))} style={{...INP,fontSize:12,textAlign:"center"}}/>
+              </div>
+              {curStudent&&(()=>{const used=new Set();(curStudent.assignments||[]).forEach(a=>(a.practiceExams||[]).forEach(ex=>{if(ex.platform==="WellEd")used.add(ex.number);}));return used.size>0?<div style={{display:"flex",flexWrap:"wrap",gap:3,marginTop:4}}>{WELLED_PRACTICE_TESTS.slice(0,20).map(n=><span key={n} style={{fontSize:9,padding:"1px 5px",borderRadius:3,fontWeight:700,background:used.has(n)?"#dcfce7":"#f1f5f9",color:used.has(n)?"#065f46":"#94a3b8",border:used.has(n)?"1px solid #86efac":"1px solid #e2e8f0"}}>{n}{used.has(n)?" ✓":""}</span>)}</div>:null;})()}
             </div>}
           </div>
         </div>
@@ -1139,7 +1344,7 @@ function GeneratorTab(props){
       </div>
 
       {/* MIDDLE: STUDENT SUMMARY (when selected) + WORKSHEET PICKER */}
-      <div style={{display:"flex",flexDirection:"column",gap:12,overflow:"hidden",maxHeight:"calc(100vh - 188px)"}}>
+      <div style={{display:"flex",flexDirection:"column",gap:12,overflow:"hidden",maxHeight:"calc(100vh - 140px)"}}>
       {curStudent && <StudentSummaryCard student={curStudent}/>}
       <div style={{...CARD,display:"flex",flexDirection:"column",overflow:"hidden",flex:1,minHeight:0}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexShrink:0}}>
@@ -1468,7 +1673,9 @@ function StudentsList({students,showAdd,setShowAdd,newS,setNewS,addStudent,openP
 }
 
 /* ============ STUDENT PROFILE ============ */
-function StudentProfile({p,setProfile,ptab,setPtab,paChk,setPaChk,paSubj,setPaSubj,paSrch,setPaSrch,savePreAssign,sfm,setSfm,addScore,delScore,delAsg,setExamScore,setWelledDomainScore,addWelledLog,delWelledLog,handleDiagUpload,clearDiagnostics,diagInputRef,diagProfile,showToast}){
+function StudentProfile({p,setProfile,ptab,setPtab,paChk,setPaChk,paSubj,setPaSubj,paSrch,setPaSrch,savePreAssign,paDate,setPaDate,paWeChk,setPaWeChk,paBBNums,setPaBBNums,paWENums,setPaWENums,sfm,setSfm,addScore,delScore,delAsg,setExamScore,setWelledDomainScore,addWelledLog,delWelledLog,handleDiagUpload,clearDiagnostics,diagInputRef,diagProfile,showToast,students,setStudents,examType,handleWelledUpload,welledInputRef,customAssignments,setCustomAssignments}){
+  const[editDateId,setEditDateId]=useState(null);
+  const[editDateVal,setEditDateVal]=useState("");
   const paFiltered = useMemo(()=>ALL_WS.filter(ws=>{
     if(paSubj!=="All"&&ws.subject!==paSubj)return false;
     if(paSrch&&!ws.title.toLowerCase().includes(paSrch.toLowerCase()))return false;
@@ -1529,7 +1736,18 @@ function StudentProfile({p,setProfile,ptab,setPtab,paChk,setPaChk,paSubj,setPaSu
                 <div key={asg.id} style={{...CARD}}>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
                     <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                      <span style={{fontWeight:700,color:B2,fontSize:14}}>{asg.date}</span>
+                      {editDateId===asg.id ? (
+                        <span style={{display:"flex",alignItems:"center",gap:4}}>
+                          <input type="date" value={editDateVal} onChange={e=>setEditDateVal(e.target.value)} style={{...INP,width:140,fontSize:12,padding:"2px 6px"}}/>
+                          <button onClick={()=>{const upd=students.map(st=>st.id===p.id?{...st,assignments:st.assignments.map(a=>a.id===asg.id?{...a,date:editDateVal}:a)}:st);setStudents(upd);setProfile(upd.find(st=>st.id===p.id));setEditDateId(null);showToast("Date updated");}} style={{...mkBtn("#16a34a","#fff"),padding:"2px 8px",fontSize:10}}>Save</button>
+                          <button onClick={()=>setEditDateId(null)} style={{...mkBtn("#f1f5f9","#475569"),padding:"2px 8px",fontSize:10}}>Cancel</button>
+                        </span>
+                      ) : (
+                        <span style={{display:"flex",alignItems:"center",gap:4}}>
+                          <span style={{fontWeight:700,color:B2,fontSize:14}}>{asg.date}</span>
+                          <button onClick={()=>{setEditDateId(asg.id);setEditDateVal(asg.date||todayStr());}} title="Edit date" style={{background:"none",border:"none",cursor:"pointer",fontSize:11,color:"#94a3b8",padding:"2px 4px"}}>✏️</button>
+                        </span>
+                      )}
                       {asg.preAssigned&&<Tag c="#fef3c7" t="#92400e">PRE-EXISTING</Tag>}
                       {asg.examType&&asg.examType!=="SAT"&&<Tag c="#f3e8ff" t="#7c3aed">{asg.examType}</Tag>}
                       {asg.timeDrill&&<Tag c="#eff6ff" t="#1d4ed8">⏱ TIMED</Tag>}
@@ -1616,7 +1834,9 @@ function StudentProfile({p,setProfile,ptab,setPtab,paChk,setPaChk,paSubj,setPaSu
               </div>
               <div style={{display:"flex",gap:8}}>
                 <input ref={diagInputRef} type="file" multiple accept="application/pdf" onChange={e=>handleDiagUpload(e.target.files)} style={{display:"none"}}/>
-                <button onClick={()=>diagInputRef.current?.click()} style={{...mkBtn(B2,"#fff")}}>📄 Upload PDF(s)</button>
+                <button onClick={()=>diagInputRef.current?.click()} style={{...mkBtn(B2,"#fff")}}>📄 Upload Diagnostic PDF(s)</button>
+                <input ref={welledInputRef} type="file" multiple accept="application/pdf" onChange={e=>handleWelledUpload(e.target.files)} style={{display:"none"}}/>
+                <button onClick={()=>welledInputRef.current?.click()} style={{...mkBtn("#065f46","#fff")}}>🌿 Upload WellEd Report(s)</button>
                 {(p.diagnostics||[]).length>0&&<button onClick={clearDiagnostics} style={{...mkBtn("#fee2e2","#dc2626")}}>Clear</button>}
               </div>
             </div>
@@ -1703,6 +1923,11 @@ function StudentProfile({p,setProfile,ptab,setPtab,paChk,setPaChk,paSubj,setPaSu
           <div style={{background:"#fffbeb",border:"1.5px solid #fcd34d",borderRadius:10,padding:12,marginBottom:14,fontSize:13,color:"#92400e"}}>
             💡 <strong>Pre-Assign Panel</strong> — Mark worksheets already given before this student was added. Previously-assigned worksheets still show so you can assign them again.
           </div>
+          <div style={{...CARD,marginBottom:14,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+            <label style={{fontSize:12,fontWeight:700,color:B2}}>Date:
+              <input type="date" value={paDate} onChange={e=>setPaDate(e.target.value)} style={{...INP,marginLeft:8,width:160}}/>
+            </label>
+          </div>
           <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
             {["All","Reading & Writing","Math"].map(s=>(
               <button key={s} onClick={()=>setPaSubj(s)} style={{...mkBtn(paSubj===s?B2:"#f1f5f9",paSubj===s?"#fff":"#475569"),padding:"5px 14px",fontSize:12}}>{s==="Reading & Writing"?"R&W":s}</button>
@@ -1731,9 +1956,52 @@ function StudentProfile({p,setProfile,ptab,setPtab,paChk,setPaChk,paSubj,setPaSu
               </div>
             ))}
           </div>
+          {/* WellEd Domain Pre-Assign */}
+          <div style={{...CARD,marginTop:14}}>
+            <div style={{fontSize:13,fontWeight:800,color:"#065f46",marginBottom:10}}>WellEd Domain Assignments</div>
+            <div style={{maxHeight:220,overflowY:"auto",border:"1px solid #d1fae5",borderRadius:6,padding:6}}>
+              {WELLED_DOMAIN.map(e=>(
+                <div key={e.subject+"|"+e.domain} style={{marginBottom:6}}>
+                  <div style={{fontSize:10,fontWeight:800,color:DOMAIN_COLOR[e.domain]||B2,marginBottom:3}}>{e.domain}</div>
+                  {e.diffs.map(d=>{
+                    const it = WE_DOMAIN_ITEMS.find(x=>x.subject===e.subject&&x.domain===e.domain&&x.difficulty===d);
+                    const ck=!!paWeChk[it.id];
+                    const alreadyAsg = (p.assignments||[]).some(a=>(a.welledDomain||[]).some(w=>w.subject===e.subject&&w.domain===e.domain&&w.difficulty===d));
+                    return(
+                      <label key={d} style={{display:"flex",alignItems:"center",gap:6,fontSize:11,padding:"3px 6px",cursor:"pointer",background:ck?"#dcfce7":alreadyAsg?"#fefce8":"transparent",borderRadius:4,marginBottom:2}}>
+                        <input type="checkbox" checked={ck} onChange={()=>setPaWeChk(prev=>({...prev,[it.id]:!prev[it.id]}))}/>
+                        <span style={{color:"#065f46",fontWeight:600}}>{d[0].toUpperCase()+d.slice(1)}</span>
+                        {alreadyAsg&&<span style={{fontSize:8,fontWeight:800,color:"#a16207",background:"#fef3c7",padding:"1px 5px",borderRadius:3}}>ASSIGNED</span>}
+                        <span style={{color:"#94a3b8",marginLeft:"auto"}}>{e.qs}Qs</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+            <div style={{fontSize:11,color:"#94a3b8",marginTop:6}}>{Object.values(paWeChk).filter(Boolean).length} WellEd domains selected</div>
+          </div>
+
+          {/* Practice Exams Pre-Assign */}
+          <div style={{...CARD,marginTop:14}}>
+            <div style={{fontSize:13,fontWeight:800,color:"#1e40af",marginBottom:10}}>Practice Exams</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+              <div>
+                <label style={{fontSize:11,fontWeight:700,color:"#1e40af",display:"block",marginBottom:4}}>BlueBook Test Numbers</label>
+                <input placeholder="e.g. 1, 2, 3" value={paBBNums} onChange={e=>setPaBBNums(e.target.value)} style={{...INP,fontSize:11}}/>
+                <div style={{fontSize:9,color:"#94a3b8",marginTop:2}}>Comma-separated numbers</div>
+              </div>
+              <div>
+                <label style={{fontSize:11,fontWeight:700,color:"#065f46",display:"block",marginBottom:4}}>WellEd Test Numbers</label>
+                <input placeholder="e.g. 1, 2, 3" value={paWENums} onChange={e=>setPaWENums(e.target.value)} style={{...INP,fontSize:11}}/>
+                <div style={{fontSize:9,color:"#94a3b8",marginTop:2}}>Comma-separated numbers</div>
+              </div>
+            </div>
+          </div>
+
           <div style={{marginTop:12,display:"flex",gap:8}}>
-            <button onClick={savePreAssign} style={{...mkBtn(B2,"#fff"),padding:"9px 20px"}}>✅ Save Pre-Assigned ({Object.values(paChk).filter(Boolean).length} selected)</button>
-            <button onClick={()=>setPaChk({})} style={{...mkBtn("#f1f5f9","#475569")}}>Clear</button>
+            <button onClick={savePreAssign} style={{...mkBtn(B2,"#fff"),padding:"9px 20px"}}>✅ Save Pre-Assigned ({Object.values(paChk).filter(Boolean).length + Object.values(paWeChk).filter(Boolean).length + ((paBBNums||"").split(/[,\s]+/).filter(s=>s&&Number(s)>0).length) + ((paWENums||"").split(/[,\s]+/).filter(s=>s&&Number(s)>0).length)} items)</button>
+            <button onClick={()=>{setPaChk({});setPaWeChk({});setPaBBNums("");setPaWENums("");}} style={{...mkBtn("#f1f5f9","#475569")}}>Clear</button>
           </div>
         </div>
       )}
