@@ -1,0 +1,51 @@
+rules_version = '2';
+
+// PSM Generator — Firestore security rules
+//
+// Access model (Phase 1 — tutors only):
+//   Anyone signed in with a verified @affordabletutoringsolutions.org Google
+//   Workspace account can read and write every document. Everything else is
+//   denied. The auth gate in app.jsx uses the same domain hint, but the UI
+//   hint is NOT a security boundary — these rules are.
+//
+// Phase 2 (future — student / parent portal):
+//   Students and parents will sign in with any Google account and receive a
+//   custom claim (role: 'student' | 'parent', studentId: '<doc-id>') minted
+//   by an admin script. They'll get read-only access to their own student
+//   document and its subcollections. See the commented branch below — do
+//   NOT uncomment until the custom-claim minting flow is built, tested, and
+//   the data model has per-student documents (current schema is one blob
+//   at psm-data/main, which is incompatible with per-student reads).
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isTutor() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.matches('.*@affordabletutoringsolutions[.]org');
+    }
+
+    // Phase 1: tutors have full access to everything.
+    match /{document=**} {
+      allow read, write: if isTutor();
+    }
+
+    // Phase 2 scaffolding — DO NOT UNCOMMENT until student portal ships.
+    // match /students/{studentId} {
+    //   allow read: if isTutor()
+    //     || (request.auth != null
+    //         && request.auth.token.role in ['student', 'parent']
+    //         && request.auth.token.studentId == studentId);
+    //   allow write: if isTutor();
+    //
+    //   match /{sub=**} {
+    //     allow read: if isTutor()
+    //       || (request.auth != null
+    //           && request.auth.token.role in ['student', 'parent']
+    //           && request.auth.token.studentId == studentId);
+    //     allow write: if isTutor();
+    //   }
+    // }
+  }
+}

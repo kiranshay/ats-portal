@@ -18,6 +18,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 if(window['pdfjsLib']){window['pdfjsLib'].GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';}
 // Initialize Firebase
@@ -30,6 +31,9 @@ firebase.initializeApp({
   appId: "1:456789704122:web:b08189d7f6472c6206b183"
 });
 window.db = firebase.firestore();
+window.auth = firebase.auth();
+// Keep tutors signed in across tabs / reloads until explicit sign-out.
+window.auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(()=>{});
 </script>
 <style>
   /* =========================================================
@@ -268,6 +272,26 @@ window.db = firebase.firestore();
     font-size: 10px !important;
     letter-spacing: 0.04em !important;
     font-weight: 500 !important;
+  }
+
+  /* Signed-in user chip — override the global pill-button styling for the
+     inline sign-out icon so it sits cleanly inside the chip container. */
+  [data-psm-header] [data-psm-actions] [data-psm-user]{
+    padding: 4px 4px 4px 12px !important;
+  }
+  [data-psm-header] [data-psm-actions] [data-psm-user] button{
+    background: transparent !important;
+    border: none !important;
+    padding: 4px 6px 4px 2px !important;
+    color: var(--ink-mute) !important;
+    border-radius: 999px !important;
+  }
+  [data-psm-header] [data-psm-actions] [data-psm-user] button:hover{
+    color: var(--danger) !important;
+    background: transparent !important;
+  }
+  [data-psm-header] [data-psm-actions] [data-psm-user]:hover{
+    border-color: var(--ink) !important;
   }
 </style>
 </head>
@@ -822,8 +846,135 @@ const fsWrite = (data)=>{
   }, 800);
 };
 
-/* ============ APP ============ */
+/* ============ AUTH GATE ============ */
+// Workspace-only Google sign-in. The firestore.rules enforce the same
+// domain check server-side — this component is UX, not security.
+const ATS_DOMAIN = "affordabletutoringsolutions.org";
+
+function SignInScreen({onSignIn, error, busy}){
+  return (
+    <div style={{
+      minHeight:"100vh",background:"var(--paper)",display:"flex",
+      alignItems:"center",justifyContent:"center",padding:"40px 24px",
+      backgroundImage:"radial-gradient(circle at 20% 10%, rgba(0,74,121,.06), transparent 45%), radial-gradient(circle at 80% 80%, rgba(154,91,31,.05), transparent 45%)"
+    }}>
+      <div style={{
+        maxWidth:480,width:"100%",background:"var(--card)",
+        border:"1px solid var(--rule)",borderRadius:14,
+        boxShadow:"var(--shadow-lg)",padding:"44px 44px 36px",position:"relative",overflow:"hidden"
+      }}>
+        <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:"linear-gradient(90deg,var(--brand) 0,var(--brand) 72px,transparent 72px)"}}/>
+        <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:28}}>
+          <img src="ats_logo.png" alt="ATS" style={{width:48,height:48,borderRadius:11,boxShadow:"0 0 0 1px var(--rule-strong), 0 6px 16px -8px rgba(0,74,121,.45)"}}/>
+          <div>
+            <div style={{fontFamily:"var(--font-body)",fontSize:10,fontWeight:600,letterSpacing:"0.18em",textTransform:"uppercase",color:"var(--ink-mute)",marginBottom:4}}>Affordable Tutoring Solutions</div>
+            <div style={{fontFamily:"var(--font-display)",fontVariationSettings:"'opsz' 144, 'SOFT' 20",fontWeight:600,fontSize:26,letterSpacing:"-0.02em",lineHeight:1.05,color:"var(--ink)"}}>PSM <em style={{fontStyle:"italic",color:"var(--brand)",fontWeight:500}}>Generator</em></div>
+          </div>
+        </div>
+        <h2 style={{fontFamily:"var(--font-display)",fontVariationSettings:"'opsz' 72",fontWeight:500,fontSize:22,margin:"0 0 10px",letterSpacing:"-0.01em"}}>Tutor sign-in</h2>
+        <p style={{fontSize:13.5,lineHeight:1.55,color:"var(--ink-soft)",margin:"0 0 26px"}}>
+          Access is limited to verified <span style={{fontFamily:"var(--font-mono)",fontSize:12.5,color:"var(--ink)"}}>@{ATS_DOMAIN}</span> accounts. Student records are protected by this sign-in.
+        </p>
+        <button
+          onClick={onSignIn}
+          disabled={busy}
+          style={{
+            width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:12,
+            padding:"14px 20px",borderRadius:10,border:"1px solid var(--brand)",
+            background:busy?"var(--paper-alt)":"var(--brand)",color:busy?"var(--ink-mute)":"var(--paper)",
+            fontFamily:"var(--font-body)",fontSize:14,fontWeight:500,letterSpacing:"0.01em",
+            cursor:busy?"default":"pointer",boxShadow:busy?"none":"0 6px 18px -10px rgba(0,74,121,.7)"
+          }}>
+          <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+            <path fill="#fff" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/>
+            <path fill="#fff" opacity=".95" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/>
+            <path fill="#fff" opacity=".85" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/>
+            <path fill="#fff" opacity=".75" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/>
+          </svg>
+          <span>{busy ? "Opening Google…" : "Continue with Google"}</span>
+        </button>
+        {error && (
+          <div style={{
+            marginTop:18,padding:"12px 14px",borderRadius:8,
+            background:"var(--accent-soft)",border:"1px solid rgba(154,91,31,.3)",
+            fontSize:12.5,color:"var(--accent)",lineHeight:1.5
+          }}>{error}</div>
+        )}
+        <div style={{marginTop:28,paddingTop:18,borderTop:"1px solid var(--rule)",fontSize:11,color:"var(--ink-mute)",letterSpacing:"0.01em",lineHeight:1.6}}>
+          Need an account? Contact your workspace admin. Personal Gmail accounts will be denied.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function App(){
+  const [authUser, setAuthUser] = useState(()=>window.auth ? window.auth.currentUser : null);
+  const [authReady, setAuthReady] = useState(false);
+  const [signInError, setSignInError] = useState("");
+  const [signInBusy, setSignInBusy] = useState(false);
+
+  useEffect(()=>{
+    if(!window.auth){ setAuthReady(true); return; }
+    const unsub = window.auth.onAuthStateChanged((u)=>{
+      if(u){
+        const email = (u.email||"").toLowerCase();
+        if(!email.endsWith("@"+ATS_DOMAIN) || !u.emailVerified){
+          // Workspace check failed — immediately sign out and surface error.
+          window.auth.signOut();
+          setSignInError(`Access restricted to verified @${ATS_DOMAIN} accounts. You signed in as ${email||"an unknown account"}.`);
+          setAuthUser(null);
+        } else {
+          setSignInError("");
+          setAuthUser(u);
+        }
+      } else {
+        setAuthUser(null);
+      }
+      setAuthReady(true);
+      setSignInBusy(false);
+    });
+    return ()=>unsub();
+  },[]);
+
+  const handleSignIn = async ()=>{
+    if(!window.auth){ setSignInError("Auth not initialized."); return; }
+    setSignInBusy(true);
+    setSignInError("");
+    try{
+      const provider = new firebase.auth.GoogleAuthProvider();
+      provider.setCustomParameters({hd: ATS_DOMAIN, prompt:"select_account"});
+      await window.auth.signInWithPopup(provider);
+    }catch(e){
+      setSignInBusy(false);
+      if(e && e.code === "auth/popup-closed-by-user"){ setSignInError(""); return; }
+      if(e && e.code === "auth/cancelled-popup-request"){ return; }
+      setSignInError(e && e.message ? e.message : "Sign-in failed. Try again.");
+    }
+  };
+
+  const handleSignOut = ()=>{
+    if(!window.auth) return;
+    window.auth.signOut();
+  };
+
+  if(!authReady){
+    return (
+      <div style={{minHeight:"100vh",background:"var(--paper)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <div style={{fontFamily:"var(--font-display)",fontSize:18,color:"var(--ink-mute)"}} className="pl">Loading…</div>
+      </div>
+    );
+  }
+
+  if(!authUser){
+    return <SignInScreen onSignIn={handleSignIn} error={signInError} busy={signInBusy}/>;
+  }
+
+  return <AppInner authUser={authUser} onSignOut={handleSignOut}/>;
+}
+
+/* ============ APP (authenticated inner) ============ */
+function AppInner({authUser, onSignOut}){
   const[tab,setTab]=useState("generator");
   const[students,setStudents]=useState(()=>sLoad("psm_v4",sLoad("psm_v3",[])));
   const[selSt,setSelSt]=useState("");
@@ -1450,6 +1601,39 @@ function App(){
             Import
             <input type="file" accept="application/json" onChange={importData} style={{display:"none"}}/>
           </label>
+          <div data-psm-user title={authUser.email} style={{
+            display:"inline-flex",alignItems:"center",gap:8,
+            padding:"4px 4px 4px 12px",border:"1px solid var(--rule)",borderRadius:999,
+            marginLeft:4
+          }}>
+            <span style={{
+              fontFamily:"var(--font-display)",fontVariationSettings:"'opsz' 48",
+              fontSize:12,fontWeight:500,color:"var(--ink)",letterSpacing:"-0.005em",
+              maxWidth:140,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"
+            }}>{(authUser.displayName||authUser.email||"").split(" ")[0]||authUser.email}</span>
+            {authUser.photoURL ? (
+              <img src={authUser.photoURL} alt="" referrerPolicy="no-referrer" style={{
+                width:24,height:24,borderRadius:"50%",
+                boxShadow:"0 0 0 1px var(--rule-strong)"
+              }}/>
+            ) : (
+              <span style={{
+                width:24,height:24,borderRadius:"50%",background:"var(--brand-soft)",
+                color:"var(--brand-dark)",display:"inline-flex",alignItems:"center",
+                justifyContent:"center",fontSize:11,fontWeight:600,fontFamily:"var(--font-body)"
+              }}>{(authUser.displayName||authUser.email||"?").charAt(0).toUpperCase()}</span>
+            )}
+            <button onClick={onSignOut} title="Sign out" aria-label="Sign out" style={{
+              border:"none !important",background:"transparent !important",
+              padding:"4px 8px 4px 2px",cursor:"pointer",color:"var(--ink-mute)",
+              display:"inline-flex",alignItems:"center"
+            }}>
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M6 2H3a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                <path d="M10 5l3 3-3 3M13 8H6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
 

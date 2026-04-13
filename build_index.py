@@ -20,6 +20,7 @@ shell_head = r'''<!DOCTYPE html>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 if(window['pdfjsLib']){window['pdfjsLib'].GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';}
 // Initialize Firebase
@@ -32,6 +33,9 @@ firebase.initializeApp({
   appId: "1:456789704122:web:b08189d7f6472c6206b183"
 });
 window.db = firebase.firestore();
+window.auth = firebase.auth();
+// Keep tutors signed in across tabs / reloads until explicit sign-out.
+window.auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(()=>{});
 </script>
 <style>
   /* =========================================================
@@ -270,6 +274,26 @@ window.db = firebase.firestore();
     font-size: 10px !important;
     letter-spacing: 0.04em !important;
     font-weight: 500 !important;
+  }
+
+  /* Signed-in user chip — override the global pill-button styling for the
+     inline sign-out icon so it sits cleanly inside the chip container. */
+  [data-psm-header] [data-psm-actions] [data-psm-user]{
+    padding: 4px 4px 4px 12px !important;
+  }
+  [data-psm-header] [data-psm-actions] [data-psm-user] button{
+    background: transparent !important;
+    border: none !important;
+    padding: 4px 6px 4px 2px !important;
+    color: var(--ink-mute) !important;
+    border-radius: 999px !important;
+  }
+  [data-psm-header] [data-psm-actions] [data-psm-user] button:hover{
+    color: var(--danger) !important;
+    background: transparent !important;
+  }
+  [data-psm-header] [data-psm-actions] [data-psm-user]:hover{
+    border-color: var(--ink) !important;
   }
 </style>
 </head>

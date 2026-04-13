@@ -1,9 +1,13 @@
 {
+  "firestore": {
+    "rules": "firestore.rules"
+  },
   "hosting": {
     "public": ".",
     "ignore": [
       "firebase.json",
       ".firebaserc",
+      "firestore.rules",
       "app.jsx",
       "build_index.py",
       "embed.js",
