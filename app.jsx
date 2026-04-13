@@ -1961,90 +1961,96 @@ function StudentProfile({p,setProfile,ptab,setPtab,paChk,setPaChk,paSubj,setPaSu
       {/* DIAGNOSTICS */}
       {ptab==="diagnostics"&&(
         <div>
-          <div style={{...CARD,marginBottom:14}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10}}>
-              <div>
-                <div style={{fontSize:14,fontWeight:800,color:B2,marginBottom:4}}>🔬 Diagnostic Reports</div>
-                <div style={{fontSize:12,color:"#64748b"}}>Upload ZipGrade SAT Diagnostic PDFs (Reading, Math Mod 1, Math Mod 2). The parser extracts domain &amp; subdomain scores automatically.</div>
+          <div style={{...CARD,marginBottom:16,padding:20}}>
+            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",flexWrap:"wrap",gap:16}}>
+              <div style={{flex:"1 1 320px"}}>
+                <div style={{fontFamily:"'Fraunces',Georgia,serif",fontVariationSettings:'"opsz" 96',fontSize:20,fontWeight:600,color:"#0F1A2E",letterSpacing:-.3,marginBottom:6}}>Diagnostic Reports</div>
+                <div style={{fontSize:12,color:"#66708A",lineHeight:1.55,maxWidth:520}}>Upload ZipGrade SAT Diagnostic PDFs (Reading, Math Mod 1, Math Mod 2). The parser extracts domain and subdomain scores automatically.</div>
               </div>
-              <div style={{display:"flex",gap:8}}>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                 <input ref={diagInputRef} type="file" multiple accept="application/pdf" onChange={e=>handleDiagUpload(e.target.files)} style={{display:"none"}}/>
-                <button onClick={()=>diagInputRef.current?.click()} style={{...mkBtn(B2,"#fff")}}>📄 Upload Diagnostic PDF(s)</button>
+                <button onClick={()=>diagInputRef.current?.click()} style={{...mkBtn(B2,"#FAF7F2"),padding:"8px 16px",fontSize:11,fontWeight:600,letterSpacing:.3,textTransform:"uppercase"}}>Upload Diagnostic PDF</button>
                 <input ref={welledInputRef} type="file" multiple accept="application/pdf" onChange={e=>handleWelledUpload(e.target.files)} style={{display:"none"}}/>
-                <button onClick={()=>welledInputRef.current?.click()} style={{...mkBtn("#065f46","#fff")}}>🌿 Upload WellEd Report(s)</button>
-                {(p.diagnostics||[]).length>0&&<button onClick={clearDiagnostics} style={{...mkBtn("#fee2e2","#dc2626")}}>Clear</button>}
+                <button onClick={()=>welledInputRef.current?.click()} style={{...mkBtn("transparent","#6E3F12"),border:"1px solid rgba(154,91,31,.4)",padding:"8px 16px",fontSize:11}}>Upload WellEd Report</button>
+                {(p.diagnostics||[]).length>0&&<button onClick={clearDiagnostics} style={{...mkBtn("transparent","#8C2E2E"),border:"1px solid rgba(140,46,46,.3)",padding:"8px 14px",fontSize:11}}>Clear</button>}
               </div>
             </div>
           </div>
 
           {(!p.diagnostics||p.diagnostics.length===0)?(
-            <div style={{...CARD,padding:40,textAlign:"center",color:"#94a3b8"}}>
-              <div style={{fontSize:32,marginBottom:8}}>🔬</div>
-              <div style={{fontSize:14,fontWeight:600}}>No diagnostic reports uploaded yet</div>
-              <div style={{fontSize:12,marginTop:4}}>Upload the student's ZipGrade SAT Diagnostic PDFs to see their domain/subdomain breakdown.</div>
+            <div style={{...CARD,padding:"72px 40px",textAlign:"center"}}>
+              <div style={{fontFamily:"'Fraunces',Georgia,serif",fontStyle:"italic",fontSize:22,color:"#66708A",letterSpacing:-.2,marginBottom:8}}>No diagnostic reports uploaded yet.</div>
+              <div style={{fontSize:11,color:"#66708A"}}>Upload the student's ZipGrade SAT Diagnostic PDFs to see their domain and subdomain breakdown.</div>
             </div>
           ):(<>
             {/* Report list */}
-            <div style={{...CARD,marginBottom:14}}>
-              <div style={{fontSize:13,fontWeight:800,color:B2,marginBottom:10}}>Uploaded Reports</div>
-              {p.diagnostics.map((r,i)=>(
-                <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"6px 10px",background:i%2===0?"#f8fafc":"#fff",borderRadius:5,marginBottom:3,fontSize:12}}>
-                  <span style={{fontWeight:700,color:B2}}>📄 {r.fileName}</span>
-                  <Tag c="#eff6ff" t="#1d4ed8">{r.subject}</Tag>
-                  <span style={{marginLeft:"auto",color:"#475569"}}>{r.earned}/{r.possible} ({r.percentCorrect}%)</span>
-                  <span style={{color:"#94a3b8",fontSize:10}}>{r.tags?.length||0} tags</span>
-                </div>
-              ))}
+            <div style={{...CARD,marginBottom:16,padding:20}}>
+              <SH>Uploaded Reports</SH>
+              <div style={{display:"flex",flexDirection:"column",gap:2}}>
+                {p.diagnostics.map((r,i)=>(
+                  <div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"8px 12px",borderRadius:2,fontSize:12,background:i%2===0?"rgba(15,26,46,.02)":"transparent"}}>
+                    <span style={{fontWeight:500,color:"#0F1A2E",fontFamily:"'Fraunces',Georgia,serif",fontSize:13}}>{r.fileName}</span>
+                    <span style={{...mkPill("transparent","#003258"),border:"1px solid rgba(0,50,88,.25)"}}>{r.subject}</span>
+                    <span style={{marginLeft:"auto",color:"#2E3A57",fontFamily:"'IBM Plex Mono',monospace",fontSize:11}}>{r.earned}/{r.possible} · {r.percentCorrect}%</span>
+                    <span style={{color:"#66708A",fontSize:10,fontFamily:"'IBM Plex Mono',monospace"}}>{r.tags?.length||0} tags</span>
+                  </div>
+                ))}
+              </div>
             </div>
 
-            {/* Diagnostic Section & Total Scores */}
-            {diagProfile&&(diagProfile.rwScore||diagProfile.mathScore)&&<div style={{...CARD,marginBottom:14}}>
-              <div style={{fontSize:13,fontWeight:800,color:B2,marginBottom:12}}>📋 Diagnostic Baseline Scores</div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:10}}>
-                {diagProfile.rwScore&&<div style={{background:"linear-gradient(135deg,#eef2ff,#e0e7ff)",padding:"14px 16px",borderRadius:10,borderLeft:`5px solid #4338ca`}}>
-                  <div style={{fontSize:10,fontWeight:700,color:"#6366f1",textTransform:"uppercase",letterSpacing:0.8}}>R&W Section</div>
-                  <div style={{fontSize:26,fontWeight:900,color:"#4338ca",marginTop:4}}>{diagProfile.rwScore.lower}–{diagProfile.rwScore.upper}</div>
-                  <div style={{fontSize:11,color:"#64748b",marginTop:2}}>Raw: {diagProfile.rwScore.earn}/{diagProfile.rwScore.poss}</div>
+            {/* Diagnostic Section & Total Scores — quiet data readout */}
+            {diagProfile&&(diagProfile.rwScore||diagProfile.mathScore)&&<div style={{...CARD,marginBottom:16,padding:24}}>
+              <SH>Baseline Scores · Estimated Scaled Range</SH>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:0,borderTop:"1px solid rgba(15,26,46,.08)"}}>
+                {diagProfile.rwScore&&<div style={{padding:"16px 22px",borderRight:"1px solid rgba(15,26,46,.08)",borderBottom:"1px solid rgba(15,26,46,.08)"}}>
+                  <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:600,color:"#66708A",textTransform:"uppercase",letterSpacing:1.4}}>R&amp;W Section</div>
+                  <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:20,fontWeight:500,color:"#003258",marginTop:6,letterSpacing:.2,lineHeight:1.1}}>{diagProfile.rwScore.lower}<span style={{color:"rgba(0,50,88,.5)",margin:"0 2px"}}>–</span>{diagProfile.rwScore.upper}</div>
+                  <div style={{fontSize:10,color:"#66708A",marginTop:6,fontFamily:"'IBM Plex Mono',monospace"}}>Raw {diagProfile.rwScore.earn}/{diagProfile.rwScore.poss}</div>
                 </div>}
-                {diagProfile.mathScore&&<div style={{background:"linear-gradient(135deg,#ecfeff,#cffafe)",padding:"14px 16px",borderRadius:10,borderLeft:`5px solid #0e7490`}}>
-                  <div style={{fontSize:10,fontWeight:700,color:"#06b6d4",textTransform:"uppercase",letterSpacing:0.8}}>Math Section</div>
-                  <div style={{fontSize:26,fontWeight:900,color:"#0e7490",marginTop:4}}>{diagProfile.mathScore.lower}–{diagProfile.mathScore.upper}</div>
-                  <div style={{fontSize:11,color:"#64748b",marginTop:2}}>Raw: {diagProfile.mathScore.earn}/{diagProfile.mathScore.poss}</div>
+                {diagProfile.mathScore&&<div style={{padding:"16px 22px",borderRight:"1px solid rgba(15,26,46,.08)",borderBottom:"1px solid rgba(15,26,46,.08)"}}>
+                  <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:600,color:"#66708A",textTransform:"uppercase",letterSpacing:1.4}}>Math Section</div>
+                  <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:20,fontWeight:500,color:"#6E3F12",marginTop:6,letterSpacing:.2,lineHeight:1.1}}>{diagProfile.mathScore.lower}<span style={{color:"rgba(110,63,18,.5)",margin:"0 2px"}}>–</span>{diagProfile.mathScore.upper}</div>
+                  <div style={{fontSize:10,color:"#66708A",marginTop:6,fontFamily:"'IBM Plex Mono',monospace"}}>Raw {diagProfile.mathScore.earn}/{diagProfile.mathScore.poss}</div>
                 </div>}
-                {diagProfile.totalLower!=null&&<div style={{background:"linear-gradient(135deg,#f0f9ff,#e0f2fe)",padding:"14px 16px",borderRadius:10,borderLeft:`5px solid ${B2}`}}>
-                  <div style={{fontSize:10,fontWeight:700,color:B2,textTransform:"uppercase",letterSpacing:0.8}}>Total SAT (Est.)</div>
-                  <div style={{fontSize:26,fontWeight:900,color:B2,marginTop:4}}>{diagProfile.totalLower}–{diagProfile.totalUpper}</div>
-                  <div style={{fontSize:11,color:"#64748b",marginTop:2}}>out of 1600</div>
+                {diagProfile.totalLower!=null&&<div style={{padding:"16px 22px",borderBottom:"1px solid rgba(15,26,46,.08)"}}>
+                  <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:600,color:"#66708A",textTransform:"uppercase",letterSpacing:1.4}}>Total SAT · Est.</div>
+                  <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:22,fontWeight:600,color:"#0F1A2E",marginTop:6,letterSpacing:.2,lineHeight:1.1}}>{diagProfile.totalLower}<span style={{color:"rgba(15,26,46,.4)",margin:"0 2px"}}>–</span>{diagProfile.totalUpper}</div>
+                  <div style={{fontSize:10,color:"#66708A",marginTop:6,fontFamily:"'IBM Plex Mono',monospace"}}>Out of 1600</div>
                 </div>}
               </div>
             </div>}
 
-            {/* Domain heat map */}
-            {diagProfile&&<div style={{...CARD,marginBottom:14}}>
-              <div style={{fontSize:13,fontWeight:800,color:B2,marginBottom:10}}>📊 Diagnostic Performance Heat Map</div>
-              <div style={{fontSize:11,color:"#64748b",marginBottom:10}}>Use this to inform what to assign. Red = weakest areas.</div>
-              {diagProfile.domains.length>0&&<div style={{marginBottom:14}}>
-                <div style={{fontSize:11,fontWeight:800,color:"#475569",marginBottom:6}}>DOMAINS</div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:6}}>
+            {/* Domain / Subskill performance */}
+            {diagProfile&&<div style={{...CARD,marginBottom:16,padding:20}}>
+              <SH>Performance Breakdown · Weakest First</SH>
+              {diagProfile.domains.length>0&&<div style={{marginBottom:24}}>
+                <div style={{fontFamily:"'Fraunces',Georgia,serif",fontVariationSettings:'"opsz" 96',fontSize:14,fontStyle:"italic",color:"#2E3A57",marginBottom:12}}>By Domain</div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:8}}>
                   {diagProfile.domains.sort((a,b)=>(a.pct||0)-(b.pct||0)).map(d=>(
-                    <div key={d.name} style={{background:heatColorPct(d.pct),color:"#fff",padding:"8px 12px",borderRadius:7}}>
-                      <div style={{fontSize:10,opacity:.85,fontWeight:600}}>{d.name}</div>
-                      <div style={{fontSize:18,fontWeight:800}}>{d.pct}%</div>
-                      <div style={{fontSize:10,opacity:.85}}>{d.earn}/{d.poss} correct</div>
+                    <div key={d.name} style={{background:heatColorPct(d.pct),color:"#FAF7F2",padding:"14px 16px",borderRadius:3}}>
+                      <div style={{fontFamily:"'IBM Plex Sans',system-ui,sans-serif",fontSize:13,fontWeight:700,lineHeight:1.25,letterSpacing:-.1}}>{d.name}</div>
+                      <div style={{fontFamily:"'Fraunces',Georgia,serif",fontVariationSettings:'"opsz" 96',fontSize:26,fontWeight:600,letterSpacing:-.4,marginTop:6,lineHeight:1}}>{d.pct}<span style={{fontSize:15,opacity:.7}}>%</span></div>
+                      <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,opacity:.85,marginTop:5}}>{d.earn} / {d.poss}</div>
                     </div>
                   ))}
                 </div>
               </div>}
               {diagProfile.subs.length>0&&<div>
-                <div style={{fontSize:11,fontWeight:800,color:"#475569",marginBottom:6}}>SUBSKILLS</div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:5}}>
-                  {diagProfile.subs.sort((a,b)=>(a.pct||0)-(b.pct||0)).map(s=>(
-                    <div key={s.domain+s.name} style={{background:"#fff",border:`2px solid ${heatColorPct(s.pct)}`,padding:"6px 10px",borderRadius:6}}>
-                      <div style={{fontSize:9,color:"#94a3b8",fontWeight:700,textTransform:"uppercase"}}>{s.domain}</div>
-                      <div style={{fontSize:11,fontWeight:700,color:"#1e293b"}}>{s.name}</div>
-                      <div style={{fontSize:14,fontWeight:800,color:heatColorPct(s.pct)}}>{s.pct}% <span style={{fontSize:10,color:"#94a3b8",fontWeight:500}}>({s.earn}/{s.poss})</span></div>
-                    </div>
-                  ))}
+                <div style={{fontFamily:"'Fraunces',Georgia,serif",fontVariationSettings:'"opsz" 96',fontSize:14,fontStyle:"italic",color:"#2E3A57",marginBottom:12}}>By Subskill</div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:6}}>
+                  {diagProfile.subs.sort((a,b)=>(a.pct||0)-(b.pct||0)).map(s=>{
+                    const c = heatColorPct(s.pct);
+                    return(
+                      <div key={s.domain+s.name} style={{background:"#fff",borderLeft:`3px solid ${c}`,padding:"10px 14px",borderRadius:2,boxShadow:"inset 0 0 0 1px rgba(15,26,46,.08)"}}>
+                        <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#66708A",fontWeight:500,letterSpacing:.7,textTransform:"uppercase"}}>{s.domain}</div>
+                        <div style={{fontSize:13,fontWeight:600,color:"#0F1A2E",marginTop:3,letterSpacing:-.1}}>{s.name}</div>
+                        <div style={{display:"flex",alignItems:"baseline",gap:8,marginTop:6}}>
+                          <span style={{fontFamily:"'Fraunces',Georgia,serif",fontVariationSettings:'"opsz" 48',fontSize:19,fontWeight:600,color:c,letterSpacing:-.2,lineHeight:1}}>{s.pct}<span style={{fontSize:12}}>%</span></span>
+                          <span style={{fontSize:11,color:"#66708A",fontFamily:"'IBM Plex Mono',monospace"}}>{s.earn}/{s.poss}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>}
             </div>}
@@ -2268,11 +2274,11 @@ function HeatMapTab({students,openProfile}){
   );
 }
 
-/* ============ SIMPLE SVG LINE CHART ============ */
-function LineChart({points, color="#004a79", max, height=80, width=260}){
+/* ============ EDITORIAL SVG LINE CHART ============ */
+function LineChart({points, color="#004A79", max, height=80, width=260}){
   // points: [{x:number, y:number, label?:string}]  x = 0..N-1 typically
-  if(!points || points.length===0) return <div style={{fontSize:10,color:"#94a3b8"}}>No data</div>;
-  const pad = 8;
+  if(!points || points.length===0) return <div style={{fontSize:10,color:"#66708A",fontFamily:"'Fraunces',Georgia,serif",fontStyle:"italic"}}>No data</div>;
+  const pad = 10;
   const w = width - pad*2, h = height - pad*2;
   const maxY = max!=null ? max : Math.max(...points.map(p=>p.y));
   const minY = 0;
@@ -2287,14 +2293,14 @@ function LineChart({points, color="#004a79", max, height=80, width=260}){
   const area = `${path} L${coords[coords.length-1].cx.toFixed(1)},${(pad+h).toFixed(1)} L${coords[0].cx.toFixed(1)},${(pad+h).toFixed(1)} Z`;
   return (
     <svg width={width} height={height} style={{display:"block"}}>
-      <rect x={0} y={0} width={width} height={height} fill="#f8fafc" rx={6}/>
+      <rect x={0} y={0} width={width} height={height} fill="#FDFBF6" stroke="rgba(15,26,46,.08)"/>
       {[0.25,0.5,0.75].map(f=>(
-        <line key={f} x1={pad} y1={pad+h*f} x2={pad+w} y2={pad+h*f} stroke="#e2e8f0" strokeWidth={1} strokeDasharray="2,3"/>
+        <line key={f} x1={pad} y1={pad+h*f} x2={pad+w} y2={pad+h*f} stroke="rgba(15,26,46,.08)" strokeWidth={1} strokeDasharray="2,4"/>
       ))}
-      <path d={area} fill={color} fillOpacity={0.12}/>
-      <path d={path} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"/>
+      <path d={area} fill={color} fillOpacity={0.08}/>
+      <path d={path} fill="none" stroke={color} strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"/>
       {coords.map((c,i)=>(
-        <circle key={i} cx={c.cx} cy={c.cy} r={3} fill="#fff" stroke={color} strokeWidth={1.5}>
+        <circle key={i} cx={c.cx} cy={c.cy} r={2.5} fill="#FAF7F2" stroke={color} strokeWidth={1.5}>
           <title>{c.raw.label||""}: {c.raw.y}{max?`/${max}`:""}</title>
         </circle>
       ))}
