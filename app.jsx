@@ -2314,7 +2314,7 @@ function StudentProfile({p,setProfile,ptab,setPtab,paChk,setPaChk,paSubj,setPaSu
                   {(asg.welledDomain||[]).length>0&&<div style={{marginTop:14,padding:14,background:"#F5ECDF",borderRadius:4,border:"1px solid rgba(154,91,31,.2)"}}>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
                       <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:600,color:"#6E3F12",letterSpacing:1.2,textTransform:"uppercase"}}>WellEd Domain Assignments</div>
-                      <button onClick={()=>showToast&&showToast("✓ Saved to Score History")} style={{...mkBtn("transparent","#6E3F12"),border:"1px solid rgba(154,91,31,.4)",padding:"3px 10px",fontSize:10}}>Save to Score History</button>
+                      <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,color:"#66708A",letterSpacing:.4,textTransform:"uppercase",fontWeight:500}}>Auto-synced to Score Tracking</div>
                     </div>
                     {asg.welledDomain.map((i,idx)=>{
                       const wMax = i.subject==="Math"?22:27;
@@ -2336,7 +2336,7 @@ function StudentProfile({p,setProfile,ptab,setPtab,paChk,setPaChk,paSubj,setPaSu
                   {(asg.practiceExams||[]).length>0&&<div style={{marginTop:14,padding:14,background:"#E9F0F6",borderRadius:4,border:"1px solid rgba(0,74,121,.2)"}}>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
                       <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:600,color:"#003258",letterSpacing:1.2,textTransform:"uppercase"}}>Practice Exams</div>
-                      <button onClick={()=>showToast&&showToast("✓ Saved to Score History")} style={{...mkBtn("transparent","#003258"),border:"1px solid rgba(0,50,88,.4)",padding:"3px 10px",fontSize:10}}>Save to Score History</button>
+                      <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,color:"#66708A",letterSpacing:.4,textTransform:"uppercase",fontWeight:500}}>Auto-synced to Score Tracking</div>
                     </div>
                     {asg.practiceExams.map((ex,idx)=>{
                       const isFull = ex.type!=="section";
