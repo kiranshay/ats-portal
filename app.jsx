@@ -1,8 +1,23 @@
 /* ============ CONSTANTS ============ */
-const B1="#003258", B2="#004a79", B3="#0066a6";
-const DC={easy:"#16a34a",medium:"#d97706",hard:"#dc2626",comprehensive:"#7c3aed",mixed:"#7c3aed"};
-const SUBJ_COLOR={"Reading & Writing":{bg:"#eef2ff",fg:"#4338ca",accent:"#6366f1"},"Math":{bg:"#ecfeff",fg:"#0e7490",accent:"#06b6d4"}};
-const DOMAIN_COLOR={"Information & Ideas":"#4f46e5","Craft & Structure":"#7c3aed","Expression of Ideas":"#2563eb","Standard English Conventions":"#0891b2","Algebra":"#059669","Advanced Math":"#0d9488","Problem-Solving & Data Analysis":"#ca8a04","Geometry & Trigonometry":"#dc2626"};
+/* ATS brand navies — sampled from the official logo (2.png = #004A79).
+   B1 = deepest, B2 = primary, B3 = lighter accent. Do not alter without brand approval. */
+const B1="#003258", B2="#004A79", B3="#0066A6";
+/* Editorial semantic palettes — muted, paper-friendly, readable at small sizes. */
+const DC={easy:"#4C7A4C",medium:"#A9761B",hard:"#8C2E2E",comprehensive:"#5B4B8A",mixed:"#5B4B8A"};
+const SUBJ_COLOR={
+  "Reading & Writing":{bg:"#E9F0F6",fg:"#003258",accent:"#004A79"},
+  "Math":{bg:"#F5ECDF",fg:"#6E3F12",accent:"#9A5B1F"}
+};
+const DOMAIN_COLOR={
+  "Information & Ideas":"#003258",
+  "Craft & Structure":"#5B4B8A",
+  "Expression of Ideas":"#1F4E7A",
+  "Standard English Conventions":"#2B6A6A",
+  "Algebra":"#4C7A4C",
+  "Advanced Math":"#2F5F4F",
+  "Problem-Solving & Data Analysis":"#A9761B",
+  "Geometry & Trigonometry":"#8C2E2E"
+};
 const DIFF_ORDER=["easy","medium","hard","comprehensive"];
 
 const uid=()=>Math.random().toString(36).slice(2,10);
@@ -69,23 +84,24 @@ const mdBoldToHtml = (text)=>{
 };
 
 /* ============ STYLE HELPERS ============ */
-const INP={border:"1px solid #cbd5e1",borderRadius:7,padding:"7px 11px",fontSize:13,outline:"none",width:"100%",background:"#fff",color:"#1e293b"};
-const CARD={background:"#fff",borderRadius:12,padding:16,boxShadow:"0 1px 4px rgba(0,0,0,.07)"};
-const mkPill=(bg,fg)=>({background:bg,color:fg,borderRadius:20,padding:"2px 9px",fontSize:10,fontWeight:700,display:"inline-block"});
-const mkBtn=(bg,fg)=>({background:bg,color:fg,border:"none",borderRadius:7,padding:"7px 15px",fontSize:13,cursor:"pointer",fontWeight:600});
+/* Editorial primitives — all cards/inputs/buttons inherit the paper-and-ink system. */
+const INP={border:"1px solid rgba(15,26,46,.18)",borderRadius:4,padding:"8px 12px",fontSize:13,outline:"none",width:"100%",background:"#fff",color:"#0F1A2E",fontFamily:"'IBM Plex Sans',system-ui,sans-serif"};
+const CARD={background:"#fff",borderRadius:6,padding:18,boxShadow:"0 0 0 1px rgba(15,26,46,.08), 0 1px 2px rgba(15,26,46,.04)"};
+const mkPill=(bg,fg)=>({background:bg,color:fg,borderRadius:3,padding:"2px 8px",fontSize:10,fontWeight:500,letterSpacing:.3,textTransform:"uppercase",fontFamily:"'IBM Plex Mono',monospace",display:"inline-block"});
+const mkBtn=(bg,fg)=>({background:bg,color:fg,border:"1px solid transparent",borderRadius:4,padding:"8px 16px",fontSize:12,cursor:"pointer",fontWeight:500,letterSpacing:.2,fontFamily:"'IBM Plex Sans',system-ui,sans-serif"});
 
-function Tag({c="#eff6ff",t="#1d4ed8",children}){return <span style={mkPill(c,t)}>{children}</span>;}
-function SH({children}){return <div style={{fontSize:10,fontWeight:800,color:"#94a3b8",textTransform:"uppercase",letterSpacing:1.2,marginBottom:8}}>{children}</div>;}
+function Tag({c="#E9F0F6",t="#003258",children}){return <span style={mkPill(c,t)}>{children}</span>;}
+function SH({children}){return <div style={{fontFamily:"'Fraunces',Georgia,serif",fontVariationSettings:'"opsz" 48',fontSize:11,fontWeight:600,color:"#66708A",textTransform:"uppercase",letterSpacing:1.6,marginBottom:10,paddingBottom:8,borderBottom:"1px solid rgba(15,26,46,.08)"}}>{children}</div>;}
 
 function Toggle({on,set,label,sub}){
   return(
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer"}} onClick={()=>set(!on)}>
       <div style={{flex:1,minWidth:0}}>
-        <div style={{fontSize:13,fontWeight:700,color:B2}}>{label}</div>
-        {sub&&<div style={{fontSize:11,color:"#64748b",marginTop:2}}>{sub}</div>}
+        <div style={{fontFamily:"'Fraunces',Georgia,serif",fontVariationSettings:'"opsz" 48',fontSize:15,fontWeight:600,color:"#0F1A2E",letterSpacing:-.1}}>{label}</div>
+        {sub&&<div style={{fontSize:11,color:"#66708A",marginTop:2}}>{sub}</div>}
       </div>
-      <div style={{width:44,height:24,borderRadius:12,background:on?B2:"#cbd5e1",position:"relative",transition:"background .2s",flexShrink:0,marginLeft:10}}>
-        <div style={{position:"absolute",top:3,left:on?22:3,width:18,height:18,borderRadius:9,background:"#fff",transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.2)"}}/>
+      <div style={{width:38,height:22,borderRadius:11,background:on?B2:"rgba(15,26,46,.18)",position:"relative",transition:"background .2s",flexShrink:0,marginLeft:12,boxShadow:on?"inset 0 1px 2px rgba(0,50,88,.35)":"inset 0 1px 2px rgba(15,26,46,.12)"}}>
+        <div style={{position:"absolute",top:2,left:on?18:2,width:18,height:18,borderRadius:9,background:"#FAF7F2",transition:"left .2s",boxShadow:"0 1px 2px rgba(15,26,46,.25)"}}/>
       </div>
     </div>
   );
@@ -1114,53 +1130,52 @@ function App(){
 
   /* ============ RENDER ============ */
   return(
-    <div style={{fontFamily:"'Segoe UI',system-ui,sans-serif",background:"#eef2f7",minHeight:"100vh",display:"flex",flexDirection:"column"}}>
+    <div style={{fontFamily:"'IBM Plex Sans',system-ui,sans-serif",background:"var(--paper)",minHeight:"100vh",display:"flex",flexDirection:"column"}}>
       {toast&&<div style={{position:"fixed",top:16,right:16,background:"#1e293b",color:"#fff",padding:"10px 18px",borderRadius:10,fontSize:13,fontWeight:600,zIndex:9999,boxShadow:"0 4px 16px rgba(0,0,0,.25)"}}>{toast}</div>}
       {parsing&&<div style={{position:"fixed",top:16,left:"50%",transform:"translateX(-50%)",background:"#4338ca",color:"#fff",padding:"10px 18px",borderRadius:10,fontSize:13,fontWeight:600,zIndex:9999}} className="pl">Parsing diagnostic PDF(s)...</div>}
 
-      {/* HEADER */}
-      <div style={{background:`linear-gradient(135deg,${B1} 0%,${B2} 55%,${B3} 100%)`,color:"#fff",padding:"0 24px",display:"flex",alignItems:"center",justifyContent:"space-between",height:58,flexShrink:0}}>
-        <div style={{display:"flex",alignItems:"center",gap:12}}>
-          <img src="https://www.affordabletutoringsolutions.org/__static/a5b47adc-5f67-4265-b84a-f8af839f6a17/image_desktop" alt="ATS" style={{height:32,borderRadius:6}} onError={e=>{e.target.style.display="none";e.target.nextSibling.style.display="flex";}}/>
-          <div style={{width:36,height:36,borderRadius:10,background:"rgba(255,255,255,.15)",display:"none",alignItems:"center",justifyContent:"center",fontSize:18}}>📐</div>
-          <div>
-            <div style={{fontSize:16,fontWeight:800}}>Affordable Tutoring Solutions</div>
-            <div style={{fontSize:10,opacity:.75,letterSpacing:.5}}>PSM GENERATOR &amp; STUDENT TRACKING SYSTEM</div>
+      {/* HEADER — editorial wordmark + refined action rail */}
+      <div data-psm-header style={{display:"flex",alignItems:"flex-end",justifyContent:"space-between",flexShrink:0,gap:24}}>
+        <div data-psm-brand style={{display:"flex",alignItems:"center",gap:16}}>
+          <img src="ats_logo.png" alt="ATS" data-psm-logo/>
+          <div style={{display:"flex",flexDirection:"column"}}>
+            <div data-psm-eyebrow>Affordable Tutoring Solutions · Est. 2023</div>
+            <div data-psm-title>PSM <em>Generator</em></div>
           </div>
         </div>
-        <div style={{display:"flex",gap:10,alignItems:"center",fontSize:12,opacity:.95}}>
-          <div style={{display:"flex",background:"rgba(255,255,255,.12)",borderRadius:7,padding:2}}>
+        <div data-psm-actions style={{display:"flex",alignItems:"center",flexWrap:"wrap",justifyContent:"flex-end"}}>
+          <div data-psm-exam style={{display:"flex",gap:0,border:"1px solid var(--rule)",borderRadius:999,padding:2}}>
             {["SAT","PSAT"].map(t=>(
-              <button key={t} onClick={()=>setExamType(t)} style={{background:examType===t?"#fff":"transparent",color:examType===t?B2:"#fff",border:"none",borderRadius:5,padding:"4px 12px",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t}</button>
+              <button key={t} data-active={examType===t} onClick={()=>setExamType(t)} style={{padding:"4px 14px",cursor:"pointer"}}>{t}</button>
             ))}
           </div>
-          <a href="https://tutor.thesatcrashcourse.com/" target="_blank" rel="noopener noreferrer" style={{background:"rgba(255,255,255,.15)",border:"none",color:"#fff",borderRadius:6,padding:"5px 10px",fontSize:11,cursor:"pointer",fontWeight:600,textDecoration:"none"}}>WellEd</a>
-          <a href="https://ats.wise.live/get-started" target="_blank" rel="noopener noreferrer" style={{background:"rgba(255,255,255,.15)",border:"none",color:"#fff",borderRadius:6,padding:"5px 10px",fontSize:11,cursor:"pointer",fontWeight:600,textDecoration:"none"}}>Wise</a>
-          <span>👤 {students.length}</span>
-          <span>📋 {students.reduce((n,st)=>n+(st.assignments||[]).reduce((m,a)=>m+(a.worksheets||[]).length,0),0)}</span>
-          <div title={cloudStatus==="synced"?"Cloud synced — all tutors see changes in real-time":cloudStatus==="connecting"?"Connecting to cloud...":"Offline — changes saved locally"} style={{display:"flex",alignItems:"center",gap:4,background:cloudStatus==="synced"?"rgba(34,197,94,.25)":cloudStatus==="connecting"?"rgba(234,179,8,.25)":"rgba(239,68,68,.25)",borderRadius:6,padding:"4px 8px",fontSize:10,fontWeight:700,cursor:"default"}}>
-            <div style={{width:7,height:7,borderRadius:"50%",background:cloudStatus==="synced"?"#22c55e":cloudStatus==="connecting"?"#eab308":"#ef4444"}}/>
-            {cloudStatus==="synced"?"☁️ Cloud":cloudStatus==="connecting"?"⏳ Syncing":"⚠️ Offline"}
-          </div>
-          <button onClick={exportData} title="Export data" style={{background:"rgba(255,255,255,.15)",border:"none",color:"#fff",borderRadius:6,padding:"5px 10px",fontSize:11,cursor:"pointer",fontWeight:600}}>⬇ Export</button>
-          <label title="Import data" style={{background:"rgba(255,255,255,.15)",border:"none",color:"#fff",borderRadius:6,padding:"5px 10px",fontSize:11,cursor:"pointer",fontWeight:600}}>
-            ⬆ Import
+          <a href="https://tutor.thesatcrashcourse.com/" target="_blank" rel="noopener noreferrer">WellEd</a>
+          <a href="https://ats.wise.live/get-started" target="_blank" rel="noopener noreferrer">Wise</a>
+          <span data-psm-chip title="Enrolled students" style={{padding:"6px 10px",border:"1px solid var(--rule)",borderRadius:999,color:"var(--ink-soft)"}}>{students.length.toString().padStart(2,"0")} students</span>
+          <span data-psm-chip title="Total assigned worksheets" style={{padding:"6px 10px",border:"1px solid var(--rule)",borderRadius:999,color:"var(--ink-soft)"}}>{students.reduce((n,st)=>n+(st.assignments||[]).reduce((m,a)=>m+(a.worksheets||[]).length,0),0)} assigned</span>
+          <span data-psm-chip title={cloudStatus==="synced"?"Cloud synced — all tutors see changes in real-time":cloudStatus==="connecting"?"Connecting to cloud...":"Offline — changes saved locally"} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 10px",border:"1px solid var(--rule)",borderRadius:999,color:cloudStatus==="synced"?"var(--ok)":cloudStatus==="connecting"?"var(--warn)":"var(--danger)"}}>
+            <span style={{width:6,height:6,borderRadius:"50%",background:"currentColor"}}/>
+            {cloudStatus==="synced"?"Synced":cloudStatus==="connecting"?"Syncing":"Offline"}
+          </span>
+          <button onClick={exportData} title="Export data">Export</button>
+          <label title="Import data" style={{cursor:"pointer"}}>
+            Import
             <input type="file" accept="application/json" onChange={importData} style={{display:"none"}}/>
           </label>
         </div>
       </div>
 
-      {/* TABS */}
-      <div style={{background:"#fff",borderBottom:"2px solid #e2e8f0",display:"flex",padding:"0 24px",gap:2,flexShrink:0}}>
-        {[{id:"generator",icon:"📋",label:"Generator"},{id:"students",icon:"👤",label:"Students"},{id:"heatmap",icon:"🔥",label:"Heat Map"},{id:"scores",icon:"📊",label:"Score Tracking"}].map(t=>(
-          <button key={t.id} onClick={()=>{if(t.id!=="students")setProfile(null);setTab(t.id);}} style={{border:"none",background:"none",cursor:"pointer",padding:"12px 18px",fontSize:13,fontWeight:tab===t.id?700:500,color:tab===t.id?B2:"#64748b",borderBottom:tab===t.id?`3px solid ${B2}`:"3px solid transparent",marginBottom:-2,display:"flex",alignItems:"center",gap:6}}>
-            <span>{t.icon}</span>{t.label}
+      {/* TABS — editorial nav with serif labels */}
+      <div data-psm-tabs style={{display:"flex",flexShrink:0}}>
+        {[{id:"generator",label:"Generator"},{id:"students",label:"Students"},{id:"heatmap",label:"Heat Map"},{id:"scores",label:"Score Tracking"}].map(t=>(
+          <button key={t.id} data-active={tab===t.id} onClick={()=>{if(t.id!=="students")setProfile(null);setTab(t.id);}} style={{border:"none",background:"none",cursor:"pointer"}}>
+            {t.label}
           </button>
         ))}
       </div>
 
       {/* BODY */}
-      <div style={{flex:1,padding:20,overflowY:"auto"}}>
+      <div data-psm-body style={{flex:1,overflowY:"auto"}}>
         {tab==="generator"&&<GeneratorTab {...{
           students,curStudent,selSt,setSelSt,openProfile,
           subjF,setSubjF,domF,setDomF,sdomF,setSdomF,diffF,setDiffF,srch,setSrch,
@@ -1233,43 +1248,45 @@ function GeneratorTab(props){
             <option value="">— No Student —</option>
             {students.map(st=><option key={st.id} value={st.id}>{st.name}</option>)}
           </select>
-          {selSt&&<button onClick={()=>openProfile(curStudent)} style={{...mkBtn("#eff6ff",B2),marginTop:8,width:"100%",fontSize:12}}>👤 View Profile</button>}
+          {selSt&&<button onClick={()=>openProfile(curStudent)} style={{...mkBtn("transparent",B2),border:"1px solid rgba(0,74,121,.28)",marginTop:10,width:"100%",fontSize:11}}>View Profile →</button>}
         </div>
 
         <div style={{...CARD}}>
           <SH>Filters</SH>
-          <div style={{marginBottom:10}}>
-            <div style={{fontSize:10,color:"#94a3b8",marginBottom:5}}>SUBJECT</div>
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:9,color:"#66708A",marginBottom:6,letterSpacing:1.2,fontWeight:600,fontFamily:"'IBM Plex Mono',monospace"}}>SUBJECT</div>
             <div style={{display:"flex",gap:4}}>
               {["All","Reading & Writing","Math"].map(s=>(
-                <button key={s} onClick={()=>{setSubjF(s);setDomF("All");setSdomF("All");}} style={{...mkBtn(subjF===s?B2:"#f1f5f9",subjF===s?"#fff":"#475569"),padding:"4px 10px",fontSize:11,flex:1}}>
+                <button key={s} onClick={()=>{setSubjF(s);setDomF("All");setSdomF("All");}} style={{...mkBtn(subjF===s?B2:"transparent",subjF===s?"#FAF7F2":"#2E3A57"),border:subjF===s?"1px solid "+B2:"1px solid rgba(15,26,46,.15)",padding:"5px 10px",fontSize:11,flex:1}}>
                   {s==="All"?"All":s==="Reading & Writing"?"R&W":"Math"}
                 </button>
               ))}
             </div>
           </div>
-          <div style={{marginBottom:8}}>
-            <div style={{fontSize:10,color:"#94a3b8",marginBottom:4}}>DOMAIN</div>
+          <div style={{marginBottom:10}}>
+            <div style={{fontSize:9,color:"#66708A",marginBottom:5,letterSpacing:1.2,fontWeight:600,fontFamily:"'IBM Plex Mono',monospace"}}>DOMAIN</div>
             <select value={domF} onChange={e=>{setDomF(e.target.value);setSdomF("All");}} style={{...INP,fontSize:12}}>
               <option value="All">All Domains</option>
               {availDoms.map(d=><option key={d}>{d}</option>)}
             </select>
           </div>
-          <div style={{marginBottom:8}}>
-            <div style={{fontSize:10,color:"#94a3b8",marginBottom:4}}>SUBSKILL</div>
+          <div style={{marginBottom:10}}>
+            <div style={{fontSize:9,color:"#66708A",marginBottom:5,letterSpacing:1.2,fontWeight:600,fontFamily:"'IBM Plex Mono',monospace"}}>SUBSKILL</div>
             <select value={sdomF} onChange={e=>setSdomF(e.target.value)} style={{...INP,fontSize:12}}>
               <option value="All">All Subskills</option>
               {availSdoms.map(d=><option key={d}>{d}</option>)}
             </select>
           </div>
           <div>
-            <div style={{fontSize:10,color:"#94a3b8",marginBottom:5}}>DIFFICULTY</div>
+            <div style={{fontSize:9,color:"#66708A",marginBottom:6,letterSpacing:1.2,fontWeight:600,fontFamily:"'IBM Plex Mono',monospace"}}>DIFFICULTY</div>
             <div style={{display:"flex",flexDirection:"column",gap:4}}>
               {["All","easy","medium","hard","comprehensive"].map(d=>{
                 const label = d==="All"?"All Difficulties":d[0].toUpperCase()+d.slice(1);
                 const active = diffF===d;
+                const accent = d==="All"?B2:DC[d];
                 return(
-                  <button key={d} onClick={()=>setDiffF(d)} style={{...mkBtn(active?(d==="All"?B2:DC[d]):"#f1f5f9",active?"#fff":"#475569"),padding:"6px 10px",fontSize:11,textAlign:"left",fontWeight:active?700:600}}>
+                  <button key={d} onClick={()=>setDiffF(d)} style={{...mkBtn(active?accent:"transparent",active?"#FAF7F2":"#2E3A57"),border:active?"1px solid "+accent:"1px solid rgba(15,26,46,.15)",padding:"6px 12px",fontSize:11,textAlign:"left",fontWeight:active?600:500,display:"flex",alignItems:"center",gap:8}}>
+                    {!active&&d!=="All"&&<span style={{width:6,height:6,borderRadius:"50%",background:accent,flexShrink:0}}/>}
                     {label}
                   </button>
                 );
@@ -1278,35 +1295,35 @@ function GeneratorTab(props){
           </div>
         </div>
 
-        <input placeholder="🔍 Search worksheets..." value={srch} onChange={e=>setSrch(e.target.value)} style={{...INP,boxShadow:"0 1px 3px rgba(0,0,0,.06)"}}/>
+        <input placeholder="Search worksheets…" value={srch} onChange={e=>setSrch(e.target.value)} style={{...INP,fontStyle:srch?"normal":"italic",boxShadow:"0 0 0 1px rgba(15,26,46,.05)"}}/>
 
         {/* TIME DRILL */}
-        <div style={{...CARD,background:timeDrill?"#eff6ff":"#fff",border:timeDrill?"1.5px solid #93c5fd":"1.5px solid #e2e8f0"}}>
-          <Toggle on={timeDrill} set={setTimeDrill} label="⏱ Enable Time Drilling"/>
-          {timeDrill&&<div style={{marginTop:10,padding:10,background:"#f0f9ff",borderRadius:8,fontSize:11,color:"#1e40af",lineHeight:1.5}}>
-            <div style={{fontWeight:700,marginBottom:4}}>⏱ Time Drilling Instructions</div>
-            <div style={{color:"#475569",marginBottom:6}}>Enter time limits in minutes for each selected worksheet. These will appear in parentheses before the worksheet names in your assignment. Leave blank to exclude time limit for specific worksheets.</div>
-            <div style={{background:"#dbeafe",padding:"6px 8px",borderRadius:5,fontSize:10}}>
-              <div style={{fontWeight:700,marginBottom:2}}>Reference Timing:</div>
-              <div>• Reading &amp; Writing: ~71 seconds per question</div>
-              <div>• Math: ~1 minute 35 seconds per question</div>
+        <div style={{...CARD,background:timeDrill?"#E9F0F6":"#fff",boxShadow:timeDrill?"0 0 0 1px "+B2+", 0 1px 2px rgba(0,74,121,.08)":CARD.boxShadow}}>
+          <Toggle on={timeDrill} set={setTimeDrill} label="Time Drilling"/>
+          {timeDrill&&<div style={{marginTop:12,padding:12,background:"rgba(255,255,255,.7)",borderRadius:4,fontSize:11,color:"#2E3A57",lineHeight:1.55,border:"1px solid rgba(0,74,121,.15)"}}>
+            <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:12,fontWeight:600,color:"#003258",marginBottom:6}}>Instructions</div>
+            <div style={{color:"#2E3A57",marginBottom:8}}>Enter time limits in minutes for each selected worksheet. These appear in parentheses before the worksheet names in the assignment. Leave blank to omit.</div>
+            <div style={{background:"#FAF7F2",padding:"8px 10px",borderRadius:3,fontSize:10,border:"1px solid rgba(15,26,46,.08)",fontFamily:"'IBM Plex Mono',monospace"}}>
+              <div style={{fontWeight:600,marginBottom:3,color:"#003258",letterSpacing:.4}}>REFERENCE TIMING</div>
+              <div>Reading &amp; Writing &nbsp;·&nbsp; ~71 sec / question</div>
+              <div>Math &nbsp;·&nbsp; ~1 min 35 sec / question</div>
             </div>
           </div>}
         </div>
 
         {/* ONENOTE */}
-        <div style={{...CARD,background:oneNote?"#eff6ff":"#fff",border:oneNote?"1.5px solid #93c5fd":"1.5px solid #e2e8f0"}}>
-          <Toggle on={oneNote} set={setOneNote} label="📝 PSMs Completed on OneNote"/>
-          {oneNote&&<div style={{marginTop:10,padding:10,background:"#f0f9ff",borderRadius:8,fontSize:11,color:"#475569",lineHeight:1.5}}>
-            When enabled, only answer keys will be included (no student worksheets) and special OneNote instructions will be added for students completing work digitally.
+        <div style={{...CARD,background:oneNote?"#E9F0F6":"#fff",boxShadow:oneNote?"0 0 0 1px "+B2+", 0 1px 2px rgba(0,74,121,.08)":CARD.boxShadow}}>
+          <Toggle on={oneNote} set={setOneNote} label="PSMs on OneNote"/>
+          {oneNote&&<div style={{marginTop:12,padding:12,background:"rgba(255,255,255,.7)",borderRadius:4,fontSize:11,color:"#2E3A57",lineHeight:1.55,border:"1px solid rgba(0,74,121,.15)"}}>
+            Only answer keys will be included — no student worksheets. Special OneNote instructions are added for students completing work digitally.
           </div>}
         </div>
 
         {/* WELLED DOMAIN */}
-        <div style={{...CARD,background:weDomEn?"#f0fdf4":"#fff",border:weDomEn?"1.5px solid #86efac":"1.5px solid #e2e8f0"}}>
-          <Toggle on={weDomEn} set={setWeDomEn} label="🌿 WellEd Domain Assignments"/>
-          {weDomEn&&<div style={{marginTop:10}}>
-            <div style={{padding:10,background:"#ecfdf5",borderRadius:8,fontSize:11,color:"#065f46",lineHeight:1.5,marginBottom:8}}>
+        <div style={{...CARD,background:weDomEn?"#F5ECDF":"#fff",boxShadow:weDomEn?"0 0 0 1px #9A5B1F, 0 1px 2px rgba(154,91,31,.1)":CARD.boxShadow}}>
+          <Toggle on={weDomEn} set={setWeDomEn} label="WellEd Domain Assignments"/>
+          {weDomEn&&<div style={{marginTop:12}}>
+            <div style={{padding:12,background:"rgba(255,255,255,.7)",borderRadius:4,fontSize:11,color:"#6E3F12",lineHeight:1.55,marginBottom:10,border:"1px solid rgba(154,91,31,.18)"}}>
               Select topic-specific assignments. R&amp;W assignments have 27 Qs each; Math have 22 Qs each. PSDA and Geometry only offer Easy and Hard.
             </div>
             <div style={{maxHeight:260,overflowY:"auto",border:"1px solid #d1fae5",borderRadius:6,padding:6}}>
@@ -1369,10 +1386,10 @@ function GeneratorTab(props){
         </div>
 
         {/* VOCAB */}
-        <div style={{...CARD,background:vocabEn?"#fdf4ff":"#fff",border:vocabEn?"1.5px solid #d8b4fe":"1.5px solid #e2e8f0"}}>
-          <Toggle on={vocabEn} set={setVocabEn} label="📚 Vocab (WellEd Labs)"/>
-          {vocabEn&&<div style={{marginTop:10}}>
-            <div style={{padding:10,background:"#faf5ff",borderRadius:8,fontSize:11,color:"#6b21a8",lineHeight:1.5,marginBottom:8}}>
+        <div style={{...CARD,background:vocabEn?"#EFEAE0":"#fff",boxShadow:vocabEn?"0 0 0 1px #5B4B8A, 0 1px 2px rgba(91,75,138,.08)":CARD.boxShadow}}>
+          <Toggle on={vocabEn} set={setVocabEn} label="Vocabulary"/>
+          {vocabEn&&<div style={{marginTop:12}}>
+            <div style={{padding:12,background:"rgba(255,255,255,.7)",borderRadius:4,fontSize:11,color:"#3A305C",lineHeight:1.55,marginBottom:10,border:"1px solid rgba(91,75,138,.2)"}}>
               Select vocab flashcard sets or quizzes. Each set has 4 quiz variants. Question counts are not tracked for vocab.
             </div>
             <VocabPicker vocabChk={vocabChk} setVocabChk={setVocabChk}/>
@@ -1382,10 +1399,10 @@ function GeneratorTab(props){
         {/* PRACTICE EXAMS */}
         <div style={{...CARD}}>
           <SH>Practice Exams</SH>
-          <div style={{padding:10,background:"#f8fafc",borderRadius:8,marginBottom:8}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:addBB?8:0}}>
-              <span style={{fontSize:12,fontWeight:700,color:"#1e40af"}}>📘 BlueBook</span>
-              <input type="checkbox" checked={addBB} onChange={e=>setAddBB(e.target.checked)} style={{cursor:"pointer"}}/>
+          <div style={{padding:12,background:"#F3EEE4",borderRadius:4,marginBottom:10,border:"1px solid rgba(15,26,46,.06)"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:addBB?10:0}}>
+              <span style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:14,fontWeight:600,color:"#003258",letterSpacing:-.1}}>BlueBook</span>
+              <input type="checkbox" checked={addBB} onChange={e=>setAddBB(e.target.checked)} style={{cursor:"pointer",accentColor:B2}}/>
             </div>
             {addBB&&<div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 54px",gap:6,marginBottom:6}}>
@@ -1398,10 +1415,10 @@ function GeneratorTab(props){
               {curStudent&&(()=>{const used=new Set();(curStudent.assignments||[]).forEach(a=>(a.practiceExams||[]).forEach(ex=>{if(ex.platform==="BlueBook")used.add(ex.number);}));return used.size>0?<div style={{display:"flex",flexWrap:"wrap",gap:3,marginTop:4}}>{BLUEBOOK_PRACTICE_TESTS.map(n=><span key={n} style={{fontSize:9,padding:"1px 5px",borderRadius:3,fontWeight:700,background:used.has(n)?"#fef3c7":"#f1f5f9",color:used.has(n)?"#a16207":"#94a3b8",border:used.has(n)?"1px solid #fde68a":"1px solid #e2e8f0"}}>{n}{used.has(n)?" ✓":""}</span>)}</div>:null;})()}
             </div>}
           </div>
-          <div style={{padding:10,background:"#f8fafc",borderRadius:8}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:addWE?8:0}}>
-              <span style={{fontSize:12,fontWeight:700,color:"#065f46"}}>🌿 WellEd Labs</span>
-              <input type="checkbox" checked={addWE} onChange={e=>setAddWE(e.target.checked)} style={{cursor:"pointer"}}/>
+          <div style={{padding:12,background:"#F3EEE4",borderRadius:4,border:"1px solid rgba(15,26,46,.06)"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:addWE?10:0}}>
+              <span style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:14,fontWeight:600,color:"#6E3F12",letterSpacing:-.1}}>WellEd Labs</span>
+              <input type="checkbox" checked={addWE} onChange={e=>setAddWE(e.target.checked)} style={{cursor:"pointer",accentColor:"#9A5B1F"}}/>
             </div>
             {addWE&&<div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 54px",gap:6,marginBottom:6}}>
@@ -1417,14 +1434,16 @@ function GeneratorTab(props){
         </div>
 
         {/* LIVE COUNTERS */}
-        <div style={{background:totalSelected>0?"#ecfdf5":"#f8fafc",border:`1.5px solid ${totalSelected>0?"#a7f3d0":"#e2e8f0"}`,borderRadius:10,padding:12,fontSize:12,color:totalSelected>0?"#065f46":"#94a3b8",fontWeight:600}}>
-          <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-            <span>Worksheets</span><span>{selWS.length}</span>
+        <div style={{background:totalSelected>0?"#0F1A2E":"#F3EEE4",borderRadius:6,padding:"14px 16px",fontSize:12,color:totalSelected>0?"#FAF7F2":"#66708A",fontWeight:500,boxShadow:totalSelected>0?"0 4px 14px -6px rgba(15,26,46,.3)":"0 0 0 1px rgba(15,26,46,.08)",transition:"background .3s, color .3s"}}>
+          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,letterSpacing:1.4,opacity:.7,marginBottom:8}}>SELECTION</div>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:5,fontFamily:"'IBM Plex Mono',monospace"}}>
+            <span>Worksheets</span><span>{selWS.length.toString().padStart(2,"0")}</span>
           </div>
-          {selWeDom.length>0&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span>WellEd Domain</span><span>{selWeDom.length}</span></div>}
-          {selVocab.length>0&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span>Vocab Items</span><span>{selVocab.length}</span></div>}
-          <div style={{display:"flex",justifyContent:"space-between",paddingTop:6,marginTop:4,borderTop:"1px solid #a7f3d0",fontSize:14,fontWeight:800}}>
-            <span>Total Qs</span><span>{totalQs}</span>
+          {selWeDom.length>0&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:5,fontFamily:"'IBM Plex Mono',monospace"}}><span>WellEd Domain</span><span>{selWeDom.length.toString().padStart(2,"0")}</span></div>}
+          {selVocab.length>0&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:5,fontFamily:"'IBM Plex Mono',monospace"}}><span>Vocab Items</span><span>{selVocab.length.toString().padStart(2,"0")}</span></div>}
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",paddingTop:8,marginTop:6,borderTop:"1px solid "+(totalSelected>0?"rgba(250,247,242,.2)":"rgba(15,26,46,.1)"),fontFamily:"'IBM Plex Mono',monospace"}}>
+            <span style={{fontSize:9,letterSpacing:1.4,opacity:.7}}>TOTAL QUESTIONS</span>
+            <span style={{fontSize:13,fontWeight:600,color:totalSelected>0?"#FAF7F2":"#0F1A2E"}}>{totalQs.toString().padStart(3,"0")}</span>
           </div>
         </div>
       </div>
@@ -1432,49 +1451,52 @@ function GeneratorTab(props){
       {/* MIDDLE: STUDENT SUMMARY (when selected) + WORKSHEET PICKER */}
       <div style={{display:"flex",flexDirection:"column",gap:12,overflow:"hidden",maxHeight:"calc(100vh - 140px)"}}>
       {curStudent && <StudentSummaryCard student={curStudent}/>}
-      <div style={{...CARD,display:"flex",flexDirection:"column",overflow:"hidden",flex:1,minHeight:0}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexShrink:0}}>
-          <div style={{fontSize:14,fontWeight:800,color:B2}}>Worksheets <span style={{fontSize:12,fontWeight:500,color:"#94a3b8"}}>({Object.values(grouped).reduce((n,doms)=>n+Object.values(doms).reduce((m,subs)=>m+Object.values(subs).reduce((k,arr)=>k+arr.length,0),0),0)} shown)</span></div>
+      <div style={{...CARD,display:"flex",flexDirection:"column",overflow:"hidden",flex:1,minHeight:0,padding:20}}>
+        <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:16,flexShrink:0,paddingBottom:12,borderBottom:"1px solid rgba(15,26,46,.08)"}}>
+          <div style={{fontFamily:"'Fraunces',Georgia,serif",fontVariationSettings:'"opsz" 96',fontSize:22,fontWeight:600,color:"#0F1A2E",letterSpacing:-.3}}>Worksheets <span style={{fontSize:11,fontWeight:500,color:"#66708A",fontFamily:"'IBM Plex Mono',monospace",letterSpacing:.3,marginLeft:8}}>{Object.values(grouped).reduce((n,doms)=>n+Object.values(doms).reduce((m,subs)=>m+Object.values(subs).reduce((k,arr)=>k+arr.length,0),0),0)} shown</span></div>
           <div style={{display:"flex",gap:6}}>
-            <button onClick={()=>{const a={};Object.values(grouped).forEach(doms=>Object.values(doms).forEach(subs=>Object.values(subs).forEach(arr=>arr.forEach(ws=>a[ws.id]=true))));setChk(prev=>({...prev,...a}));}} style={{...mkBtn("#f1f5f9","#475569"),padding:"4px 12px",fontSize:11}}>Select All</button>
-            <button onClick={()=>setChk({})} style={{...mkBtn("#fee2e2","#dc2626"),padding:"4px 12px",fontSize:11}}>Clear</button>
+            <button onClick={()=>{const a={};Object.values(grouped).forEach(doms=>Object.values(doms).forEach(subs=>Object.values(subs).forEach(arr=>arr.forEach(ws=>a[ws.id]=true))));setChk(prev=>({...prev,...a}));}} style={{...mkBtn("transparent","#2E3A57"),border:"1px solid rgba(15,26,46,.18)",padding:"5px 14px",fontSize:11}}>Select All</button>
+            <button onClick={()=>setChk({})} style={{...mkBtn("transparent","#8C2E2E"),border:"1px solid rgba(140,46,46,.3)",padding:"5px 14px",fontSize:11}}>Clear</button>
           </div>
         </div>
         <div style={{overflowY:"auto",flex:1}}>
           {Object.keys(grouped).length===0&&<div style={{color:"#94a3b8",textAlign:"center",paddingTop:40,fontSize:13}}>No worksheets match filters.</div>}
           {Object.entries(grouped).map(([subj,doms])=>{
-            const sc = SUBJ_COLOR[subj]||{bg:"#f1f5f9",fg:"#475569",accent:B2};
+            const sc = SUBJ_COLOR[subj]||{bg:"#F3EEE4",fg:"#2E3A57",accent:B2};
             return(
-              <div key={subj} style={{marginBottom:18}}>
-                <div style={{background:sc.bg,color:sc.fg,fontSize:11,fontWeight:800,padding:"5px 12px",borderRadius:6,letterSpacing:.8,borderLeft:`4px solid ${sc.accent}`,marginBottom:8,textTransform:"uppercase"}}>{subj}</div>
+              <div key={subj} style={{marginBottom:24}}>
+                <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12,paddingBottom:6,borderBottom:"1px solid rgba(15,26,46,.1)"}}>
+                  <div style={{width:3,height:18,background:sc.accent}}/>
+                  <div style={{fontFamily:"'Fraunces',Georgia,serif",fontVariationSettings:'"opsz" 96',fontSize:15,fontWeight:600,color:sc.fg,letterSpacing:-.15}}>{subj}</div>
+                </div>
                 {Object.entries(doms).map(([dom,subs])=>(
-                  <div key={dom} style={{marginBottom:14,marginLeft:6}}>
-                    <div style={{fontSize:12,fontWeight:800,color:DOMAIN_COLOR[dom]||B2,padding:"3px 10px",background:"#f8fafc",borderRadius:5,marginBottom:6,borderLeft:`3px solid ${DOMAIN_COLOR[dom]||B2}`}}>{dom}</div>
+                  <div key={dom} style={{marginBottom:16,marginLeft:4}}>
+                    <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,fontWeight:600,color:DOMAIN_COLOR[dom]||B2,padding:"3px 0",marginBottom:8,letterSpacing:1,textTransform:"uppercase"}}>{dom}</div>
                     {Object.entries(subs).sort((a,b)=>{const ac=a[0].startsWith("Comprehensive ")?0:1;const bc=b[0].startsWith("Comprehensive ")?0:1;return ac-bc||a[0].localeCompare(b[0]);}).map(([sub,arr])=>(
-                      <div key={sub} style={{marginBottom:8,marginLeft:10}}>
-                        <div style={{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:.6,marginBottom:3}}>{sub}</div>
+                      <div key={sub} style={{marginBottom:10,marginLeft:4}}>
+                        <div style={{fontSize:10,fontWeight:500,color:"#66708A",letterSpacing:.6,marginBottom:4,fontStyle:"italic",fontFamily:"'Fraunces',Georgia,serif"}}>{sub}</div>
                         {arr.map(ws=>{
                           const ck=!!chk[ws.id];
                           const cnt=curStudent?.assignments?.reduce((n,a)=>n+(a.worksheets||[]).filter(w=>(w.id||w.title)===(ws.id)||w.title===ws.title).length,0)||0;
                           const lastDate = curStudent?lastAssignedDate(curStudent,ws.id):null;
                           return(
-                            <div key={ws.id} onClick={()=>setChk(prev=>({...prev,[ws.id]:!prev[ws.id]}))} style={{display:"flex",alignItems:"center",padding:"6px 10px",cursor:"pointer",borderRadius:7,marginBottom:2,background:ck?"#eff6ff":"transparent",border:ck?"1.5px solid #bfdbfe":"1.5px solid transparent"}}>
-                              <input type="checkbox" checked={ck} onChange={()=>{}} onClick={e=>e.stopPropagation()} style={{marginRight:9,cursor:"pointer"}}/>
+                            <div key={ws.id} onClick={()=>setChk(prev=>({...prev,[ws.id]:!prev[ws.id]}))} style={{display:"flex",alignItems:"center",padding:"8px 12px",cursor:"pointer",borderRadius:4,marginBottom:2,background:ck?"#E9F0F6":"transparent",boxShadow:ck?"inset 0 0 0 1px "+B2:"none",transition:"background .15s"}}>
+                              <input type="checkbox" checked={ck} onChange={()=>{}} onClick={e=>{e.stopPropagation();setChk(prev=>({...prev,[ws.id]:!prev[ws.id]}));}} style={{marginRight:11,cursor:"pointer",accentColor:B2}}/>
                               <div style={{flex:1,minWidth:0}}>
-                                <div style={{fontSize:12,fontWeight:ck?700:400,color:"#1e293b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                                <div style={{fontSize:12,fontWeight:ck?600:400,color:"#0F1A2E",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                                   {ws.title}
-                                  {lastDate&&<span style={{fontSize:9,color:"#fff",background:"#dc2626",padding:"1px 6px",borderRadius:4,marginLeft:6,fontWeight:800}}>✓ ASSIGNED {lastDate}</span>}
+                                  {lastDate&&<span style={{fontSize:8,color:"#FAF7F2",background:"#8C2E2E",padding:"2px 7px",borderRadius:2,marginLeft:8,fontWeight:600,letterSpacing:.5,fontFamily:"'IBM Plex Mono',monospace",textTransform:"uppercase"}}>Assigned {lastDate}</span>}
                                 </div>
                               </div>
-                              {ws.qs>0&&<span style={{...mkPill("#eff6ff","#1e40af"),marginRight:4}}>{ws.qs}Q</span>}
-                              {cnt>0&&<span style={{...mkPill("#fef3c7","#92400e"),marginRight:4,flexShrink:0}}>×{cnt}</span>}
-                              <span style={{...mkPill(DC[ws.difficulty]+"22",DC[ws.difficulty]),flexShrink:0}}>{ws.difficulty}</span>
-                              {ck&&<select value={evenOdd[ws.id]||""} onChange={e=>{e.stopPropagation();setEvenOdd(prev=>({...prev,[ws.id]:e.target.value}));}} onClick={e=>e.stopPropagation()} style={{marginLeft:6,fontSize:10,padding:"2px 4px",border:"1px solid #cbd5e1",borderRadius:4}}>
+                              {ws.qs>0&&<span style={{...mkPill("transparent","#003258"),marginRight:6,border:"1px solid rgba(0,50,88,.2)"}}>{ws.qs}Q</span>}
+                              {cnt>0&&<span style={{...mkPill("transparent","#A9761B"),marginRight:6,flexShrink:0,border:"1px solid rgba(169,118,27,.35)"}}>×{cnt}</span>}
+                              <span style={{...mkPill(DC[ws.difficulty]+"18",DC[ws.difficulty]),flexShrink:0,border:"1px solid "+DC[ws.difficulty]+"44"}}>{ws.difficulty}</span>
+                              {ck&&<select value={evenOdd[ws.id]||""} onChange={e=>{e.stopPropagation();setEvenOdd(prev=>({...prev,[ws.id]:e.target.value}));}} onClick={e=>e.stopPropagation()} style={{marginLeft:8,fontSize:10,padding:"3px 5px",border:"1px solid rgba(15,26,46,.18)",borderRadius:3,background:"#fff",fontFamily:"'IBM Plex Mono',monospace"}}>
                                 <option value="">All</option>
                                 <option value="EVEN">Even</option>
                                 <option value="ODD">Odd</option>
                               </select>}
-                              {timeDrill&&ck&&<input type="number" placeholder="min" min={1} max={120} value={timeLims[ws.id]||""} onChange={e=>{e.stopPropagation();setTimeLims(prev=>({...prev,[ws.id]:e.target.value}));}} onClick={e=>e.stopPropagation()} style={{width:46,marginLeft:6,border:"1.5px solid #93c5fd",borderRadius:5,padding:"3px 5px",fontSize:11,outline:"none"}}/>}
+                              {timeDrill&&ck&&<input type="number" placeholder="min" min={1} max={120} value={timeLims[ws.id]||""} onChange={e=>{e.stopPropagation();setTimeLims(prev=>({...prev,[ws.id]:e.target.value}));}} onClick={e=>e.stopPropagation()} style={{width:50,marginLeft:8,border:"1px solid "+B2,borderRadius:3,padding:"3px 6px",fontSize:11,outline:"none",fontFamily:"'IBM Plex Mono',monospace"}}/>}
                             </div>
                           );
                         })}
@@ -1490,19 +1512,19 @@ function GeneratorTab(props){
       </div>
 
       {/* RIGHT: OUTPUT */}
-      <div style={{display:"flex",flexDirection:"column",gap:10}}>
-        <button onClick={generate} style={{...mkBtn(B2,"#fff"),padding:"13px 20px",fontSize:14,boxShadow:"0 3px 10px rgba(0,74,121,.3)"}}>⚡ Generate Assignment</button>
-        <div style={{...CARD,flex:1,display:"flex",flexDirection:"column"}}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10,flexShrink:0,flexWrap:"wrap",gap:6}}>
-            <div style={{fontSize:13,fontWeight:800,color:B2}}>Output</div>
+      <div style={{display:"flex",flexDirection:"column",gap:12}}>
+        <button onClick={generate} style={{...mkBtn(B2,"#FAF7F2"),padding:"14px 20px",fontSize:13,fontWeight:600,letterSpacing:.4,textTransform:"uppercase",boxShadow:"0 4px 14px -4px rgba(0,50,88,.45), inset 0 1px 0 rgba(255,255,255,.1)"}}>Generate Assignment →</button>
+        <div style={{...CARD,flex:1,display:"flex",flexDirection:"column",padding:20}}>
+          <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:14,flexShrink:0,flexWrap:"wrap",gap:8,paddingBottom:12,borderBottom:"1px solid rgba(15,26,46,.08)"}}>
+            <div style={{fontFamily:"'Fraunces',Georgia,serif",fontVariationSettings:'"opsz" 96',fontSize:22,fontWeight:600,color:"#0F1A2E",letterSpacing:-.3}}>Output</div>
             <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-              <button onClick={copyRichOut} disabled={!output} title="Copy with bold formatting preserved" style={{...mkBtn(copied?"#22c55e":"#eff6ff",copied?"#fff":B2),padding:"5px 10px",fontSize:11}}>{copied?"✓ Copied!":"📋 Copy Rich"}</button>
-              <button onClick={copyOut} disabled={!output} title="Copy plain text with asterisks" style={{...mkBtn("#f1f5f9","#475569"),padding:"5px 10px",fontSize:11}}>📄 Plain</button>
-              <button onClick={downloadPdf} disabled={!output} title="Download as PDF" style={{...mkBtn("#dc2626","#fff"),padding:"5px 10px",fontSize:11}}>📑 PDF</button>
+              <button onClick={copyRichOut} disabled={!output} title="Copy with bold formatting preserved" style={{...mkBtn(copied?"#4C7A4C":"transparent",copied?"#FAF7F2":"#003258"),border:"1px solid "+(copied?"#4C7A4C":"rgba(0,50,88,.3)"),padding:"5px 12px",fontSize:11,opacity:!output?.45:1}}>{copied?"✓ Copied":"Copy Rich"}</button>
+              <button onClick={copyOut} disabled={!output} title="Copy plain text with asterisks" style={{...mkBtn("transparent","#2E3A57"),border:"1px solid rgba(15,26,46,.18)",padding:"5px 12px",fontSize:11,opacity:!output?.45:1}}>Plain</button>
+              <button onClick={downloadPdf} disabled={!output} title="Download as PDF" style={{...mkBtn("transparent","#8C2E2E"),border:"1px solid rgba(140,46,46,.3)",padding:"5px 12px",fontSize:11,opacity:!output?.45:1}}>PDF</button>
             </div>
           </div>
           {output ? (
-            <div style={{flex:1,border:"1.5px solid #e2e8f0",borderRadius:8,padding:14,fontSize:12,color:"#1e293b",background:"#f8fafc",lineHeight:1.55,minHeight:260,overflowY:"auto",fontFamily:"'Segoe UI',system-ui,sans-serif"}} dangerouslySetInnerHTML={{__html: mdBoldToHtml(output)}}/>
+            <div style={{flex:1,border:"1px solid rgba(15,26,46,.12)",borderRadius:4,padding:18,fontSize:12,color:"#0F1A2E",background:"#FDFBF6",lineHeight:1.65,minHeight:260,overflowY:"auto",fontFamily:"'IBM Plex Sans',system-ui,sans-serif"}} dangerouslySetInnerHTML={{__html: mdBoldToHtml(output)}}/>
           ) : (
             <div style={{flex:1,border:"1.5px solid #e2e8f0",borderRadius:8,padding:14,fontSize:12,color:"#94a3b8",background:"#f8fafc",minHeight:260,display:"flex",alignItems:"center",justifyContent:"center"}}>Generate an assignment to see output here…</div>
           )}
