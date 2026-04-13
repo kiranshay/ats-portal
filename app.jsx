@@ -171,7 +171,7 @@ function Toggle({on,set,label,sub}){
   return(
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer"}} onClick={()=>set(!on)}>
       <div style={{flex:1,minWidth:0}}>
-        <div style={{fontFamily:"'Fraunces',Georgia,serif",fontVariationSettings:'"opsz" 48',fontSize:15,fontWeight:600,color:"#0F1A2E",letterSpacing:-.1}}>{label}</div>
+        <div style={{fontFamily:"'IBM Plex Sans',system-ui,sans-serif",fontSize:14,fontWeight:600,color:"#0F1A2E",letterSpacing:-.05}}>{label}</div>
         {sub&&<div style={{fontSize:11,color:"#66708A",marginTop:2}}>{sub}</div>}
       </div>
       <div style={{width:38,height:22,borderRadius:11,background:on?B2:"rgba(15,26,46,.18)",position:"relative",transition:"background .2s",flexShrink:0,marginLeft:12,boxShadow:on?"inset 0 1px 2px rgba(0,50,88,.35)":"inset 0 1px 2px rgba(15,26,46,.12)"}}>
@@ -1995,7 +1995,7 @@ function GeneratorTab(props){
               {/* BlueBook */}
               <div style={{padding:12,background:"#F3EEE4",borderRadius:4,marginBottom:10,border:"1px solid rgba(15,26,46,.06)"}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:addBB?10:0}}>
-                  <span style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:14,fontWeight:600,color:"#003258",letterSpacing:-.1}}>BlueBook</span>
+                  <span style={{fontFamily:"'IBM Plex Sans',system-ui,sans-serif",fontSize:14,fontWeight:600,color:"#003258",letterSpacing:-.05}}>BlueBook</span>
                   <input type="checkbox" checked={addBB} onChange={e=>setAddBB(e.target.checked)} style={{cursor:"pointer",accentColor:B2}}/>
                 </div>
                 {addBB&&<div>
@@ -2034,7 +2034,7 @@ function GeneratorTab(props){
               {/* WellEd Labs */}
               <div style={{padding:12,background:"#F3EEE4",borderRadius:4,border:"1px solid rgba(15,26,46,.06)"}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:addWE?10:0}}>
-                  <span style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:14,fontWeight:600,color:"#6E3F12",letterSpacing:-.1}}>WellEd Labs</span>
+                  <span style={{fontFamily:"'IBM Plex Sans',system-ui,sans-serif",fontSize:14,fontWeight:600,color:"#6E3F12",letterSpacing:-.05}}>WellEd Labs</span>
                   <input type="checkbox" checked={addWE} onChange={e=>setAddWE(e.target.checked)} style={{cursor:"pointer",accentColor:"#9A5B1F"}}/>
                 </div>
                 {addWE&&<div>
@@ -2111,10 +2111,10 @@ function GeneratorTab(props){
                 </div>
                 {Object.entries(doms).map(([dom,subs])=>(
                   <div key={dom} style={{marginBottom:16,marginLeft:4}}>
-                    <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,fontWeight:600,color:DOMAIN_COLOR[dom]||B2,padding:"3px 0",marginBottom:8,letterSpacing:1,textTransform:"uppercase"}}>{dom}</div>
+                    <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,fontWeight:600,color:DOMAIN_COLOR[dom]||B2,padding:"3px 0",marginBottom:8,letterSpacing:1,textTransform:"uppercase"}}>{dom}</div>
                     {Object.entries(subs).sort((a,b)=>{const ac=a[0].startsWith("Comprehensive ")?0:1;const bc=b[0].startsWith("Comprehensive ")?0:1;return ac-bc||a[0].localeCompare(b[0]);}).map(([sub,arr])=>(
                       <div key={sub} style={{marginBottom:10,marginLeft:4}}>
-                        <div style={{fontSize:10,fontWeight:500,color:"#66708A",letterSpacing:.6,marginBottom:4,fontStyle:"italic",fontFamily:"'Fraunces',Georgia,serif"}}>{sub}</div>
+                        <div style={{fontSize:12,fontWeight:500,color:"#2E3A57",letterSpacing:.1,marginBottom:5,fontFamily:"'IBM Plex Sans',system-ui,sans-serif"}}>{sub}</div>
                         {arr.map(ws=>{
                           const ck=!!chk[ws.id];
                           const cnt=curStudent?.assignments?.reduce((n,a)=>n+(a.worksheets||[]).filter(w=>(w.id||w.title)===(ws.id)||w.title===ws.title).length,0)||0;
@@ -2123,7 +2123,7 @@ function GeneratorTab(props){
                             <div key={ws.id} onClick={()=>setChk(prev=>({...prev,[ws.id]:!prev[ws.id]}))} style={{display:"flex",alignItems:"center",padding:"8px 12px",cursor:"pointer",borderRadius:4,marginBottom:2,background:ck?"#E9F0F6":"transparent",boxShadow:ck?"inset 0 0 0 1px "+B2:"none",transition:"background .15s"}}>
                               <input type="checkbox" checked={ck} onChange={()=>{}} onClick={e=>{e.stopPropagation();setChk(prev=>({...prev,[ws.id]:!prev[ws.id]}));}} style={{marginRight:11,cursor:"pointer",accentColor:B2}}/>
                               <div style={{flex:1,minWidth:0}}>
-                                <div style={{fontSize:12,fontWeight:ck?600:400,color:"#0F1A2E",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                                <div style={{fontSize:13,fontWeight:ck?600:400,color:"#0F1A2E",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontFamily:"'IBM Plex Sans',system-ui,sans-serif"}}>
                                   {ws.title}
                                   {lastDate&&<span style={{fontSize:8,color:"#FAF7F2",background:"#8C2E2E",padding:"2px 7px",borderRadius:2,marginLeft:8,fontWeight:600,letterSpacing:.5,fontFamily:"'IBM Plex Mono',monospace",textTransform:"uppercase"}}>Assigned {lastDate}</span>}
                                 </div>
@@ -2251,7 +2251,7 @@ function StudentSummaryCard({student}){
               return(
                 <div key={d} title={`${d}: ${total}`} style={{background:heatCellColor(total),borderRadius:3,padding:"6px 4px",textAlign:"center",border:"1px solid "+(total>0?"transparent":"rgba(15,26,46,.08)")}}>
                   <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:8,color:hot?"#FAF7F2":"#66708A",fontWeight:500,lineHeight:1,letterSpacing:.3}}>{short}</div>
-                  <div style={{fontFamily:"'Fraunces',Georgia,serif",fontVariationSettings:'"opsz" 96',fontSize:16,fontWeight:600,color:hot?"#FAF7F2":total>0?"#0F1A2E":"rgba(15,26,46,.25)",marginTop:2}}>{total||"·"}</div>
+                  <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:15,fontWeight:600,color:hot?"#FAF7F2":total>0?"#0F1A2E":"rgba(15,26,46,.25)",marginTop:2,fontVariantNumeric:"tabular-nums"}}>{total||"·"}</div>
                 </div>
               );
             })}
@@ -2414,7 +2414,7 @@ function StudentsList({students,showAdd,setShowAdd,newS,setNewS,addStudent,openP
                 return(
                   <tr key={st.id} style={{borderBottom:i===students.length-1?"none":"1px solid rgba(15,26,46,.06)"}}>
                     <td style={{padding:"14px 16px"}}>
-                      <div style={{fontFamily:"'Fraunces',Georgia,serif",fontVariationSettings:'"opsz" 96',fontSize:16,fontWeight:600,color:"#0F1A2E",letterSpacing:-.2}}>{st.name}</div>
+                      <div style={{fontFamily:"'IBM Plex Sans',system-ui,sans-serif",fontSize:14,fontWeight:600,color:"#0F1A2E",letterSpacing:-.05}}>{st.name}</div>
                     </td>
                     <td style={{padding:"14px 16px",fontSize:12,color:"#2E3A57"}}>{st.grade||<span style={{color:"#66708A"}}>—</span>}</td>
                     <td style={{padding:"14px 16px",fontSize:12,color:"#2E3A57"}}>{st.tutor||<span style={{color:"#66708A"}}>—</span>}</td>
@@ -2472,7 +2472,7 @@ function StudentProfile({p,setProfile,ptab,setPtab,paChk,setPaChk,paSubj,setPaSu
           <div style={{display:"flex",gap:0,borderLeft:"1px solid rgba(15,26,46,.1)"}}>
             {[[(p.assignments||[]).reduce((n,a)=>n+(a.worksheets||[]).length,0),"Worksheets"],[(p.diagnostics||[]).length,"Diagnostics"],[(p.assignments||[]).length,"Sessions"]].map(([v,l])=>(
               <div key={l} style={{textAlign:"center",padding:"0 24px",borderRight:"1px solid rgba(15,26,46,.1)"}}>
-                <div style={{fontFamily:"'Fraunces',Georgia,serif",fontVariationSettings:'"opsz" 144',fontSize:34,fontWeight:600,color:"#0F1A2E",letterSpacing:-.6,lineHeight:1}}>{v}</div>
+                <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:30,fontWeight:600,color:"#0F1A2E",letterSpacing:-.4,lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{v}</div>
                 <div style={{fontFamily:"'IBM Plex Mono',monospace",color:"#66708A",fontSize:9,letterSpacing:1.2,textTransform:"uppercase",marginTop:6,fontWeight:500}}>{l}</div>
               </div>
             ))}
@@ -2514,7 +2514,7 @@ function StudentProfile({p,setProfile,ptab,setPtab,paChk,setPaChk,paSubj,setPaSu
                         </span>
                       ) : (
                         <span style={{display:"flex",alignItems:"center",gap:6}}>
-                          <span style={{fontFamily:"'Fraunces',Georgia,serif",fontVariationSettings:'"opsz" 96',fontSize:18,fontWeight:600,color:"#0F1A2E",letterSpacing:-.2}}>{asg.date}</span>
+                          <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:14,fontWeight:600,color:"#0F1A2E",letterSpacing:.2,fontVariantNumeric:"tabular-nums"}}>{asg.date}</span>
                           <button onClick={()=>{setEditDateId(asg.id);setEditDateVal(asg.date||todayStr());}} title="Edit date" style={{background:"none",border:"1px solid rgba(15,26,46,.15)",borderRadius:2,cursor:"pointer",fontSize:9,color:"#66708A",padding:"2px 8px",fontFamily:"'IBM Plex Mono',monospace",letterSpacing:.4,textTransform:"uppercase",fontWeight:500}}>Edit</button>
                         </span>
                       )}
@@ -2577,7 +2577,7 @@ function StudentProfile({p,setProfile,ptab,setPtab,paChk,setPaChk,paSubj,setPaSu
                           <span style={{fontSize:9,color:"#66708A",fontFamily:"'IBM Plex Mono',monospace",letterSpacing:.4,textTransform:"uppercase"}}>Math</span>
                           <input type="number" min="0" max="800" placeholder="0" value={math} onChange={e=>setExamScore(asg.id,idx,{mathScore:e.target.value})} style={examInp}/>
                           <span style={{fontSize:10,color:"#003258",fontWeight:600,fontFamily:"'IBM Plex Mono',monospace"}}>/ 800</span>
-                          {(rw||math) && <span style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:14,fontWeight:600,color:"#003258",marginLeft:6}}>= {total}/1600</span>}
+                          {(rw||math) && <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:13,fontWeight:600,color:"#003258",marginLeft:6,fontVariantNumeric:"tabular-nums"}}>= {total}/1600</span>}
                         </>) : (<>
                           <select value={ex.sectionSubject||""} onChange={e=>setExamScore(asg.id,idx,{sectionSubject:e.target.value})} style={{padding:"4px 10px",border:"1px solid rgba(0,74,121,.35)",borderRadius:2,fontSize:11,background:"#fff"}}>
                             <option value="">Section…</option>
@@ -2629,7 +2629,7 @@ function StudentProfile({p,setProfile,ptab,setPtab,paChk,setPaChk,paSubj,setPaSu
               <div style={{display:"flex",flexDirection:"column",gap:2}}>
                 {p.diagnostics.map((r,i)=>(
                   <div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"8px 12px",borderRadius:2,fontSize:12,background:i%2===0?"rgba(15,26,46,.02)":"transparent"}}>
-                    <span style={{fontWeight:500,color:"#0F1A2E",fontFamily:"'Fraunces',Georgia,serif",fontSize:13}}>{r.fileName}</span>
+                    <span style={{fontWeight:500,color:"#0F1A2E",fontFamily:"'IBM Plex Sans',system-ui,sans-serif",fontSize:13}}>{r.fileName}</span>
                     <span style={{...mkPill("transparent","#003258"),border:"1px solid rgba(0,50,88,.25)"}}>{r.subject}</span>
                     <span style={{marginLeft:"auto",color:"#2E3A57",fontFamily:"'IBM Plex Mono',monospace",fontSize:11}}>{r.earned}/{r.possible} · {r.percentCorrect}%</span>
                     <span style={{color:"#66708A",fontSize:10,fontFamily:"'IBM Plex Mono',monospace"}}>{r.tags?.length||0} tags</span>
@@ -2669,7 +2669,7 @@ function StudentProfile({p,setProfile,ptab,setPtab,paChk,setPaChk,paSubj,setPaSu
                   {diagProfile.domains.sort((a,b)=>(a.pct||0)-(b.pct||0)).map(d=>(
                     <div key={d.name} style={{background:heatColorPct(d.pct),color:"#FAF7F2",padding:"14px 16px",borderRadius:3}}>
                       <div style={{fontFamily:"'IBM Plex Sans',system-ui,sans-serif",fontSize:13,fontWeight:700,lineHeight:1.25,letterSpacing:-.1}}>{d.name}</div>
-                      <div style={{fontFamily:"'Fraunces',Georgia,serif",fontVariationSettings:'"opsz" 96',fontSize:26,fontWeight:600,letterSpacing:-.4,marginTop:6,lineHeight:1}}>{d.pct}<span style={{fontSize:15,opacity:.7}}>%</span></div>
+                      <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:24,fontWeight:600,letterSpacing:-.3,marginTop:6,lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{d.pct}<span style={{fontSize:14,opacity:.7}}>%</span></div>
                       <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,opacity:.85,marginTop:5}}>{d.earn} / {d.poss}</div>
                     </div>
                   ))}
@@ -2685,7 +2685,7 @@ function StudentProfile({p,setProfile,ptab,setPtab,paChk,setPaChk,paSubj,setPaSu
                         <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#66708A",fontWeight:500,letterSpacing:.7,textTransform:"uppercase"}}>{s.domain}</div>
                         <div style={{fontSize:13,fontWeight:600,color:"#0F1A2E",marginTop:3,letterSpacing:-.1}}>{s.name}</div>
                         <div style={{display:"flex",alignItems:"baseline",gap:8,marginTop:6}}>
-                          <span style={{fontFamily:"'Fraunces',Georgia,serif",fontVariationSettings:'"opsz" 48',fontSize:19,fontWeight:600,color:c,letterSpacing:-.2,lineHeight:1}}>{s.pct}<span style={{fontSize:12}}>%</span></span>
+                          <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:18,fontWeight:600,color:c,letterSpacing:-.2,lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{s.pct}<span style={{fontSize:12}}>%</span></span>
                           <span style={{fontSize:11,color:"#66708A",fontFamily:"'IBM Plex Mono',monospace"}}>{s.earn}/{s.poss}</span>
                         </div>
                       </div>
@@ -2946,7 +2946,7 @@ function HeatMapTab({students,openProfile}){
                   return(
                     <div key={dom} style={{background:heatCellColor(v),padding:"12px 8px",textAlign:"center",minHeight:80,display:"flex",flexDirection:"column",justifyContent:"space-between",borderRadius:2,border:v===0?"1px solid rgba(15,26,46,.08)":"none"}}>
                       <div style={{fontFamily:"'IBM Plex Sans',system-ui,sans-serif",fontSize:10,fontWeight:600,color:hot?"#FAF7F2":"#2E3A57",lineHeight:1.2,letterSpacing:-.05}}>{dom}</div>
-                      <div style={{fontFamily:"'Fraunces',Georgia,serif",fontVariationSettings:'"opsz" 96',fontSize:22,fontWeight:600,color:hot?"#FAF7F2":v>0?"#0F1A2E":"rgba(15,26,46,.25)",letterSpacing:-.3,marginTop:8,lineHeight:1}}>{v||"·"}</div>
+                      <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:22,fontWeight:600,color:hot?"#FAF7F2":v>0?"#0F1A2E":"rgba(15,26,46,.25)",letterSpacing:-.3,marginTop:8,lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{v||"·"}</div>
                     </div>
                   );
                 })}
@@ -3327,7 +3327,7 @@ function ScoreHistoryPanel({p, sfm, setSfm, addScore, delScore, addWelledLog, de
                     return(
                       <tr key={sc.id} style={{borderBottom:i===arr.length-1?"none":"1px solid rgba(15,26,46,.06)"}}>
                         <td style={{padding:"10px 12px",color:"#2E3A57",fontFamily:"'IBM Plex Mono',monospace",fontSize:11}}>{sc.date}</td>
-                        <td style={{padding:"10px 12px",fontWeight:500,color:"#0F1A2E",fontFamily:"'Fraunces',Georgia,serif",fontSize:13}}>{sc.testType}</td>
+                        <td style={{padding:"10px 12px",fontWeight:500,color:"#0F1A2E",fontFamily:"'IBM Plex Sans',system-ui,sans-serif",fontSize:13}}>{sc.testType}</td>
                         <td style={{padding:"10px 12px",fontWeight:600,color:"#0F1A2E",fontFamily:"'IBM Plex Mono',monospace",fontSize:12}}>{sc.score}</td>
                         <td style={{padding:"10px 12px",color:"#66708A",fontFamily:"'IBM Plex Mono',monospace"}}>{sc.maxScore||<span style={{color:"rgba(15,26,46,.25)"}}>—</span>}</td>
                         <td style={{padding:"10px 12px"}}>{pct!==null?<PctBar value={pct} width={80}/>:<span style={{color:"rgba(15,26,46,.25)"}}>—</span>}</td>
@@ -3356,7 +3356,7 @@ function ScoreHistoryPanel({p, sfm, setSfm, addScore, delScore, addWelledLog, de
                       <tr key={lg.id} style={{borderBottom:i===arr.length-1?"none":"1px solid rgba(15,26,46,.06)"}}>
                         <td style={{padding:"10px 12px",color:"#2E3A57",fontFamily:"'IBM Plex Mono',monospace",fontSize:11}}>{lg.date}</td>
                         <td style={{padding:"10px 12px",color:"#2E3A57"}}>{lg.subject}</td>
-                        <td style={{padding:"10px 12px",fontWeight:500,color:dc,fontFamily:"'Fraunces',Georgia,serif",fontSize:13}}>{lg.domain}</td>
+                        <td style={{padding:"10px 12px",fontWeight:500,color:dc,fontFamily:"'IBM Plex Sans',system-ui,sans-serif",fontSize:13}}>{lg.domain}</td>
                         <td style={{padding:"10px 12px"}}><span style={{...mkPill("transparent",DC[lg.difficulty]||"#66708A"),border:"1px solid "+(DC[lg.difficulty]||"#66708A")+"55"}}>{lg.difficulty}</span></td>
                         <td style={{padding:"10px 12px",fontWeight:600,color:"#0F1A2E",fontFamily:"'IBM Plex Mono',monospace"}}>{lg.score}/{mx}</td>
                         <td style={{padding:"10px 12px"}}><PctBar value={pct} width={80}/></td>
