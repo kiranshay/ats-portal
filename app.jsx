@@ -1654,6 +1654,69 @@ function GeneratorTab(props){
 
   const totalSelected = selWS.length + selWeDom.length + selVocab.length + (addBB?1:0) + (addWE?1:0);
 
+  // Most recent non-pre-assigned session for the selected student. Sorted by
+  // date desc; ties broken by position in the assignments array (later wins).
+  const lastSession = useMemo(()=>{
+    if(!curStudent) return null;
+    const eligible = (curStudent.assignments||[]).filter(a=>!a.preAssigned && !a.deleted);
+    if(!eligible.length) return null;
+    const indexed = eligible.map((a,i)=>({a,i}));
+    indexed.sort((x,y)=>{
+      const d = (y.a.date||"").localeCompare(x.a.date||"");
+      return d !== 0 ? d : y.i - x.i;
+    });
+    return indexed[0].a;
+  },[curStudent]);
+
+  const copyLastSession = ()=>{
+    if(!lastSession) return;
+    if(totalSelected > 0 && !confirm(`Replace your current selection (${totalSelected} item${totalSelected!==1?"s":""}) with ${curStudent.name}'s last session from ${lastSession.date}?`)) return;
+
+    const newChk = {};
+    const newEvenOdd = {};
+    const newTimeLims = {};
+    (lastSession.worksheets||[]).forEach(ws=>{
+      newChk[ws.id] = true;
+      if(ws.evenOdd) newEvenOdd[ws.id] = ws.evenOdd;
+      if(ws.timeLimit) newTimeLims[ws.id] = ws.timeLimit;
+    });
+
+    // WellEd Domain — reconstruct deterministic id from subject/domain/difficulty.
+    // Custom assignments (missing domain) are skipped; they don't round-trip.
+    const newWeChk = {};
+    (lastSession.welledDomain||[]).forEach(w=>{
+      if(!w.subject || !w.domain || !w.difficulty) return;
+      newWeChk[`WED|${w.subject}|${w.domain}|${w.difficulty}`] = true;
+    });
+
+    // Vocab — deterministic id from kind/name/variant.
+    const newVocabChk = {};
+    (lastSession.vocab||[]).forEach(v=>{
+      if(v.kind === "vocab_flash") newVocabChk[`VF|${v.name}`] = true;
+      else if(v.kind === "vocab_quiz" && v.variant) newVocabChk[`VQ|${v.name}|${v.variant}`] = true;
+    });
+
+    // BlueBook / WellEd exam configs from practiceExams.
+    const bb = (lastSession.practiceExams||[]).filter(x=>x.platform==="BlueBook");
+    const we = (lastSession.practiceExams||[]).filter(x=>x.platform==="WellEd");
+
+    setChk(newChk);
+    setEvenOdd(newEvenOdd);
+    setTimeLims(newTimeLims);
+    setWeChk(newWeChk);
+    setVocabChk(newVocabChk);
+    setWeDomEn((lastSession.welledDomain||[]).length > 0);
+    setVocabEn((lastSession.vocab||[]).length > 0);
+    setTimeDrill(!!lastSession.timeDrill);
+    setOneNote(!!lastSession.oneNote);
+    setAddBB(bb.length > 0);
+    if(bb.length > 0){ setBbType(bb[0].type || "full"); setBbCnt(bb.length); }
+    setAddWE(we.length > 0);
+    if(we.length > 0){ setWeType(we[0].type || "full"); setWeCnt(we.length); }
+
+    showToast(`Copied ${curStudent.name}'s last session (${lastSession.date})`);
+  };
+
   return(
     <div style={{display:"grid",gridTemplateColumns:"275px 1fr 345px",gap:14,minHeight:"calc(100vh - 140px)"}}>
       {/* LEFT SIDEBAR */}
@@ -1665,6 +1728,22 @@ function GeneratorTab(props){
             {students.map(st=><option key={st.id} value={st.id}>{st.name}</option>)}
           </select>
           {selSt&&<button onClick={()=>openProfile(curStudent)} style={{...mkBtn("transparent",B2),border:"1px solid rgba(0,74,121,.28)",marginTop:10,width:"100%",fontSize:11}}>View Profile →</button>}
+          {selSt&&(
+            <button
+              onClick={copyLastSession}
+              disabled={!lastSession}
+              title={lastSession?`Copy from ${lastSession.date}`:"No previous sessions for this student"}
+              style={{
+                ...mkBtn("transparent", lastSession?"#6E3F12":"#94a3b8"),
+                border:`1px solid ${lastSession?"rgba(154,91,31,.35)":"rgba(15,26,46,.12)"}`,
+                marginTop:6,width:"100%",fontSize:11,
+                cursor:lastSession?"pointer":"default",
+                opacity:lastSession?1:.6
+              }}
+            >
+              Copy Last Session {lastSession ? `· ${lastSession.date}` : ""}
+            </button>
+          )}
         </div>
 
         <div style={{...CARD}}>
