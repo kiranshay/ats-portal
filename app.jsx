@@ -307,6 +307,82 @@ const fsWrite = (data)=>{
 // domain check server-side — this component is UX, not security.
 const ATS_DOMAIN = "affordabletutoringsolutions.org";
 
+// ── Allowlist auth (Phase A — flag-gated, off by default) ─────────────────
+// When true, sign-in drops the workspace domain check and instead looks up
+// the user's email in the `allowlist` Firestore collection. Each allowlist
+// doc carries {role, studentIds, active} — see docs/AUTH_MIGRATION_PLAN.md
+// and docs/AUTH_MIGRATION_SESSION_1.md. Leave this FALSE in shipped code
+// until Phase B (rules dual-gate) is also deployed, otherwise the new flow
+// will 404 on the allowlist reads (rules still require the workspace gate).
+const USE_ALLOWLIST_AUTH = false;
+
+// Read allowlist/{emailLowercase}. Returns {role, studentIds, active, ...} or null.
+// One-shot, not a subscription — cached in React state for the session.
+async function getAllowlistEntry(email){
+  if(!window.db || !email) return null;
+  const key = String(email).trim().toLowerCase();
+  if(!key) return null;
+  try{
+    const snap = await window.db.collection("allowlist").doc(key).get();
+    if(!snap.exists) return null;
+    const data = snap.data() || {};
+    // Normalize: studentIds is the source of truth; fall back to legacy singular studentId.
+    const studentIds = Array.isArray(data.studentIds)
+      ? data.studentIds
+      : (data.studentId ? [data.studentId] : []);
+    return {
+      email: data.email || key,
+      role: data.role || null,
+      studentIds,
+      active: data.active !== false, // default true if missing
+      addedBy: data.addedBy || null,
+      addedAt: data.addedAt || null,
+      raw: data,
+    };
+  } catch(e){
+    console.warn("[allowlist] read error:", e);
+    return null;
+  }
+}
+
+function LockoutScreen({email, onSignOut}){
+  return (
+    <div style={{
+      minHeight:"100vh",background:"var(--paper)",display:"flex",
+      alignItems:"center",justifyContent:"center",padding:"40px 24px",
+      backgroundImage:"radial-gradient(circle at 20% 10%, rgba(154,91,31,.08), transparent 45%), radial-gradient(circle at 80% 80%, rgba(0,74,121,.05), transparent 45%)"
+    }}>
+      <div style={{
+        maxWidth:480,width:"100%",background:"var(--card)",
+        border:"1px solid var(--rule)",borderRadius:14,
+        boxShadow:"var(--shadow-lg)",padding:"44px 44px 36px",position:"relative",overflow:"hidden"
+      }}>
+        <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:"linear-gradient(90deg,var(--accent) 0,var(--accent) 72px,transparent 72px)"}}/>
+        <h2 style={{fontFamily:"var(--font-display)",fontVariationSettings:"'opsz' 72",fontWeight:500,fontSize:22,margin:"0 0 10px",letterSpacing:"-0.01em"}}>Account not authorized</h2>
+        <p style={{fontSize:13.5,lineHeight:1.55,color:"var(--ink-soft)",margin:"0 0 18px"}}>
+          You signed in successfully, but this account isn't on the PSM Generator allowlist yet. Send the email below to Kiran or Aidan and they can add you.
+        </p>
+        <div style={{
+          padding:"12px 14px",borderRadius:8,background:"var(--paper-alt)",
+          border:"1px solid var(--rule)",fontFamily:"var(--font-mono)",fontSize:13,
+          color:"var(--ink)",userSelect:"all",marginBottom:22,wordBreak:"break-all"
+        }}>{email || "(no email on account)"}</div>
+        <button
+          onClick={onSignOut}
+          style={{
+            width:"100%",padding:"12px 20px",borderRadius:10,
+            border:"1px solid var(--rule-strong)",background:"var(--card)",
+            color:"var(--ink)",fontFamily:"var(--font-body)",fontSize:13.5,
+            fontWeight:500,cursor:"pointer"
+          }}>Sign out and try a different account</button>
+        <div style={{marginTop:24,paddingTop:16,borderTop:"1px solid var(--rule)",fontSize:11,color:"var(--ink-mute)",lineHeight:1.6}}>
+          If you were recently added to the allowlist, try reloading this page.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SignInScreen({onSignIn, error, busy}){
   return (
     <div style={{
@@ -327,9 +403,11 @@ function SignInScreen({onSignIn, error, busy}){
             <div style={{fontFamily:"var(--font-display)",fontVariationSettings:"'opsz' 144, 'SOFT' 20",fontWeight:600,fontSize:26,letterSpacing:"-0.02em",lineHeight:1.05,color:"var(--ink)"}}>PSM <em style={{fontStyle:"italic",color:"var(--brand)",fontWeight:500}}>Generator</em></div>
           </div>
         </div>
-        <h2 style={{fontFamily:"var(--font-display)",fontVariationSettings:"'opsz' 72",fontWeight:500,fontSize:22,margin:"0 0 10px",letterSpacing:"-0.01em"}}>Tutor sign-in</h2>
+        <h2 style={{fontFamily:"var(--font-display)",fontVariationSettings:"'opsz' 72",fontWeight:500,fontSize:22,margin:"0 0 10px",letterSpacing:"-0.01em"}}>{USE_ALLOWLIST_AUTH ? "Sign in" : "Tutor sign-in"}</h2>
         <p style={{fontSize:13.5,lineHeight:1.55,color:"var(--ink-soft)",margin:"0 0 26px"}}>
-          Access is limited to verified <span style={{fontFamily:"var(--font-mono)",fontSize:12.5,color:"var(--ink)"}}>@{ATS_DOMAIN}</span> accounts. Student records are protected by this sign-in.
+          {USE_ALLOWLIST_AUTH
+            ? "Sign in with your Google account. Access is limited to authorized users; if your account isn't on the allowlist, you'll see an error and can request access."
+            : <>Access is limited to verified <span style={{fontFamily:"var(--font-mono)",fontSize:12.5,color:"var(--ink)"}}>@{ATS_DOMAIN}</span> accounts. Student records are protected by this sign-in.</>}
         </p>
         <button
           onClick={onSignIn}
@@ -357,7 +435,9 @@ function SignInScreen({onSignIn, error, busy}){
           }}>{error}</div>
         )}
         <div style={{marginTop:28,paddingTop:18,borderTop:"1px solid var(--rule)",fontSize:11,color:"var(--ink-mute)",letterSpacing:"0.01em",lineHeight:1.6}}>
-          Need an account? Contact your workspace admin. Personal Gmail accounts will be denied.
+          {USE_ALLOWLIST_AUTH
+            ? "Need access? Ask Kiran or Aidan to add your Google email to the allowlist."
+            : "Need an account? Contact your workspace admin. Personal Gmail accounts will be denied."}
         </div>
       </div>
     </div>
@@ -381,6 +461,18 @@ const DEV_BYPASS = (()=>{
     return new URLSearchParams(location.search).get("dev") === "1";
   }catch{ return false; }
 })();
+// Optional role override for local dev bypass: ?dev=1&role=admin|tutor|student|parent
+// Lets Claude (or Kiran) exercise the Phase 2 role-aware code paths without
+// being on a real Firestore allowlist. Only read when DEV_BYPASS is active.
+const DEV_FAKE_ROLE = (()=>{
+  if(!DEV_BYPASS) return null;
+  try{
+    const r = new URLSearchParams(location.search).get("role");
+    if(!r) return null;
+    const allowed = ["admin","tutor","student","parent"];
+    return allowed.includes(r) ? r : null;
+  }catch{ return null; }
+})();
 const DEV_FAKE_USER = {
   email: "dev@localhost",
   displayName: "Dev User",
@@ -388,36 +480,95 @@ const DEV_FAKE_USER = {
   emailVerified: true,
   uid: "dev-local",
 };
+// Default dev bypass role when none specified: "tutor" preserves prior behavior.
+const DEV_FAKE_ENTRY = {
+  email: "dev@localhost",
+  role: DEV_FAKE_ROLE || "tutor",
+  studentIds: [],
+  active: true,
+  addedBy: "dev-bypass",
+  addedAt: null,
+};
 
 function App(){
   const [authUser, setAuthUser] = useState(()=>{
     if(DEV_BYPASS) return DEV_FAKE_USER;
     return window.auth ? window.auth.currentUser : null;
   });
+  // currentUserEntry: the allowlist entry for the signed-in user, or null.
+  // Only populated when USE_ALLOWLIST_AUTH is on (or when DEV_BYPASS is on).
+  // When the flag is off, this stays null and AppInner falls back to legacy
+  // tutor behavior — no role gating anywhere.
+  const [currentUserEntry, setCurrentUserEntry] = useState(()=>{
+    if(DEV_BYPASS) return DEV_FAKE_ENTRY;
+    return null;
+  });
   const [authReady, setAuthReady] = useState(DEV_BYPASS);
   const [signInError, setSignInError] = useState("");
   const [signInBusy, setSignInBusy] = useState(false);
+  // lockedOutEmail: user authenticated with Google but isn't on the allowlist.
+  // We keep them signed in so they can see their email and copy it; sign-out
+  // is explicit via the LockoutScreen button.
+  const [lockedOutEmail, setLockedOutEmail] = useState("");
 
   useEffect(()=>{
     if(DEV_BYPASS){
-      console.warn("[psm-generator] DEV_BYPASS active — auth gate skipped (localhost only).");
+      console.warn(`[psm-generator] DEV_BYPASS active — auth gate skipped. Fake role: ${DEV_FAKE_ENTRY.role}`);
       return;
     }
     if(!window.auth){ setAuthReady(true); return; }
-    const unsub = window.auth.onAuthStateChanged((u)=>{
-      if(u){
-        const email = (u.email||"").toLowerCase();
-        if(!email.endsWith("@"+ATS_DOMAIN) || !u.emailVerified){
-          // Workspace check failed — immediately sign out and surface error.
-          window.auth.signOut();
-          setSignInError(`Access restricted to verified @${ATS_DOMAIN} accounts. You signed in as ${email||"an unknown account"}.`);
-          setAuthUser(null);
-        } else {
-          setSignInError("");
-          setAuthUser(u);
-        }
-      } else {
+    const unsub = window.auth.onAuthStateChanged(async (u)=>{
+      if(!u){
         setAuthUser(null);
+        setCurrentUserEntry(null);
+        setLockedOutEmail("");
+        setAuthReady(true);
+        setSignInBusy(false);
+        return;
+      }
+      const email = (u.email||"").toLowerCase();
+
+      if(USE_ALLOWLIST_AUTH){
+        // New path: no domain check, look up allowlist entry.
+        if(!u.emailVerified){
+          window.auth.signOut();
+          setSignInError("Your Google account isn't verified. Try again with a verified account.");
+          setAuthUser(null);
+          setCurrentUserEntry(null);
+          setAuthReady(true);
+          setSignInBusy(false);
+          return;
+        }
+        const entry = await getAllowlistEntry(email);
+        if(!entry || !entry.active || !entry.role){
+          // Authenticated, but not authorized. Show lockout with email.
+          setAuthUser(u);
+          setCurrentUserEntry(null);
+          setLockedOutEmail(email);
+          setSignInError("");
+          setAuthReady(true);
+          setSignInBusy(false);
+          return;
+        }
+        setSignInError("");
+        setLockedOutEmail("");
+        setAuthUser(u);
+        setCurrentUserEntry(entry);
+        setAuthReady(true);
+        setSignInBusy(false);
+        return;
+      }
+
+      // Legacy path: workspace domain check.
+      if(!email.endsWith("@"+ATS_DOMAIN) || !u.emailVerified){
+        window.auth.signOut();
+        setSignInError(`Access restricted to verified @${ATS_DOMAIN} accounts. You signed in as ${email||"an unknown account"}.`);
+        setAuthUser(null);
+        setCurrentUserEntry(null);
+      } else {
+        setSignInError("");
+        setAuthUser(u);
+        setCurrentUserEntry(null); // legacy mode has no role
       }
       setAuthReady(true);
       setSignInBusy(false);
@@ -431,7 +582,12 @@ function App(){
     setSignInError("");
     try{
       const provider = new firebase.auth.GoogleAuthProvider();
-      provider.setCustomParameters({hd: ATS_DOMAIN, prompt:"select_account"});
+      if(USE_ALLOWLIST_AUTH){
+        // No workspace domain hint — let users pick any Google account.
+        provider.setCustomParameters({prompt:"select_account"});
+      } else {
+        provider.setCustomParameters({hd: ATS_DOMAIN, prompt:"select_account"});
+      }
       await window.auth.signInWithPopup(provider);
     }catch(e){
       setSignInBusy(false);
@@ -446,10 +602,13 @@ function App(){
       // Drop the ?dev=1 flag and reload — that's the real way out of dev mode.
       const url = new URL(location.href);
       url.searchParams.delete("dev");
+      url.searchParams.delete("role");
       location.href = url.toString();
       return;
     }
     if(!window.auth) return;
+    setLockedOutEmail("");
+    setCurrentUserEntry(null);
     window.auth.signOut();
   };
 
@@ -461,15 +620,325 @@ function App(){
     );
   }
 
+  // Locked-out state: user signed in but isn't on the allowlist. Flag-only.
+  if(USE_ALLOWLIST_AUTH && lockedOutEmail){
+    return <LockoutScreen email={lockedOutEmail} onSignOut={handleSignOut}/>;
+  }
+
   if(!authUser){
     return <SignInScreen onSignIn={handleSignIn} error={signInError} busy={signInBusy}/>;
   }
 
-  return <AppInner authUser={authUser} onSignOut={handleSignOut}/>;
+  return <AppInner authUser={authUser} onSignOut={handleSignOut} currentUserEntry={currentUserEntry}/>;
 }
 
 /* ============ APP (authenticated inner) ============ */
-function AppInner({authUser, onSignOut}){
+// ── Admins tab ────────────────────────────────────────────────────────────
+// Admin-only UI for managing the Firestore `allowlist` collection.
+// Only rendered when currentUserEntry.role === "admin". In Phase A this is
+// only reachable via ?dev=1&role=admin locally; Phase B adds the rules that
+// allow a real admin session to read/write the allowlist collection in prod.
+function AdminsTab({currentUserEntry, students, showToast}){
+  const [entries, setEntries] = useState([]);        // allowlist docs
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [stuSearch, setStuSearch] = useState("");
+  // Add-form state
+  const [fEmail, setFEmail] = useState("");
+  const [fRole, setFRole] = useState("tutor");
+  const [fStudentIds, setFStudentIds] = useState([]);
+  const [fBusy, setFBusy] = useState(false);
+  const [fError, setFError] = useState("");
+
+  const selfEmail = (currentUserEntry?.email || "").toLowerCase();
+
+  const loadEntries = async ()=>{
+    if(!window.db){ setLoadError("Firestore not initialized"); setLoading(false); return; }
+    setLoading(true);
+    setLoadError("");
+    try{
+      const snap = await window.db.collection("allowlist").get();
+      const rows = [];
+      snap.forEach(d=>{
+        const data = d.data() || {};
+        rows.push({
+          id: d.id,
+          email: data.email || d.id,
+          role: data.role || "",
+          studentIds: Array.isArray(data.studentIds) ? data.studentIds : (data.studentId ? [data.studentId] : []),
+          active: data.active !== false,
+          addedBy: data.addedBy || "",
+          addedAt: data.addedAt || "",
+        });
+      });
+      rows.sort((a,b)=>{
+        // admins first, then tutors, then students/parents; within group alphabetical
+        const order = {admin:0, tutor:1, parent:2, student:3};
+        const oa = order[a.role] ?? 9;
+        const ob = order[b.role] ?? 9;
+        if(oa !== ob) return oa - ob;
+        return a.email.localeCompare(b.email);
+      });
+      setEntries(rows);
+    }catch(e){
+      setLoadError(e && e.message ? e.message : "Failed to load allowlist");
+    }
+    setLoading(false);
+  };
+
+  useEffect(()=>{ loadEntries(); // eslint-disable-next-line
+  }, []);
+
+  const addEntry = async ()=>{
+    setFError("");
+    const emailKey = fEmail.trim().toLowerCase();
+    if(!emailKey || !emailKey.includes("@")){ setFError("Enter a valid email."); return; }
+    if((fRole==="student" || fRole==="parent") && fStudentIds.length === 0){
+      setFError("Student and parent roles need at least one student selected.");
+      return;
+    }
+    if(!window.db){ setFError("Firestore not initialized"); return; }
+    setFBusy(true);
+    try{
+      await window.db.collection("allowlist").doc(emailKey).set({
+        email: emailKey,
+        role: fRole,
+        studentIds: (fRole==="student" || fRole==="parent") ? fStudentIds : [],
+        studentId: null, // legacy field kept null; studentIds is source of truth
+        active: true,
+        addedBy: selfEmail || "admin-ui",
+        addedAt: new Date().toISOString(),
+      }, {merge:false});
+      setFEmail(""); setFRole("tutor"); setFStudentIds([]);
+      showToast && showToast(`Added ${emailKey}`);
+      await loadEntries();
+    }catch(e){
+      setFError(e && e.message ? e.message : "Write failed");
+    }
+    setFBusy(false);
+  };
+
+  const toggleActive = async (row)=>{
+    if(row.email.toLowerCase() === selfEmail){
+      showToast && showToast("You can't deactivate yourself");
+      return;
+    }
+    if(!window.db) return;
+    try{
+      await window.db.collection("allowlist").doc(row.id).update({active: !row.active});
+      await loadEntries();
+    }catch(e){
+      showToast && showToast("Update failed: " + (e.message||""));
+    }
+  };
+
+  const deleteEntry = async (row)=>{
+    if(row.email.toLowerCase() === selfEmail){
+      showToast && showToast("You can't delete yourself");
+      return;
+    }
+    if(!confirm(`Delete allowlist entry for ${row.email}? They will lose access on next reload.`)) return;
+    if(!window.db) return;
+    try{
+      await window.db.collection("allowlist").doc(row.id).delete();
+      await loadEntries();
+      showToast && showToast(`Deleted ${row.email}`);
+    }catch(e){
+      showToast && showToast("Delete failed: " + (e.message||""));
+    }
+  };
+
+  const toggleStudentPick = (id)=>{
+    setFStudentIds(prev => prev.includes(id) ? prev.filter(x=>x!==id) : [...prev, id]);
+  };
+
+  const filteredStudents = (students||[]).filter(s =>
+    !stuSearch || (s.name||"").toLowerCase().includes(stuSearch.toLowerCase())
+  );
+
+  const card = {
+    background:"var(--card)", border:"1px solid var(--rule)", borderRadius:12,
+    padding:"20px 22px", marginBottom:20,
+  };
+  const label = {
+    display:"block", fontFamily:"var(--font-body)", fontSize:11, fontWeight:600,
+    letterSpacing:"0.08em", textTransform:"uppercase", color:"var(--ink-mute)",
+    marginBottom:6,
+  };
+  const input = {
+    width:"100%", padding:"9px 12px", borderRadius:8,
+    border:"1px solid var(--rule-strong)", background:"var(--paper)",
+    fontFamily:"var(--font-body)", fontSize:13, color:"var(--ink)",
+  };
+
+  return (
+    <div style={{padding:"24px 28px", maxWidth:1080, margin:"0 auto"}}>
+      <div style={{marginBottom:18}}>
+        <h2 style={{fontFamily:"var(--font-display)",fontVariationSettings:"'opsz' 72",fontWeight:500,fontSize:24,margin:"0 0 6px",letterSpacing:"-0.01em"}}>Admins</h2>
+        <p style={{fontSize:13,color:"var(--ink-soft)",margin:0,lineHeight:1.55}}>
+          Manage the <span style={{fontFamily:"var(--font-mono)",fontSize:12}}>allowlist</span> collection — who can sign in, what role they have, and which student(s) they're scoped to.
+        </p>
+      </div>
+
+      {!USE_ALLOWLIST_AUTH && (
+        <div style={{...card, background:"var(--accent-soft)", borderColor:"rgba(154,91,31,.35)"}}>
+          <div style={{fontSize:12,color:"var(--accent)",lineHeight:1.6}}>
+            <strong>Phase A — flag off.</strong> <span style={{fontFamily:"var(--font-mono)"}}>USE_ALLOWLIST_AUTH</span> is <span style={{fontFamily:"var(--font-mono)"}}>false</span>, so the app is still using the workspace domain gate in production. This admin UI can read/write the allowlist in dev bypass mode and once the Phase B rules are deployed. In prod right now, reads and writes will be denied by firestore.rules.
+          </div>
+        </div>
+      )}
+
+      {/* Add entry */}
+      <div style={card}>
+        <div style={{fontFamily:"var(--font-display)",fontSize:16,fontWeight:500,marginBottom:14}}>Add allowlist entry</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 180px",gap:14,marginBottom:14}}>
+          <div>
+            <label style={label}>Email</label>
+            <input type="email" value={fEmail} onChange={e=>setFEmail(e.target.value)} placeholder="person@gmail.com" style={input}/>
+          </div>
+          <div>
+            <label style={label}>Role</label>
+            <select value={fRole} onChange={e=>{setFRole(e.target.value); if(e.target.value!=="student"&&e.target.value!=="parent") setFStudentIds([]);}} style={input}>
+              <option value="admin">admin</option>
+              <option value="tutor">tutor</option>
+              <option value="student">student</option>
+              <option value="parent">parent</option>
+            </select>
+          </div>
+        </div>
+
+        {(fRole==="student" || fRole==="parent") && (
+          <div style={{marginBottom:14}}>
+            <label style={label}>Linked student{fRole==="parent"?"(s)":""}</label>
+            <input type="text" placeholder="Filter students…" value={stuSearch} onChange={e=>setStuSearch(e.target.value)} style={{...input, marginBottom:8}}/>
+            <div style={{maxHeight:180, overflowY:"auto", border:"1px solid var(--rule)", borderRadius:8, padding:"6px 10px", background:"var(--paper)"}}>
+              {filteredStudents.length === 0 && (
+                <div style={{fontSize:12, color:"var(--ink-mute)", padding:"10px 0"}}>No students match.</div>
+              )}
+              {filteredStudents.map(s=>(
+                <label key={s.id} style={{display:"flex",alignItems:"center",gap:10,padding:"5px 0",fontSize:13,cursor:"pointer"}}>
+                  <input
+                    type={fRole==="student" ? "radio" : "checkbox"}
+                    checked={fStudentIds.includes(s.id)}
+                    onChange={()=>{
+                      if(fRole==="student"){ setFStudentIds([s.id]); }
+                      else { toggleStudentPick(s.id); }
+                    }}
+                  />
+                  <span>{s.name}{s.grade?` · Grade ${s.grade}`:""}</span>
+                </label>
+              ))}
+            </div>
+            {fStudentIds.length > 0 && (
+              <div style={{marginTop:8,fontSize:11,color:"var(--ink-mute)"}}>
+                {fStudentIds.length} student{fStudentIds.length===1?"":"s"} selected
+              </div>
+            )}
+          </div>
+        )}
+
+        {fError && (
+          <div style={{padding:"10px 12px",borderRadius:8,background:"var(--accent-soft)",border:"1px solid rgba(154,91,31,.3)",fontSize:12,color:"var(--accent)",marginBottom:12}}>{fError}</div>
+        )}
+
+        <button
+          onClick={addEntry}
+          disabled={fBusy}
+          style={{
+            padding:"10px 22px",borderRadius:8,border:"1px solid var(--brand)",
+            background:fBusy?"var(--paper-alt)":"var(--brand)",
+            color:fBusy?"var(--ink-mute)":"var(--paper)",
+            fontFamily:"var(--font-body)",fontSize:13,fontWeight:500,
+            cursor:fBusy?"default":"pointer"
+          }}>
+          {fBusy ? "Adding…" : "Add entry"}
+        </button>
+      </div>
+
+      {/* List */}
+      <div style={card}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+          <div style={{fontFamily:"var(--font-display)",fontSize:16,fontWeight:500}}>Current allowlist ({entries.length})</div>
+          <button onClick={loadEntries} style={{padding:"6px 14px",borderRadius:6,border:"1px solid var(--rule-strong)",background:"var(--card)",fontSize:12,cursor:"pointer"}}>Refresh</button>
+        </div>
+
+        {loading && <div style={{fontSize:13,color:"var(--ink-mute)",padding:"12px 0"}}>Loading…</div>}
+        {loadError && (
+          <div style={{padding:"10px 12px",borderRadius:8,background:"var(--accent-soft)",border:"1px solid rgba(154,91,31,.3)",fontSize:12,color:"var(--accent)"}}>
+            {loadError}
+          </div>
+        )}
+        {!loading && !loadError && entries.length === 0 && (
+          <div style={{fontSize:13,color:"var(--ink-mute)",padding:"12px 0"}}>No entries yet. Add one above, or seed the collection from Firebase Console.</div>
+        )}
+        {!loading && entries.length > 0 && (
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+            <thead>
+              <tr style={{textAlign:"left",color:"var(--ink-mute)",fontSize:11,textTransform:"uppercase",letterSpacing:"0.08em"}}>
+                <th style={{padding:"8px 6px",borderBottom:"1px solid var(--rule)"}}>Email</th>
+                <th style={{padding:"8px 6px",borderBottom:"1px solid var(--rule)"}}>Role</th>
+                <th style={{padding:"8px 6px",borderBottom:"1px solid var(--rule)"}}>Students</th>
+                <th style={{padding:"8px 6px",borderBottom:"1px solid var(--rule)"}}>Active</th>
+                <th style={{padding:"8px 6px",borderBottom:"1px solid var(--rule)",textAlign:"right"}}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map(row=>{
+                const isSelf = row.email.toLowerCase() === selfEmail;
+                const stuNames = row.studentIds
+                  .map(id => (students||[]).find(s=>s.id===id)?.name || id)
+                  .join(", ");
+                return (
+                  <tr key={row.id} style={{borderBottom:"1px solid var(--rule)"}}>
+                    <td style={{padding:"10px 6px",fontFamily:"var(--font-mono)",fontSize:12}}>
+                      {row.email}
+                      {isSelf && <span style={{marginLeft:8,fontSize:10,color:"var(--ink-mute)",textTransform:"uppercase",letterSpacing:"0.1em"}}>you</span>}
+                    </td>
+                    <td style={{padding:"10px 6px"}}>{row.role}</td>
+                    <td style={{padding:"10px 6px",color:"var(--ink-soft)"}}>{stuNames || <span style={{color:"var(--ink-mute)"}}>—</span>}</td>
+                    <td style={{padding:"10px 6px"}}>
+                      <button
+                        onClick={()=>toggleActive(row)}
+                        disabled={isSelf}
+                        style={{
+                          padding:"3px 10px",borderRadius:999,
+                          border:"1px solid "+(row.active?"var(--brand)":"var(--rule-strong)"),
+                          background: row.active ? "rgba(0,74,121,.08)" : "var(--paper-alt)",
+                          color: row.active ? "var(--brand)" : "var(--ink-mute)",
+                          fontSize:11,fontWeight:500,
+                          cursor: isSelf ? "not-allowed" : "pointer"
+                        }}>
+                        {row.active ? "active" : "inactive"}
+                      </button>
+                    </td>
+                    <td style={{padding:"10px 6px",textAlign:"right"}}>
+                      <button
+                        onClick={()=>deleteEntry(row)}
+                        disabled={isSelf}
+                        style={{
+                          padding:"4px 12px",borderRadius:6,border:"1px solid var(--rule-strong)",
+                          background:"var(--card)",color: isSelf?"var(--ink-mute)":"var(--accent)",
+                          fontSize:11,cursor:isSelf?"not-allowed":"pointer"
+                        }}>
+                        delete
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AppInner({authUser, onSignOut, currentUserEntry}){
+  // Role gating. When USE_ALLOWLIST_AUTH is off in production, currentUserEntry
+  // is null and isAdmin is false — the Admins tab is simply not rendered and
+  // the rest of the app behaves exactly as it did pre-migration.
+  const isAdmin = !!(currentUserEntry && currentUserEntry.role === "admin" && currentUserEntry.active);
   const[tab,setTab]=useState("generator");
   const[students,setStudents]=useState(()=>sLoad("psm_v4",sLoad("psm_v3",[])));
   const[selSt,setSelSt]=useState("");
@@ -1599,7 +2068,14 @@ function AppInner({authUser, onSignOut}){
 
       {/* TABS — editorial nav with serif labels */}
       <div data-psm-tabs style={{display:"flex",flexShrink:0}}>
-        {[{id:"generator",label:"Generator"},{id:"students",label:"Students"},{id:"heatmap",label:"Heat Map"},{id:"scores",label:"Score Tracking"},{id:"trash",label:"Trash"}].map(t=>(
+        {[
+          {id:"generator",label:"Generator"},
+          {id:"students",label:"Students"},
+          {id:"heatmap",label:"Heat Map"},
+          {id:"scores",label:"Score Tracking"},
+          {id:"trash",label:"Trash"},
+          ...(isAdmin ? [{id:"admins",label:"Admins"}] : []),
+        ].map(t=>(
           <button key={t.id} data-active={tab===t.id} onClick={()=>{if(t.id!=="students")setProfile(null);setTab(t.id);}} style={{border:"none",background:"none",cursor:"pointer",position:"relative"}}>
             {t.label}
             {t.id==="trash"&&trashCount>0&&<span style={{marginLeft:8,padding:"1px 7px",borderRadius:999,background:"var(--accent-soft)",color:"var(--accent)",fontFamily:"var(--font-mono)",fontSize:9,fontWeight:600,verticalAlign:"middle"}}>{trashCount}</span>}
@@ -1642,6 +2118,8 @@ function AppInner({authUser, onSignOut}){
         {tab==="scores"&&<ScoresTab {...{students:visibleStudents,openProfile}}/>}
 
         {tab==="trash"&&<TrashTab {...{students,restoreStudent,purgeStudent,restoreSubItem,purgeSubItem,emptyTrash,trashCount}}/>}
+
+        {tab==="admins"&&isAdmin&&<AdminsTab {...{currentUserEntry, students:visibleStudents, showToast}}/>}
       </div>
 
       <div style={{background:B1,color:"#64748b",padding:"10px 24px",display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:11,flexShrink:0}}>
