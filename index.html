@@ -293,6 +293,26 @@ window.auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(()=>{});
   [data-psm-header] [data-psm-actions] [data-psm-user]:hover{
     border-color: var(--ink) !important;
   }
+
+  /* Student portal responsive rules (Phase 2 Session 3). Scoped under
+     [data-portal="student"] so no tutor-app selectors are affected. */
+  @media (max-width: 768px){
+    [data-portal="student"]{
+      padding: 20px 16px 60px !important;
+    }
+    [data-portal="student"] table{
+      font-size: 11px !important;
+    }
+    [data-portal="student"] table th,
+    [data-portal="student"] table td{
+      padding: 8px 6px !important;
+    }
+  }
+  @media (max-width: 480px){
+    [data-portal="student"]{
+      padding: 16px 12px 48px !important;
+    }
+  }
 </style>
 </head>
 <body>
