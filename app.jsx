@@ -579,6 +579,19 @@ function pickPortalStudentId(entry){
   return ids[0] || "";
 }
 
+// Build the x-ordered points the Score Trends chart plots. A full practice
+// score is any point whose category matches the fullPts regex used in
+// ScoreHistoryPanel. Dateless / NaN points are dropped (can't be plotted).
+function buildScoreTrendsSeries(student){
+  const pts = allScoreDataPoints(student);
+  const isFull = (cat)=> /Total SAT|R&W Section|Math Section|Full —|Section —|Practice|Official SAT|Full Practice|BlueBook|WellEd Full/i.test(cat||"");
+  return pts
+    .filter(pt => isFull(pt.category) && pt.level!=="domain" && pt.level!=="sub")
+    .filter(pt => pt.date && typeof pt.score==="number" && !Number.isNaN(pt.score))
+    .map(pt => ({date: pt.date, score: pt.score, label: pt.category||"Exam"}))
+    .sort((a,b)=> a.date.localeCompare(b.date));
+}
+
 // Top-level role-aware router. Tutors, admins, and legacy workspace users
 // (null entry) see AppInner unchanged. Students and parents see StudentPortal
 // scoped to their linked student. This is the only place the role check
@@ -3752,7 +3765,72 @@ function PortalHistoryTab({student}){
   );
 }
 function PortalTrendsTab({student}){
-  return <div style={{...CARD, padding:24}}>Score Trends — coming in Task 10</div>;
+  const series = buildScoreTrendsSeries(student);
+  return <ScoreTrendsChart series={series}/>;
+}
+
+function ScoreTrendsChart({series}){
+  const W = 640, H = 280;
+  const PAD = {top:20, right:24, bottom:48, left:56};
+  const innerW = W - PAD.left - PAD.right;
+  const innerH = H - PAD.top - PAD.bottom;
+
+  if(!series || series.length===0){
+    return (
+      <div style={{...CARD, padding:"60px 40px", textAlign:"center"}}>
+        <div style={{fontFamily:"'Fraunces',Georgia,serif",fontStyle:"italic",fontSize:22,color:"#66708A",letterSpacing:-.2,marginBottom:10}}>
+          Not enough data to draw a trend yet.
+        </div>
+        <div style={{fontSize:13,color:"#66708A",lineHeight:1.55}}>
+          Your practice test scores will plot here once you have at least one on file.
+        </div>
+      </div>
+    );
+  }
+
+  const scores = series.map(p=>p.score);
+  const minScore = Math.min(...scores);
+  const maxScore = Math.max(...scores);
+  const pad = (maxScore - minScore) || 40;
+  const yLo = Math.max(0, Math.floor((minScore - pad*0.1)/10)*10);
+  const yHi = Math.ceil((maxScore + pad*0.1)/10)*10;
+  const yRange = Math.max(1, yHi - yLo);
+
+  const x = (i)=> series.length===1
+    ? PAD.left + innerW/2
+    : PAD.left + (i/(series.length-1)) * innerW;
+  const y = (v)=> PAD.top + innerH - ((v - yLo)/yRange) * innerH;
+
+  const pathD = series.map((p,i)=> `${i===0?"M":"L"} ${x(i).toFixed(1)} ${y(p.score).toFixed(1)}`).join(" ");
+  const ticks = [0,1,2,3,4].map(k => yLo + (yRange*k/4));
+
+  return (
+    <div style={{...CARD, padding:"24px 20px"}}>
+      <PortalSectionHeading>Practice test scores over time</PortalSectionHeading>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:"auto",display:"block",fontFamily:"'IBM Plex Mono',monospace"}} role="img" aria-label="Score trend chart">
+        {ticks.map((t,i)=>(
+          <g key={i}>
+            <line x1={PAD.left} x2={W-PAD.right} y1={y(t)} y2={y(t)} stroke="rgba(15,26,46,.08)" strokeWidth="1"/>
+            <text x={PAD.left-10} y={y(t)+4} textAnchor="end" fontSize="10" fill="#66708A">{Math.round(t)}</text>
+          </g>
+        ))}
+        <path d={pathD} fill="none" stroke="#0F1A2E" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"/>
+        {series.map((p,i)=>(
+          <g key={i}>
+            <circle cx={x(i)} cy={y(p.score)} r="4.5" fill="#9A5B1F" stroke="#FAF7F2" strokeWidth="2"/>
+            <title>{p.date} · {p.label} · {p.score}</title>
+          </g>
+        ))}
+        {series.map((p,i)=>{
+          const stride = Math.max(1, Math.ceil(series.length/6));
+          if(i % stride !== 0 && i !== series.length-1) return null;
+          return (
+            <text key={i} x={x(i)} y={H-PAD.bottom+18} textAnchor="middle" fontSize="10" fill="#66708A">{p.date}</text>
+          );
+        })}
+      </svg>
+    </div>
+  );
 }
 
 /* ============ HEAT MAP HELPERS ============ */

@@ -29,3 +29,44 @@ test('pickPortalStudentId: single studentId → that id', () => {
 test('pickPortalStudentId: multiple studentIds → first one (Session 4 adds switcher)', () => {
   assert.equal(pickPortalStudentId({role:"parent", studentIds:["kid1","kid2"]}), "kid1");
 });
+
+// Operates on a synthetic __pts array shaped like allScoreDataPoints output.
+// The real buildScoreTrendsSeries in app.jsx calls allScoreDataPoints(student);
+// here we inject __pts directly so we can unit-test the filter+sort logic.
+function buildScoreTrendsSeries(student){
+  const isFull = (cat)=> /Total SAT|R&W Section|Math Section|Full —|Section —|Practice|Official SAT|Full Practice|BlueBook|WellEd Full/i.test(cat||"");
+  return (student.__pts || [])
+    .filter(pt => isFull(pt.category) && pt.level!=="domain" && pt.level!=="sub")
+    .filter(pt => pt.date && typeof pt.score==="number" && !Number.isNaN(pt.score))
+    .map(pt => ({date: pt.date, score: pt.score, label: pt.category||"Exam"}))
+    .sort((a,b)=> a.date.localeCompare(b.date));
+}
+
+test('buildScoreTrendsSeries: filters non-full points', () => {
+  const out = buildScoreTrendsSeries({__pts:[
+    {date:"2026-01-01", score:1200, category:"Total SAT Practice"},
+    {date:"2026-01-02", score:80,   category:"Information & Ideas", level:"domain"},
+    {date:"2026-01-03", score:70,   category:"Inference", level:"sub"},
+  ]});
+  assert.equal(out.length, 1);
+  assert.equal(out[0].score, 1200);
+});
+
+test('buildScoreTrendsSeries: drops dateless/NaN points', () => {
+  const out = buildScoreTrendsSeries({__pts:[
+    {date:"",           score:1200, category:"Total SAT Practice"},
+    {date:"2026-02-01", score:NaN,  category:"Total SAT Practice"},
+    {date:"2026-03-01", score:1250, category:"Total SAT Practice"},
+  ]});
+  assert.equal(out.length, 1);
+  assert.equal(out[0].date, "2026-03-01");
+});
+
+test('buildScoreTrendsSeries: sorts ascending by date', () => {
+  const out = buildScoreTrendsSeries({__pts:[
+    {date:"2026-03-01", score:1300, category:"Total SAT Practice"},
+    {date:"2026-01-01", score:1200, category:"Total SAT Practice"},
+    {date:"2026-02-01", score:1250, category:"Total SAT Practice"},
+  ]});
+  assert.deepEqual(out.map(p=>p.date), ["2026-01-01","2026-02-01","2026-03-01"]);
+});
