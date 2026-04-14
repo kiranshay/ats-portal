@@ -73,13 +73,13 @@ Every dead branch had been unreachable in production since Session 7's flag flip
 
 **Memory updated:** `memory/project_psm_auth_migration.md` was rewritten mid-session to correct the stale framing.
 
-### 2. Push happened automatically at commit time instead of after manual QA
+### 2. I lost track of who pushed and when
 
 **Plan said:** commit locally, wait for Kiran's manual in-browser verification, then push after approval.
 
-**What happened:** the local repo has a post-commit hook (part of the existing auto-deploy setup) that auto-pushed `abb7c84` the moment I committed it. I didn't notice at commit time — only when I tried to explicitly `git push origin main` at the end of the session and got "Everything up-to-date." By that point Kiran had already done his manual testing against production, caught the spam issue, fixed it via Firebase Console template settings, and re-verified the full happy path end-to-end.
+**What actually happened:** I committed `abb7c84` at 05:22 local time. Kiran began his manual testing sometime after that, found the email wasn't arriving (Gmail spam issue — see Deviation 3), fixed it via Firebase Console template settings, and re-verified the full happy path against production. When I tried `git push origin main` at session end three and a half hours later, the push returned "Everything up-to-date" — meaning the commit was already on origin. At the time I misattributed this to an "auto-push-on-commit hook"; **there is no such hook** (checked `.git/hooks/` — no post-commit hook exists, and the closeout commit itself did NOT auto-push). The real explanation is that Kiran pushed/deployed `abb7c84` himself during his testing window, and I didn't notice until the end.
 
-**Net impact:** zero. The auto-push meant Kiran's manual testing WAS the production validation — strongest possible signal. But it's an important lesson about the harness state: **the psm-generator repo auto-pushes on commit**, so "commit locally, hold push for review" is not a valid plan in this project. Future sessions should either (a) test against a dev deploy before the commit, or (b) accept that commit == ship-to-prod and gate on pre-commit verification instead. Option (b) matches how Sessions 2, 6, and 7 actually worked — they just didn't name the constraint explicitly.
+**Net impact:** zero. Kiran's manual testing WAS the production validation, which is the strongest possible signal. The only lesson is for me: when a push returns "Everything up-to-date," the first hypothesis should be "the other human pushed it" before reaching for more exotic explanations like git hooks. No repo invariant changed; plan structure for future sessions stays the same (commit, hand off to Kiran for manual verification, push after approval — with the acknowledgement that Kiran may short-circuit by pushing himself).
 
 ### 3. The Gmail spam problem (the big mid-session detour)
 
@@ -129,19 +129,11 @@ Every dead branch had been unreachable in production since Session 7's flag flip
 
 **Follow-up (not blocking):** verify the delete happened, and that the allowlist entry was also cleaned up (deleting the Firebase Auth user doesn't auto-delete the allowlist doc).
 
-### C. Auto-push-on-commit is an unnamed invariant of the psm-generator repo
-
-**State:** see Deviation 2. Every psm-generator commit ships directly to production via an existing post-commit hook + Firebase Hosting auto-deploy chain. Historical sessions have all been operating under this constraint; Session 8 is the first to name it explicitly.
-
-**Implication for future sessions:** "hold the push for review" is not a valid plan step in this project. Pre-commit verification (test suite, dev-bypass walkthrough, visual sanity check of the built `index.html`) is the only review gate. Plan sessions accordingly — reviewing at commit time, not push time.
-
-**Should this be documented in CLAUDE.md or equivalent?** Probably yes, as a single sentence. Queued as a Phase 3 follow-up.
-
-### D. Session 7's `hasOnly([...])` rule fragility is unchanged
+### C. Session 7's `hasOnly([...])` rule fragility is unchanged
 
 Session 7 open question D. Session 8 did not touch the student submission update rule and did not add rule-level test coverage. Still a latent fragility; still queued for Phase 3 infra hygiene.
 
-### E. `sendPasswordResetEmail` on a Google-only Firebase Auth user is untested
+### D. `sendPasswordResetEmail` on a Google-only Firebase Auth user is untested
 
 **State:** my admin-create flow catches `auth/email-already-in-use` from `createUserWithEmailAndPassword` and falls through to `sendPasswordResetEmail`. If the existing account is Google-only (no password provider), Firebase may throw `auth/user-not-found` on the reset call — in which case my outer try/catch surfaces the error to the admin and aborts before the allowlist write.
 
@@ -192,15 +184,14 @@ Priority-ordered. Session 7's Phase 3 list is updated:
 1. **Phase 3: Custom SMTP for Firebase Auth emails.** NEW, top priority. Promoted from "nice-to-have" to "prerequisite for family rollout" by Session 8's spam discovery. Sender: `noreply@affordabletutoringsolutions.org` (domain retained per corrected memory). 1–2 hour session.
 2. **PDF / OneDrive migration to Firebase Storage.** Unchanged from Session 7 closeout. 2-session project.
 3. **Close `DUAL_WRITE_GRACE`.** Unchanged. Housekeeping. Before family rollout.
-4. **Document the auto-push-on-commit invariant.** NEW. Single sentence in CLAUDE.md or equivalent. Cheap, high-value for future sessions.
-5. **Grant `kiranshay123@gmail.com` Firebase project Editor role.** Unchanged from Session 7. IAM change, future-proofs local CLI deploys.
-6. **Real family rollout.** Gated on #1 (SMTP) + #2 (PDF migration) + tutors actually using the system.
-7. **Add `support@affordabletutoringsolutions.org` to admin allowlist.** NEW. 30 seconds via the admin UI. Gated on confirming it's a real sign-in-able account, not an alias.
-8. **Revisit `kshay@` and `ameyers@` admin entries** once their retention is confirmed. NEW, low priority.
-9. **Per-question submission granularity.** Unchanged.
-10. **Aidan privacy review of tutor-only fields.** Unchanged.
-11. **Rule-level test coverage for the `hasOnly([...])` student submission update rule.** Unchanged from Session 7 Open Question D.
-12. **Verify `sixsiege1414@gmail.com` burner deletion.** NEW, housekeeping. Kiran to do at session end.
+4. **Grant `kiranshay123@gmail.com` Firebase project Editor role.** Unchanged from Session 7. IAM change, future-proofs local CLI deploys.
+5. **Real family rollout.** Gated on #1 (SMTP) + #2 (PDF migration) + tutors actually using the system.
+6. **Add `support@affordabletutoringsolutions.org` to admin allowlist.** NEW. 30 seconds via the admin UI. Gated on confirming it's a real sign-in-able account, not an alias.
+7. **Revisit `kshay@` and `ameyers@` admin entries** once their retention is confirmed. NEW, low priority.
+8. **Per-question submission granularity.** Unchanged.
+9. **Aidan privacy review of tutor-only fields.** Unchanged.
+10. **Rule-level test coverage for the `hasOnly([...])` student submission update rule.** Unchanged from Session 7 Open Question D.
+11. **Verify `sixsiege1414@gmail.com` burner deletion.** NEW, housekeeping. Kiran to do at session end.
 
 ---
 
@@ -239,7 +230,6 @@ I'm ready to start **Phase 3 Session 9** of psm-generator: configure custom SMTP
 - **Do NOT rotate Firebase Authentication project credentials.** The existing apiKey, authDomain, etc. are referenced from the client. SMTP config is a separate subsystem and does not require touching the auth config.
 - **Do NOT change the `email_verified` rule.** Same as Session 8 — still load-bearing.
 - **psm-generator commit override still applies** (commit + push directly, short user-voice messages, no Co-Authored-By).
-- **Auto-push-on-commit is a real invariant of this repo** per Session 8 Deviation 2 — plan sessions accordingly.
 - **No slop.** Comments only when the *why* is non-obvious.
 
 ### Pause at the first natural checkpoint
