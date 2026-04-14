@@ -3381,7 +3381,6 @@ function StudentProfile({p,setProfile,ptab,setPtab,paChk,setPaChk,paSubj,setPaSu
               {p.grade&&<span style={{...mkPill("transparent","#003258"),border:"1px solid rgba(0,50,88,.28)"}}>Grade {p.grade}</span>}
               {p.tutor&&<span style={{...mkPill("transparent","#4C7A4C"),border:"1px solid rgba(76,122,76,.35)"}}>{p.tutor}</span>}
               <span style={{...mkPill("transparent","#2E3A57"),border:"1px solid rgba(15,26,46,.18)"}}>Since {p.dateAdded}</span>
-              {profileNotes&&<span style={{...mkPill("transparent","#6E3F12"),border:"1px solid rgba(154,91,31,.35)"}}>{profileNotes}</span>}
             </div>
           </div>
           <div style={{display:"flex",gap:0,borderLeft:"1px solid rgba(15,26,46,.1)"}}>
@@ -3397,7 +3396,7 @@ function StudentProfile({p,setProfile,ptab,setPtab,paChk,setPaChk,paSubj,setPaSu
 
       {/* SUB-TABS — same editorial treatment as the main tab bar */}
       <div style={{display:"flex",gap:32,marginBottom:24,borderBottom:"1px solid rgba(15,26,46,.12)",flexWrap:"wrap"}}>
-        {[{id:"history",label:"Assignment History"},{id:"diagnostics",label:"Diagnostics"},{id:"preassign",label:"Pre-Assign"},{id:"scores",label:"Score History"}].map(pt=>{
+        {[{id:"history",label:"Assignment History"},{id:"submissions",label:"Submissions"},{id:"diagnostics",label:"Diagnostics"},{id:"preassign",label:"Pre-Assign"},{id:"scores",label:"Score History"}].map(pt=>{
           const active = ptab===pt.id;
           return(
             <button key={pt.id} onClick={()=>setPtab(pt.id)} style={{border:"none",background:"none",cursor:"pointer",padding:"14px 0",fontFamily:"'Fraunces',Georgia,serif",fontVariationSettings:'"opsz" 48',fontSize:15,fontWeight:active?600:500,color:active?"#0F1A2E":"#66708A",borderBottom:active?"2px solid #0F1A2E":"2px solid transparent",marginBottom:-1,letterSpacing:-.1,position:"relative"}}>
@@ -3512,6 +3511,9 @@ function StudentProfile({p,setProfile,ptab,setPtab,paChk,setPaChk,paSubj,setPaSu
           )}
         </div>
       )}
+
+      {/* SUBMISSIONS (Phase 2 Session 6) */}
+      {ptab==="submissions"&&<TutorSubmissionsPanel student={p}/>}
 
       {/* DIAGNOSTICS */}
       {ptab==="diagnostics"&&(
@@ -4611,6 +4613,41 @@ function LineChart({points, color="#004A79", max, height=80, width=260}){
         </circle>
       ))}
     </svg>
+  );
+}
+
+/* ============ TUTOR SUBMISSIONS PANEL (Phase 2 Session 6) ============ */
+function TutorSubmissionsPanel({student}){
+  const {status, submissions, error} = useTutorSubmissions(student.id);
+  if(status === "loading"){
+    return (
+      <div style={{...CARD, padding:"60px 40px", textAlign:"center"}}>
+        <div style={{fontFamily:"'Fraunces',Georgia,serif",fontStyle:"italic",fontSize:20,color:"#66708A"}}>Loading submissions…</div>
+      </div>
+    );
+  }
+  if(status === "error"){
+    return (
+      <div style={{...CARD, padding:"60px 40px", textAlign:"center"}}>
+        <div style={{fontFamily:"'Fraunces',Georgia,serif",fontStyle:"italic",fontSize:20,color:"#8C2E2E"}}>Couldn't load submissions.</div>
+        <div style={{fontSize:12,color:"#66708A",marginTop:8}}>{error?.message||""}</div>
+      </div>
+    );
+  }
+  if(!submissions.length){
+    return (
+      <div style={{...CARD, padding:"60px 40px", textAlign:"center"}}>
+        <div style={{fontFamily:"'Fraunces',Georgia,serif",fontStyle:"italic",fontSize:20,color:"#66708A",letterSpacing:-.2}}>No submissions yet.</div>
+        <div style={{fontSize:12,color:"#66708A",marginTop:10,lineHeight:1.55}}>When this student answers assignments in the portal, they'll show up here.</div>
+      </div>
+    );
+  }
+  return (
+    <div style={{...CARD, padding:20}}>
+      <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#66708A",letterSpacing:1,textTransform:"uppercase"}}>
+        {submissions.length} submission{submissions.length===1?"":"s"} — full UI in Task 7
+      </div>
+    </div>
   );
 }
 
