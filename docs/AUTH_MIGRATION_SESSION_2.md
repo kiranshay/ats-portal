@@ -20,13 +20,13 @@ Parent plan step B7 said "seed the allowlist from `wise_export.csv`... one doc p
 | Aidan Meyers     | (personal: aidan.meyers12@gmail.com) | admin (bootstrapped)        |
 | Aidan Meyers     | (personal: aidan.wolf2005@gmail.com) | admin (bootstrapped)        |
 | Kiran Shay       | kiranshay123@gmail.com               | admin (bootstrapped)        |
-| Heather DaSilva  | dasilva.heather@brevardschools.org   | tutor (add via admin UI)    |
-| Dr. Donald Warden| dewarden@memphis.edu                 | tutor (add via admin UI)    |
-| Danielle Desrochers | danielle.desrochers13@gmail.com   | tutor (add via admin UI)    |
+| Danielle Desrochers | danielle.desrochers13@gmail.com   | tutor (added via admin UI)  |
+| Maryam Alrahmani | maryam.alrahmani6@gmail.com          | tutor (added 2026-04-13)    |
 | Lila Iwanowski   | —                                    | ask Aidan for email         |
 | Jane Kogan       | —                                    | ask Aidan for email         |
 | Joseph Konathapally | —                                 | ask Aidan for email         |
-| Maryam Alrahmani | —                                    | ask Aidan for email         |
+| ~~Heather DaSilva~~  | ~~dasilva.heather@brevardschools.org~~ | removed 2026-04-13 — not an actual tutor for ATS |
+| ~~Dr. Donald Warden~~| ~~dewarden@memphis.edu~~         | removed 2026-04-13 — not an actual tutor for ATS |
 
 **Decision:** no seed script. Manual entry via the Phase A admin UI is faster than plumbing a Node + `firebase-admin` script for 3 known + 6 chase-down emails. Aidan chases the 6 phone-only tutors for personal emails as they come up during rollout.
 

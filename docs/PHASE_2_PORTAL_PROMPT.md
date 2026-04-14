@@ -232,18 +232,17 @@ Suggested session breakdown (the new Claude should propose their own and confirm
 
 ## Prompt for the new session
 
-When ready to start Phase 2, paste this entire block as your first message in a fresh Claude Code session in the psm-generator project:
+I'm ready to start Phase 2 of psm-generator: the student/parent portal. Read docs/PHASE_2_PORTAL_PROMPT.md end-to-end before doing anything. It has the full briefing — schema problem, options, scope, constraints, recommended session breakdown, open questions.
 
-> I'm ready to start Phase 2 of psm-generator: the student/parent portal. Read `docs/PHASE_2_PORTAL_PROMPT.md` end-to-end before doing anything. It has the full briefing — schema problem, options, scope, constraints, recommended session breakdown, open questions.
->
-> Before any code, do these things in order:
->
-> 1. Read `docs/PHASE_2_PORTAL_PROMPT.md`.
-> 2. Read `docs/AUTH_MIGRATION_PLAN.md` to understand the auth layer Phase 2 builds on.
-> 3. Verify auth migration is actually complete: check that `firestore.rules` references the allowlist, that `SignInScreen` no longer hard-codes the workspace domain, that the allowlist collection exists in Firestore. If any of these aren't done, STOP and tell me — Phase 2 cannot start until auth migration is fully shipped.
-> 4. Read the current `app.jsx` data layer (lines around 595-845, the Firestore sync code) to see exactly what shape we're working from.
-> 5. Use the brainstorming skill to walk me through the schema decision (Option A: per-student docs, Option B: derived snapshots, Option C: hybrid). Don't recommend yet — ask me what I care about (data correctness, migration risk, ongoing complexity, scale, parent latency) and let me reason through the tradeoffs out loud. Then make a recommendation.
-> 6. Once we agree on schema, write `docs/PHASE_2_SESSION_1.md` capturing the decision and the plan for THIS session specifically.
-> 7. Only then start touching code, and stop at the first natural checkpoint so I can verify and push.
->
-> Do not commit, push, or deploy anything without my explicit per-action approval. Today's date: confirm with me at session start so any "as of" references in the doc are still accurate.
+Auth migration status (as of 2026-04-13): Phases A and B are shipped. Phase A (client code behind USE_ALLOWLIST_AUTH flag, default false) is in app.jsx. Phase B (rules dual-gate + allowlist collection bootstrapped with 3 admin docs) is in firestore.rules and Firestore. Phases C (production flag flip) and D (remove workspace gate entirely) are intentionally deferred — they're small cleanup that doesn't block Phase 2. Phase 2 can proceed now. See docs/AUTH_MIGRATION_SESSION_1.md and docs/AUTH_MIGRATION_SESSION_2.md for what was actually done.
+
+Before any code, do these things in order:
+
+Read docs/PHASE_2_PORTAL_PROMPT.md.
+Read docs/AUTH_MIGRATION_PLAN.md, docs/AUTH_MIGRATION_SESSION_1.md, and docs/AUTH_MIGRATION_SESSION_2.md to understand the auth layer Phase 2 builds on. Note: Phase B shipped the allowlist schema with studentIds: [] specifically so Phase 2 doesn't need a second allowlist migration.
+Verify Phase A + B are actually shipped: firestore.rules should reference allowlist/ via isAllowlisted() helpers; app.jsx should have a USE_ALLOWLIST_AUTH constant, getAllowlistEntry helper, LockoutScreen component, and AdminsTab component. If any of these are missing, STOP and tell me — Phase 2 cannot start. (Note: USE_ALLOWLIST_AUTH being false in shipped code is CORRECT — that's Phase C, deferred. Don't stop on that.)
+Read the current app.jsx Firestore data layer — search for FS_DOC and onSnapshot to find where the single psm-data/main blob is loaded and written. This is the schema problem Phase 2 has to solve.
+Use the brainstorming skill to walk me through the schema decision (Option A: per-student docs, Option B: derived snapshots, Option C: hybrid). Don't recommend yet — ask me what I care about (data correctness, migration risk, ongoing complexity, scale, parent latency) and let me reason through the tradeoffs out loud. Then make a recommendation.
+Once we agree on schema, write docs/PHASE_2_SESSION_1.md capturing the decision and the plan for THIS session specifically.
+Only then start touching code, and stop at the first natural checkpoint so I can verify and push.
+Do not commit, push, or deploy anything without my explicit per-action approval. Confirm today's date with me at session start.
