@@ -1,0 +1,9 @@
+{
+  "name": "ats-portal-scripts",
+  "private": true,
+  "description": "One-shot admin SDK scripts (not deployed). Separate from functions/ so their dependency graphs don't interfere.",
+  "type": "module",
+  "dependencies": {
+    "firebase-admin": "^12.6.0"
+  }
+}
