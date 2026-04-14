@@ -227,29 +227,79 @@ Four threads: (1) in-app PDF delivery of worksheets, (2) answer-key data model +
 1. **`docs/PHASE_3_SESSION_8.md`** — this file. §"The Phase 3 vision" (this section) is the one-paragraph scope. §"Critical finding about worksheets_catalog.json" (below) has the biggest data-model discovery from Session 8 close.
 2. **`docs/PHASE_2_SESSION_1.md`** — the reference template for how a phase-kickoff spec is written. Read its structure: brainstorm → design decisions → session plan table with risk ratings. `PHASE_3_SPEC.md` should follow the same shape.
 3. **`worksheets_catalog.json`** — read it directly, not through the app. 150 worksheet entries, each with `subject/domain/subdomain/difficulty/title/qs/stu/key`. This is your single most important input for scoping the worksheet-data-model thread.
+3b. **Sample PDFs at `~/Desktop/stuff/OneDrive copy/NEW_ SAT Test Banks & Diagnostics/`** — actually read one `STU_*.pdf` and one matching `KEY_*.pdf` via `pdftotext -layout <path>` using the already-installed `poppler`. Confirm for yourself that the text-extraction finding (§"Critical findings" below) still holds before writing the spec. Spot-check at least one Reading-section key AND one Math-section key AND one free-response key.
 4. **`app.jsx`** — specifically `SubmissionEditor` from Session 5 (around line 3400, grep for it) and `TutorSubmissionsPanel` from Session 6. These are the existing pieces the auto-grading thread will plug into. Do NOT redesign from scratch — the answer-entry UI already exists, it just needs a bubble-sheet renderer variant.
 5. **Wise API Postman docs:** https://documenter.getpostman.com/view/17903053/2sA3XPChyE — Kiran confirmed Wise has a public API. Your first research task is reading these docs and understanding: (a) what auth does the API require (OAuth? API key? JWT?), (b) does it have webhooks or is it pull-only, (c) what is the object model for "assignment" / "student" / "session" / "notification," (d) does it expose a stable student email field we can match against Firebase Auth. Spend real time on this — it's a constraint on the other three threads.
 6. **`memory/project_psm_auth_migration.md`** — confirmed state of the ATS domain.
 
-### Critical finding about `worksheets_catalog.json` — load this into brainstorming
+### Critical findings about worksheets + answer keys — load these into brainstorming
 
-Session 8 close peeked at the catalog. What's in it:
+Session 8 close peeked at both `worksheets_catalog.json` AND the actual OneDrive folder (local path below). Three findings, in order of importance:
 
-- 150 entries, flat list
+**1. The catalog is worksheet metadata, not question content.**
+
+- 150 entries in `worksheets_catalog.json`, flat list
 - Fields per entry: `subject`, `domain`, `subdomain`, `difficulty`, `title`, `qs` (int, question count), `stu` (OneDrive URL to student-facing worksheet PDF), `key` (OneDrive URL to answer-key PDF), `keyTitle`
 - **NOT in it:** the individual questions themselves, the correct answers, or any per-question metadata
 
-**What this means:** when Kiran said "worksheets are structured data," what's structured is the **catalog of worksheet pointers**. The actual question content lives inside the OneDrive PDFs as rendered pages. Auto-grading therefore cannot just "compare JSON to JSON" — there has to exist, somewhere, structured data saying "worksheet X question 3 correct answer is C" because that data does not exist anywhere today.
+The actual question content and correct answers live inside the OneDrive PDFs as rendered pages. Any auto-grading has to source correct-answer data from somewhere.
 
-Three options for acquiring it, which brainstorming must pick between:
+**2. BIG WIN: answer key PDFs are machine-extractable with a trivial regex. Automated extraction works.**
 
-1. **Bulk annotate the catalog.** Add `correctAnswers: ["C","A","B",...]` arrays to every entry in `worksheets_catalog.json`. Roughly 1,500 questions total (150 × ~10). Tedious but finite. Most reliable. Unlocks auto-grading immediately on ship. Kiran does the data entry himself (or Aidan), possibly across two or three sittings.
-2. **OCR the answer key PDFs at ingestion time.** Parse `key` URLs, extract text, regex for answer patterns. Fragile — answer key layouts may not be consistent across 150 worksheets, and incorrect extracted answers would silently mis-grade students, which is worse than not auto-grading at all. Not recommended.
-3. **Per-worksheet tutor-entered answer keys.** First time a worksheet is assigned, tutor enters the answer key in a form, cached to Firestore. Distributed tedium instead of bulk tedium. Ships faster (no pre-work), pays later. Good fallback if Option 1 is too much upfront effort.
+The OneDrive folder is synced locally at `~/Desktop/stuff/OneDrive copy/NEW_ SAT Test Banks & Diagnostics/`. Session 8 close installed `poppler` via `brew install poppler` to get `pdftotext`, then ran it against sample answer key PDFs from both Reading and Math subjects. Result: the answer key PDFs are generated from College Board question bank data and follow a perfectly consistent text layout across all subjects:
 
-**Kiran leans toward Option 1** based on the Session 8 conversation, but brainstorming should confirm that's right given the actual data volume and difficulty format. Either way, `correctAnswers` needs to live *in the catalog* (a flat JSON file) or *in Firestore* (a collection like `worksheetKeys/{worksheetId}`) — decide which in brainstorming.
+```
+Question ID 1e85caa9
+...
+Correct Answer: A
+```
 
-**Adjacent question:** OneDrive as worksheet-PDF host is a SPOF on Kiran's laptop (Session 7 open question E). Phase 3 should migrate the `stu` PDFs (and probably the `key` PDFs) to Firebase Storage as part of the worksheet-data-model thread — but the student-facing workflow doesn't require auto-grading data. The migration and the `correctAnswers` work are separable tasks that can ship in separate sessions.
+and for free-response / student-produced-response questions:
+
+```
+Question ID 575f1e12
+...
+Correct Answer: 986
+```
+
+A ~30-line Python parser (walk dir, `pdftotext`, regex `Question ID ([a-f0-9]+)` + `Correct Answer: (.+)`) extracts correct answers for every worksheet in one pass. Zero manual data entry. **This collapses the "bulk annotate 1,500 questions by hand" option that Session 8 close was recommending.**
+
+Better still: the **Question ID** is a stable College Board identifier. This means the ingested data can be stored as a per-question database keyed by ID, not a per-worksheet array. Same question in multiple worksheets → deduplicated. Worksheets get reshuffled without touching the answer data. Question ID + correct answer is the right primitive to store, not `correctAnswers: [...]` on the worksheet doc.
+
+Revised options:
+
+1. **[NEW, RECOMMENDED] Automated extraction from answer key PDFs.** Parser script walks the OneDrive folder, extracts `(questionId, correctAnswer)` tuples from every `KEY_*.pdf`, writes them to either `worksheets_catalog.json` (per-worksheet) or a new Firestore collection `questionKeys/{questionId}` (per-question, deduplicated). Also extracts the question number → question ID mapping per worksheet so `responses[i]` can join to the correct answer. One-shot script, no manual data entry, verifiable by spot-check against a few worksheets.
+2. **[FALLBACK] Per-worksheet tutor-entered answer keys** if the extraction parser hits worksheets where the layout breaks. Tutors fill in the key the first time they assign a worksheet, cached to Firestore. Good as a safety net for edge-case PDFs, not as a primary path.
+3. **[REJECTED] Bulk manual annotation.** Was Session 8 close's recommendation. No longer necessary given finding #2.
+4. **[REJECTED] OCR.** Not needed — the PDFs have embedded selectable text, so `pdftotext` handles them without any rasterization or OCR.
+
+Brainstorming should confirm finding #2 by running the parser against a ~10-worksheet sample and verifying 100% successful extraction before committing to it as the primary path.
+
+**3. File count mismatch — Session 9's first discovery task**
+
+```
+catalog entries:                150
+KEY_*.pdf files in OneDrive:     87
+STU_*.pdf files in OneDrive:     78
+```
+
+The catalog references 150 worksheets; the folder only has 87 answer keys and 78 student PDFs following the `KEY_/STU_` naming convention. Possible causes:
+
+- The "Full Length Practice Exams," "Diagnostic Exam," "Literary Worksheets," and "Poetry Practice" subfolders likely use different naming conventions. `ls` showed these as top-level folders.
+- Some catalog entries may be aspirational (planned worksheets not yet written).
+- Some worksheets may be older content from before the `KEY_/STU_` convention was established.
+
+**Session 9 must audit this before any migration or extraction work.** Write a script that joins the catalog against the filesystem and outputs: (a) matched pairs, (b) catalog entries with no file, (c) filesystem files with no catalog entry. The spec's session plan should budget for resolving all three classes — some will be "mark as archived," some will need new file paths, some will need catalog updates.
+
+**Adjacent folder structure observations:**
+
+- Top level: `I. Reading Section/`, `II. Math Section/`, `Diagnostic Exam/`, `Full Length Practice Exams/`, plus a handful of standalone cheat-sheet PDFs at the root.
+- Under each section: domain subfolders (e.g., `III. Information and Ideas/`), then subdomain subfolders (e.g., `.COMPREHENSIVE/`), then `STUDENT TESTS/` and `ANSWER KEYS/` sibling folders containing the `STU_` and `KEY_` files.
+- The Math section has a slightly different structure with `Answer Keys/` (title case, no caps) instead of `ANSWER KEYS/`. Parser must be case-insensitive.
+
+**Adjacent finding: OneDrive as worksheet-PDF host is still a SPOF on Kiran's laptop** (Session 7 open question E). Phase 3 should migrate the `STU_*.pdf` files (and probably `KEY_*.pdf` too, for auto-grading data permanence) to Firebase Storage as part of the worksheet-data-model thread. The migration and the correctAnswers extraction work can be bundled into one session since they walk the same folder.
+
+**Adjacent finding: the answer keys also contain full question text, choices, and rationales as extractable text.** This is a longer-term scope unlock — psm-generator could eventually render questions natively in-browser instead of serving PDFs at all, reusing the extracted data for an entirely PDF-free student UX. Out of scope for Phase 3's first pass, but worth noting in the spec as a Phase 4+ possibility.
 
 ### Scope and architecture questions brainstorming must resolve
 
