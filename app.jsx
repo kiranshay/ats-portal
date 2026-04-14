@@ -4032,6 +4032,105 @@ function PortalTrendsTab({student}){
   return <ScoreTrendsChart series={series}/>;
 }
 
+const SUBMIT_EDITOR_BACK_BTN = {
+  border:"none", background:"none", cursor:"pointer", padding:0,
+  fontFamily:"'IBM Plex Mono',monospace", fontSize:10, letterSpacing:1,
+  textTransform:"uppercase", color:"#9A5B1F",
+};
+const SUBMIT_BTN_STYLE = {
+  border:"none", background:"#0F1A2E", color:"#fff", padding:"12px 22px",
+  borderRadius:8, fontFamily:"'Fraunces',Georgia,serif", fontSize:14,
+  fontWeight:600, cursor:"pointer", letterSpacing:-.1,
+};
+const SUBMIT_BTN_STYLE_DISABLED = {
+  ...SUBMIT_BTN_STYLE, background:"#C9CEDC", cursor:"not-allowed",
+};
+
+// Per-assignment submission entry. Drill-in from PortalHistoryTab. Parents
+// reach this in readOnly mode — never editable. Students in editable mode
+// autosave drafts to /students/{id}/submissions/{subId} on a 750ms debounce
+// and lock to "submitted" via a single write when they click Submit.
+function SubmissionEditor({studentId, assignment, readOnly, onClose}){
+  const {status, submission} = useSubmissionDraft(studentId, assignment.id);
+  const [text, setText] = useState("");
+  const submissionIdRef = useRef(null);
+  const [localStatus, setLocalStatus] = useState("draft");
+  const [submittedAt, setSubmittedAt] = useState(null);
+
+  useEffect(()=>{
+    if(status !== "ready" || !submission) return;
+    submissionIdRef.current = submission.id;
+    const r = Array.isArray(submission.responses) ? submission.responses[0] : null;
+    setText((r && r.studentAnswer) || "");
+    setLocalStatus(submission.status || "draft");
+    setSubmittedAt(submission.submittedAt || null);
+  }, [status, submission]);
+
+  if(status === "loading"){
+    return (
+      <div style={{...CARD, padding:"40px 24px", textAlign:"center"}}>
+        <div style={{fontFamily:"'Fraunces',Georgia,serif", color:"#66708A"}}>Loading…</div>
+      </div>
+    );
+  }
+  if(status === "error"){
+    return (
+      <div style={{...CARD, padding:"40px 24px", textAlign:"center"}}>
+        <div style={{fontFamily:"'Fraunces',Georgia,serif", fontStyle:"italic", color:"#8C2E2E", marginBottom:16}}>
+          Couldn't load this submission. Try reloading.
+        </div>
+        <button onClick={onClose} style={SUBMIT_EDITOR_BACK_BTN}>← Back</button>
+      </div>
+    );
+  }
+
+  const isLocked = readOnly || localStatus === "submitted";
+  const displayDate = (()=>{
+    if(!submittedAt) return "";
+    if(typeof submittedAt === "string") return submittedAt.slice(0,10);
+    if(submittedAt.toDate) {
+      try { return submittedAt.toDate().toISOString().slice(0,10); }
+      catch { return ""; }
+    }
+    return "";
+  })();
+
+  return (
+    <div style={{...CARD, padding:"24px 22px"}}>
+      <button onClick={onClose} style={SUBMIT_EDITOR_BACK_BTN}>← Back to assignments</button>
+      <div style={{fontFamily:"'Fraunces',Georgia,serif", fontSize:22, fontWeight:600, color:"#0F1A2E", marginTop:14, marginBottom:6, letterSpacing:-.2}}>
+        {assignment.date || assignment.dateAssigned || "Assignment"}
+      </div>
+      {isLocked && displayDate && (
+        <div style={{fontFamily:"'IBM Plex Mono',monospace", fontSize:10, color:"#66708A", textTransform:"uppercase", letterSpacing:1, marginBottom:14}}>
+          Submitted {displayDate}
+        </div>
+      )}
+      {isLocked ? (
+        <div style={{whiteSpace:"pre-wrap", fontFamily:"'Fraunces',Georgia,serif", fontSize:15, color:"#0F1A2E", lineHeight:1.55, padding:"14px 0", borderTop:"1px solid rgba(15,26,46,.08)", borderBottom:"1px solid rgba(15,26,46,.08)"}}>
+          {text || <span style={{color:"#66708A", fontStyle:"italic"}}>No answer recorded.</span>}
+        </div>
+      ) : (
+        <textarea
+          value={text}
+          onChange={e=>setText(e.target.value)}
+          placeholder={"Type your answers here. Example:\n\n1. B\n2. C\n3. A"}
+          style={{
+            width:"100%", minHeight:260, padding:"14px 16px", borderRadius:8,
+            border:"1px solid rgba(15,26,46,.2)", fontFamily:"'IBM Plex Mono',monospace",
+            fontSize:14, lineHeight:1.6, color:"#0F1A2E", resize:"vertical", boxSizing:"border-box",
+          }}
+        />
+      )}
+      {!isLocked && (
+        <div style={{marginTop:16, display:"flex", justifyContent:"flex-end"}}>
+          <button disabled style={SUBMIT_BTN_STYLE_DISABLED}>Submit</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ScoreTrendsChart({series}){
   const W = 640, H = 280;
   const PAD = {top:20, right:24, bottom:48, left:56};
