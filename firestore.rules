@@ -15,21 +15,15 @@ rules_version = '2';
 //                                   can create drafts and transition
 //                                   draft -> submitted on their own attempts
 //
-// Auth migration Phases C and D remain deferred, so isWorkspaceUser() is
-// still part of isTutorOrAdmin() — removing it is a later session's job.
+// Session 7 (2026-04-14) retired the @affordabletutoringsolutions.org
+// workspace gate. Auth is now allowlist-only.
 //
-// Source of truth for this shape: docs/PHASE_2_SESSION_1.md
+// Source of truth: docs/PHASE_2_SESSION_1.md · docs/PHASE_2_SESSION_7.md
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
     // ── Identity helpers ─────────────────────────────────────────────────
-
-    function isWorkspaceUser() {
-      return request.auth != null
-        && request.auth.token.email_verified == true
-        && request.auth.token.email.matches('.*@affordabletutoringsolutions[.]org');
-    }
 
     function emailKey() {
       return request.auth.token.email.lower();
@@ -54,11 +48,8 @@ service cloud.firestore {
       return isAllowlisted() && allowlistRole() == 'admin';
     }
 
-    // Workspace gate is kept in the OR because auth Phases C/D are still
-    // deferred — Phase 2 must not force the workspace cutover.
     function isTutorOrAdmin() {
-      return isWorkspaceUser()
-        || (isAllowlisted() && allowlistRole() in ['tutor', 'admin']);
+      return isAllowlisted() && allowlistRole() in ['tutor', 'admin'];
     }
 
     function isLinkedToStudent(studentId) {
@@ -74,7 +65,14 @@ service cloud.firestore {
     // ── Allowlist collection ─────────────────────────────────────────────
 
     match /allowlist/{email} {
-      allow read, write: if isAllowlistAdmin();
+      // Any authenticated user can read their OWN entry to resolve their
+      // role during sign-in. List (enumerate collection) and writes remain
+      // admin-only. Self-read is the fix for the Session 7 sign-in bug
+      // where non-admin users hit permission-denied on getAllowlistEntry.
+      allow get: if request.auth != null
+        && request.auth.token.email_verified == true
+        && emailKey() == email;
+      allow list, write: if isAllowlistAdmin();
     }
 
     // ── Legacy blob ──────────────────────────────────────────────────────
@@ -106,7 +104,9 @@ service cloud.firestore {
 
         allow update: if isLinkedToStudent(studentId)
           && resource.data.status == 'draft'
-          && request.resource.data.status in ['draft', 'submitted'];
+          && request.resource.data.status in ['draft', 'submitted']
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['status', 'responses', 'updatedAt', 'submittedAt']);
 
         // Tutor/admin override — must come after the student-scoped
         // rules so the stricter student conditions are evaluated first.
@@ -115,10 +115,5 @@ service cloud.firestore {
       }
     }
 
-    // Fallthrough for any ad-hoc doc outside the paths above. Workspace
-    // users only — retires with Phase D.
-    match /{document=**} {
-      allow read, write: if isWorkspaceUser();
-    }
   }
 }
