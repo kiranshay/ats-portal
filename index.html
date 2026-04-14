@@ -4772,6 +4772,7 @@ function SubmissionEditor({studentId, assignment, readOnly, onClose}){
   const submissionIdRef = useRef(null);
   const [localStatus, setLocalStatus] = useState("draft");
   const [submittedAt, setSubmittedAt] = useState(null);
+  const [submittingState, setSubmittingState] = useState(false);
   const pendingTimerRef = useRef(null);
   const writeDraftRef = useRef(null);
 
@@ -4811,6 +4812,32 @@ function SubmissionEditor({studentId, assignment, readOnly, onClose}){
       }
     } catch(err){
       console.warn("[portal] draft write error:", err);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if(isLockedNow || submittingState) return;
+    if(!canSubmitDraft({status:"draft", responses:[{questionIndex:0, studentAnswer:text}]})) return;
+    setSubmittingState(true);
+    try{
+      if(pendingTimerRef.current){
+        clearTimeout(pendingTimerRef.current);
+        pendingTimerRef.current = null;
+      }
+      if(writeDraftRef.current) await writeDraftRef.current(text);
+      const id = submissionIdRef.current;
+      if(!id) throw new Error("no submission id after flush");
+      await studentSubmissionsCollection(studentId).doc(id).update({
+        status: "submitted",
+        submittedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+      setLocalStatus("submitted");
+      setSubmittedAt(new Date().toISOString());
+    } catch(err){
+      console.warn("[portal] submit error:", err);
+      alert("Could not submit. Try again.");
+    } finally {
+      setSubmittingState(false);
     }
   };
 
@@ -4884,11 +4911,20 @@ function SubmissionEditor({studentId, assignment, readOnly, onClose}){
           }}
         />
       )}
-      {!isLocked && (
-        <div style={{marginTop:16, display:"flex", justifyContent:"flex-end"}}>
-          <button disabled style={SUBMIT_BTN_STYLE_DISABLED}>Submit</button>
-        </div>
-      )}
+      {!isLocked && (() => {
+        const enabled = canSubmitDraft({status:"draft", responses:[{questionIndex:0, studentAnswer:text}]}) && !submittingState;
+        return (
+          <div style={{marginTop:16, display:"flex", justifyContent:"flex-end"}}>
+            <button
+              disabled={!enabled}
+              onClick={handleSubmit}
+              style={enabled ? SUBMIT_BTN_STYLE : SUBMIT_BTN_STYLE_DISABLED}
+            >
+              {submittingState ? "Submitting…" : "Submit"}
+            </button>
+          </div>
+        );
+      })()}
     </div>
   );
 }
