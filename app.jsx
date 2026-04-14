@@ -409,6 +409,38 @@ function useSubmissionDraft(studentId, assignmentId){
   return state;
 }
 
+// Tutor-side live view of one student's submissions. Unlike useSubmissionDraft,
+// this is an onSnapshot subscription because the tutor may be reviewing while
+// the student is actively submitting — a one-shot .get() would miss the arrival.
+// Scoped to one student; the tutor view never needs a cross-student listener.
+function useTutorSubmissions(studentId){
+  const [state, setState] = useState({status:"loading", submissions:[], error:null});
+  useEffect(()=>{
+    if(!studentId){
+      setState({status:"ready", submissions:[], error:null});
+      return;
+    }
+    const col = studentSubmissionsCollection(studentId);
+    if(!col){
+      setState({status:"error", submissions:[], error:new Error("Firestore not initialized")});
+      return;
+    }
+    setState({status:"loading", submissions:[], error:null});
+    const unsub = col.onSnapshot(
+      (snap)=>{
+        const docs = snap.docs.map(d => ({id:d.id, ...d.data()}));
+        setState({status:"ready", submissions:docs, error:null});
+      },
+      (err)=>{
+        console.warn("[tutor] submissions snapshot error:", err);
+        setState({status:"error", submissions:[], error:err});
+      }
+    );
+    return ()=>unsub();
+  }, [studentId]);
+  return state;
+}
+
 // Fetches display metadata ({id, name, grade}) for a small list of children
 // in parallel. One-shot .get() per id — labels don't need live updates, and
 // the selected child's full live view still goes through usePortalStudent.
