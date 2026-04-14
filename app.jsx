@@ -369,6 +369,46 @@ function usePortalStudent(studentId){
   return state;
 }
 
+// One-shot lookup for an existing submission doc for (studentId, assignmentId).
+// Not a subscription: the editor owns the live textarea state locally, and
+// writes are fire-and-forget through a debounced effect. Re-queries when the
+// assignment changes. See pickLatestSubmission for the canonical-pick policy.
+//
+// Same dev-bypass caveat as usePortalStudent: requires a real Firebase Auth
+// session. The Firestore rules from Phase 2 Session 2 allow reads only for
+// tutor/admin or linked student/parent, neither of which a ?dev=1-only session
+// satisfies — sign in for real first.
+function useSubmissionDraft(studentId, assignmentId){
+  const [state, setState] = useState({status:"loading", submission:null});
+  useEffect(()=>{
+    if(!studentId || !assignmentId){
+      setState({status:"not-found", submission:null});
+      return;
+    }
+    const col = studentSubmissionsCollection(studentId);
+    if(!col){
+      setState({status:"error", submission:null});
+      return;
+    }
+    let cancelled = false;
+    setState({status:"loading", submission:null});
+    col.where("assignmentId", "==", assignmentId).get()
+      .then(snap => {
+        if(cancelled) return;
+        const docs = snap.docs.map(d => ({id:d.id, ...d.data()}));
+        const picked = pickLatestSubmission(docs);
+        setState({status: picked ? "ready" : "not-found", submission: picked});
+      })
+      .catch(err => {
+        if(cancelled) return;
+        console.warn("[portal] submission query error:", err);
+        setState({status:"error", submission:null});
+      });
+    return ()=>{ cancelled = true; };
+  }, [studentId, assignmentId]);
+  return state;
+}
+
 // Fetches display metadata ({id, name, grade}) for a small list of children
 // in parallel. One-shot .get() per id — labels don't need live updates, and
 // the selected child's full live view still goes through usePortalStudent.
