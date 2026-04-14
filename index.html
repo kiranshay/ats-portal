@@ -977,6 +977,14 @@ async function saveStudentNotes(id, notes){
 // /students collection — that would defeat the per-student rules from
 // Phase 2 Session 2. Returns {status, student, error} where status is
 // "loading" | "ready" | "not-found" | "error".
+//
+// Dev-bypass note: ?dev=1 fakes client auth state but does NOT create a
+// real Firebase Auth session, and the Firestore rules require one. To test
+// the portal locally, sign in for real first (load / without ?dev=1, click
+// Sign in with Google, complete workspace auth), then navigate to
+// ?dev=1&role=student&studentId=... — the persisted Firebase session will
+// satisfy the rules. Without this, reads fail with permission-denied and
+// the portal renders the "Couldn't load your student record" error card.
 function usePortalStudent(studentId){
   const [state, setState] = useState({status:"loading", student:null, error:null});
   useEffect(()=>{
@@ -4201,7 +4209,112 @@ function PortalShell({studentName, studentGrade, onSignOut, children}){
 }
 
 function PortalTrackingTab({student}){
-  return <div style={{...CARD, padding:24}}>Score Tracking — coming in Task 7</div>;
+  const pts = allScoreDataPoints(student);
+  const diagProfile = (student.diagnostics||[]).length ? buildDiagnosticProfile(student.diagnostics) : null;
+  const welled = (student.welledLogs||[]).filter(l=>!l.deleted);
+
+  const fullPts = pts.filter(pt=>{
+    const catStr = pt.category||"";
+    const isFull = /Total SAT|R&W Section|Math Section|Full —|Section —|Practice|Official SAT|Full Practice|BlueBook|WellEd Full/i.test(catStr);
+    return isFull && pt.level!=="domain" && pt.level!=="sub";
+  }).sort((a,b)=>(a.date||"").localeCompare(b.date||""));
+
+  const anyData = fullPts.length>0 || diagProfile || welled.length>0;
+
+  if(!anyData){
+    return (
+      <div style={{...CARD, padding:"60px 40px", textAlign:"center"}}>
+        <div style={{fontFamily:"'Fraunces',Georgia,serif",fontStyle:"italic",fontSize:22,color:"#66708A",letterSpacing:-.2,marginBottom:10}}>
+          No scores logged yet.
+        </div>
+        <div style={{fontSize:13,color:"#66708A",lineHeight:1.55}}>
+          As you complete practice tests and sessions, your scores will appear here.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:24}}>
+      <div style={CARD}>
+        <PortalSectionHeading>Practice exam history</PortalSectionHeading>
+        {fullPts.length===0 ? (
+          <PortalEmptyInline copy="No practice exam scores recorded."/>
+        ) : (
+          <table style={{width:"100%",borderCollapse:"collapse",fontFamily:"'IBM Plex Mono',monospace",fontSize:12}}>
+            <thead>
+              <tr style={{textAlign:"left",color:"#66708A",fontSize:10,letterSpacing:1,textTransform:"uppercase"}}>
+                <th style={{padding:"8px 8px 8px 0",borderBottom:"1px solid rgba(15,26,46,.12)"}}>Date</th>
+                <th style={{padding:"8px",borderBottom:"1px solid rgba(15,26,46,.12)"}}>Exam</th>
+                <th style={{padding:"8px",borderBottom:"1px solid rgba(15,26,46,.12)",textAlign:"right"}}>Score</th>
+              </tr>
+            </thead>
+            <tbody>
+              {fullPts.map((pt,i)=>(
+                <tr key={i}>
+                  <td style={{padding:"10px 8px 10px 0",borderBottom:"1px solid rgba(15,26,46,.06)"}}>{pt.date||"—"}</td>
+                  <td style={{padding:"10px 8px",borderBottom:"1px solid rgba(15,26,46,.06)",fontFamily:"'Fraunces',Georgia,serif",fontSize:14}}>{pt.category||"Exam"}</td>
+                  <td style={{padding:"10px 8px",borderBottom:"1px solid rgba(15,26,46,.06)",textAlign:"right",fontWeight:600}}>{pt.score ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div style={CARD}>
+        <PortalSectionHeading>Diagnostic profile</PortalSectionHeading>
+        {!diagProfile ? (
+          <PortalEmptyInline copy="No diagnostic reports uploaded yet."/>
+        ) : (
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            {Object.entries(diagProfile.byDomain||{}).map(([dom, v])=>(
+              <div key={dom} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+                <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:14,color:"#0F1A2E"}}>{dom}</div>
+                <PctBar value={typeof v?.accuracy==="number"?Math.round(v.accuracy):null} width={120}/>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={CARD}>
+        <PortalSectionHeading>WellEd practice log</PortalSectionHeading>
+        {welled.length===0 ? (
+          <PortalEmptyInline copy="No WellEd practice logged yet."/>
+        ) : (
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {welled.slice().reverse().map(l=>(
+              <div key={l.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 0",borderBottom:"1px solid rgba(15,26,46,.06)",gap:12,flexWrap:"wrap"}}>
+                <div style={{display:"flex",flexDirection:"column",gap:2,minWidth:0}}>
+                  <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:14,color:"#0F1A2E"}}>{l.domain||"Domain"} · <span style={{color:"#66708A",fontStyle:"italic"}}>{l.difficulty||""}</span></div>
+                  <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#66708A"}}>{l.date||""} · {l.subject||""}</div>
+                </div>
+                <div style={{minWidth:140,textAlign:"right"}}>
+                  <PctBar value={typeof l.score==="number"?l.score:(parseInt(l.score,10)||null)} width={100}/>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PortalSectionHeading({children}){
+  return (
+    <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,fontWeight:600,letterSpacing:1.4,color:"#66708A",textTransform:"uppercase",marginBottom:16}}>
+      {children}
+    </div>
+  );
+}
+function PortalEmptyInline({copy}){
+  return (
+    <div style={{fontFamily:"'Fraunces',Georgia,serif",fontStyle:"italic",fontSize:14,color:"#66708A",padding:"16px 0"}}>
+      {copy}
+    </div>
+  );
 }
 function PortalHistoryTab({student}){
   return <div style={{...CARD, padding:24}}>Assignment History — coming in Task 8</div>;
