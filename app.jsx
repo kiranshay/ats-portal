@@ -734,6 +734,28 @@ function groupSubmissionsByAssignment(submissions, assignments){
   return groups;
 }
 
+// Counts that drive the missed-question header card. Drafts are excluded
+// from reviewed/correct/incorrect counts because they can't be graded yet
+// (the student hasn't finalized them). `missed` is the subset of submitted
+// docs marked incorrect, in encounter order.
+function summarizeSubmissions(submissions){
+  const list = Array.isArray(submissions) ? submissions.filter(Boolean) : [];
+  const drafts = list.filter(s => s.status === "draft");
+  const submitted = list.filter(s => s.status === "submitted");
+  const correct = submitted.filter(s => s.correct === true);
+  const incorrect = submitted.filter(s => s.correct === false);
+  const unreviewed = submitted.filter(s => s.correct !== true && s.correct !== false);
+  return {
+    total: list.length,
+    submittedCount: submitted.length,
+    draftCount: drafts.length,
+    correctCount: correct.length,
+    incorrectCount: incorrect.length,
+    unreviewedCount: unreviewed.length,
+    missed: incorrect,
+  };
+}
+
 function canSubmitDraft(submission){
   if(!submission) return false;
   if(submission.status !== "draft") return false;

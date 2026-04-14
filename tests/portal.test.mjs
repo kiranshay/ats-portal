@@ -320,3 +320,72 @@ test('groupSubmissionsByAssignment: submissions without assignmentId bucketed as
   assert.equal(g.length, 1);
   assert.equal(g[0].assignment, null);
 });
+
+function summarizeSubmissions(submissions){
+  const list = Array.isArray(submissions) ? submissions.filter(Boolean) : [];
+  const drafts = list.filter(s => s.status === "draft");
+  const submitted = list.filter(s => s.status === "submitted");
+  const correct = submitted.filter(s => s.correct === true);
+  const incorrect = submitted.filter(s => s.correct === false);
+  const unreviewed = submitted.filter(s => s.correct !== true && s.correct !== false);
+  return {
+    total: list.length,
+    submittedCount: submitted.length,
+    draftCount: drafts.length,
+    correctCount: correct.length,
+    incorrectCount: incorrect.length,
+    unreviewedCount: unreviewed.length,
+    missed: incorrect,
+  };
+}
+
+test('summarizeSubmissions: empty → all zeros', () => {
+  const s = summarizeSubmissions([]);
+  assert.equal(s.total, 0);
+  assert.equal(s.submittedCount, 0);
+  assert.equal(s.correctCount, 0);
+  assert.equal(s.incorrectCount, 0);
+  assert.equal(s.unreviewedCount, 0);
+  assert.equal(s.draftCount, 0);
+  assert.deepEqual(s.missed, []);
+});
+
+test('summarizeSubmissions: draft excluded from reviewed counts but counted in total', () => {
+  const s = summarizeSubmissions([{status:"draft"}]);
+  assert.equal(s.total, 1);
+  assert.equal(s.draftCount, 1);
+  assert.equal(s.submittedCount, 0);
+  assert.equal(s.unreviewedCount, 0);
+});
+
+test('summarizeSubmissions: submitted without correct field is unreviewed', () => {
+  const s = summarizeSubmissions([{status:"submitted"}]);
+  assert.equal(s.submittedCount, 1);
+  assert.equal(s.unreviewedCount, 1);
+  assert.equal(s.correctCount, 0);
+  assert.equal(s.incorrectCount, 0);
+});
+
+test('summarizeSubmissions: correct true/false split', () => {
+  const s = summarizeSubmissions([
+    {id:"a", status:"submitted", correct:true},
+    {id:"b", status:"submitted", correct:false},
+    {id:"c", status:"submitted", correct:false},
+    {id:"d", status:"submitted"},
+    {id:"e", status:"draft"},
+  ]);
+  assert.equal(s.total, 5);
+  assert.equal(s.submittedCount, 4);
+  assert.equal(s.draftCount, 1);
+  assert.equal(s.correctCount, 1);
+  assert.equal(s.incorrectCount, 2);
+  assert.equal(s.unreviewedCount, 1);
+  assert.equal(s.missed.length, 2);
+  assert.deepEqual(s.missed.map(x=>x.id), ["b","c"]);
+});
+
+test('summarizeSubmissions: nullish entries filtered', () => {
+  const s = summarizeSubmissions([null, undefined, {status:"submitted", correct:true}]);
+  assert.equal(s.total, 1);
+  assert.equal(s.correctCount, 1);
+});
