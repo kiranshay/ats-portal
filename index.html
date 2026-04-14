@@ -1158,14 +1158,10 @@ function usePortalChildrenMeta(studentIds){
 // domain check server-side — this component is UX, not security.
 const ATS_DOMAIN = "affordabletutoringsolutions.org";
 
-// ── Allowlist auth (Phase A — flag-gated, off by default) ─────────────────
-// When true, sign-in drops the workspace domain check and instead looks up
-// the user's email in the `allowlist` Firestore collection. Each allowlist
-// doc carries {role, studentIds, active} — see docs/AUTH_MIGRATION_PLAN.md
-// and docs/AUTH_MIGRATION_SESSION_1.md. Leave this FALSE in shipped code
-// until Phase B (rules dual-gate) is also deployed, otherwise the new flow
-// will 404 on the allowlist reads (rules still require the workspace gate).
-const USE_ALLOWLIST_AUTH = false;
+// ── Allowlist auth ────────────────────────────────────────────────────────
+// Live since Phase 2 Session 7. Flag and its gated branches scheduled
+// for removal in Phase 3 cleanup.
+const USE_ALLOWLIST_AUTH = true;
 
 // Dual-write grace window for the Phase 2 schema migration. When true,
 // tutor writes go to BOTH /students/{id} (new authoritative path) and
