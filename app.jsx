@@ -3683,7 +3683,7 @@ function StudentPortal({studentId, onSignOut, currentUserEntry, switcherSlot}){
       </div>
 
       {tab==="tracking" && <PortalTrackingTab student={student}/>}
-      {tab==="history"  && <PortalHistoryTab student={student}/>}
+      {tab==="history"  && <PortalHistoryTab student={student} studentId={studentId} currentUserEntry={currentUserEntry}/>}
       {tab==="trends"   && <PortalTrendsTab student={student}/>}
     </PortalShell>
   );
@@ -3941,8 +3941,27 @@ function PortalEmptyInline({copy}){
     </div>
   );
 }
-function PortalHistoryTab({student}){
+function PortalHistoryTab({student, studentId, currentUserEntry}){
+  const [openAssignmentId, setOpenAssignmentId] = useState(null);
   const assignments = (student.assignments||[]).filter(a=>!a.deleted);
+  const role = currentUserEntry?.role || null;
+  const canEdit = role === "student";
+
+  if(openAssignmentId){
+    const asg = assignments.find(a => a.id === openAssignmentId);
+    if(!asg){
+      setOpenAssignmentId(null);
+      return null;
+    }
+    return (
+      <SubmissionEditor
+        studentId={studentId}
+        assignment={asg}
+        readOnly={!canEdit}
+        onClose={()=>setOpenAssignmentId(null)}
+      />
+    );
+  }
 
   if(assignments.length===0){
     return (
@@ -4019,6 +4038,32 @@ function PortalHistoryTab({student}){
                     Practice Exam · <span style={{color:"#66708A",fontStyle:"italic"}}>{e.type||"full"}</span>
                   </div>
                 ))}
+              </div>
+            )}
+            {canEdit && (
+              <div style={{marginTop:14, paddingTop:12, borderTop:"1px solid rgba(15,26,46,.08)", display:"flex", justifyContent:"flex-end"}}>
+                <button
+                  onClick={()=>setOpenAssignmentId(asg.id)}
+                  style={{
+                    border:"1px solid rgba(154,91,31,.4)", background:"#fff", color:"#9A5B1F",
+                    padding:"8px 16px", borderRadius:6, cursor:"pointer",
+                    fontFamily:"'IBM Plex Mono',monospace", fontSize:10, letterSpacing:1,
+                    textTransform:"uppercase",
+                  }}
+                >Answer →</button>
+              </div>
+            )}
+            {!canEdit && role === "parent" && (
+              <div style={{marginTop:14, paddingTop:12, borderTop:"1px solid rgba(15,26,46,.08)", display:"flex", justifyContent:"flex-end"}}>
+                <button
+                  onClick={()=>setOpenAssignmentId(asg.id)}
+                  style={{
+                    border:"1px solid rgba(15,26,46,.2)", background:"#fff", color:"#0F1A2E",
+                    padding:"8px 16px", borderRadius:6, cursor:"pointer",
+                    fontFamily:"'IBM Plex Mono',monospace", fontSize:10, letterSpacing:1,
+                    textTransform:"uppercase",
+                  }}
+                >View submission</button>
               </div>
             )}
           </div>
