@@ -179,69 +179,151 @@ Oldest → newest, this session only:
 
 ## Follow-ups rolled forward
 
-Priority-ordered. Session 7's Phase 3 list is updated:
+**IMPORTANT pivot at Session 8 close:** Kiran described the real Phase 3 vision — Wise-integrated auto-grading PDF workflow with `signInWithEmailLink` auth for students/parents. This supersedes the SMTP-first priority that had been at the top of this list. SMTP drops significantly because students/parents will never use password auth in the new design, so Firebase email deliverability only matters for admin-issued tutor accounts, which already use Gmail. See the updated Session 9 kickoff prompt at the bottom of this doc for the full reset.
 
-1. **Phase 3: Custom SMTP for Firebase Auth emails.** NEW, top priority. Promoted from "nice-to-have" to "prerequisite for family rollout" by Session 8's spam discovery. Sender: `noreply@affordabletutoringsolutions.org` (domain retained per corrected memory). 1–2 hour session.
-2. **PDF / OneDrive migration to Firebase Storage.** Unchanged from Session 7 closeout. 2-session project.
-3. **Close `DUAL_WRITE_GRACE`.** Unchanged. Housekeeping. Before family rollout.
-4. **Grant `kiranshay123@gmail.com` Firebase project Editor role.** Unchanged from Session 7. IAM change, future-proofs local CLI deploys.
-5. **Real family rollout.** Gated on #1 (SMTP) + #2 (PDF migration) + tutors actually using the system.
-6. **Add `support@affordabletutoringsolutions.org` to admin allowlist.** NEW. 30 seconds via the admin UI. Gated on confirming it's a real sign-in-able account, not an alias.
-7. **Revisit `kshay@` and `ameyers@` admin entries** once their retention is confirmed. NEW, low priority.
-8. **Per-question submission granularity.** Unchanged.
-9. **Aidan privacy review of tutor-only fields.** Unchanged.
-10. **Rule-level test coverage for the `hasOnly([...])` student submission update rule.** Unchanged from Session 7 Open Question D.
-11. **Verify `sixsiege1414@gmail.com` burner deletion.** NEW, housekeeping. Kiran to do at session end.
+Priority-ordered, updated for the pivot:
+
+1. **Phase 3 brainstorming + spec session (Session 9).** Modeled on PHASE_2_SESSION_1.md. Outputs `docs/PHASE_3_SPEC.md` which decomposes Phase 3 into executable sessions. No code. See Session 9 kickoff prompt at the bottom.
+2. **Wise API integration** (inbound + outbound). Blocks real family rollout.
+3. **Student PDF migration from OneDrive to Firebase Storage.** Removes SPOF.
+4. **Answer-key data model + auto-grading.** Either bulk-annotate `correctAnswers` in `worksheets_catalog.json` (Kiran's lean) or tutor-entered-on-demand fallback.
+5. **`signInWithEmailLink` auth path for students/parents** — Kiran's preferred lighter-weight auth tied to Wise email.
+6. **Bubble-sheet `SubmissionEditor` variant** for multiple-choice worksheets.
+7. **Close `DUAL_WRITE_GRACE`.** Unchanged. Housekeeping. Before family rollout.
+8. **Custom SMTP for Firebase Auth emails.** DEMOTED from top priority. Still worth doing eventually for admin-issued tutor account flows, but no longer blocks family rollout.
+9. **Grant `kiranshay123@gmail.com` Firebase project Editor role.** Unchanged from Session 7. IAM change, future-proofs local CLI deploys.
+10. **Real family rollout.** Gated on Wise integration + PDF migration + auto-grading + email-link auth.
+11. **Revisit `kshay@` and `ameyers@` admin entries** once their retention is confirmed. Low priority.
+12. **Per-question submission granularity.** Largely obsoleted by auto-grading (which generates per-question data natively).
+13. **Aidan privacy review of tutor-only fields.** Unchanged.
+14. **Rule-level test coverage for the `hasOnly([...])` student submission update rule.** Unchanged from Session 7 Open Question D.
+
+**Completed at Session 8 close** (crossed off the list):
+- ~~`support@affordabletutoringsolutions.org` added to admin allowlist~~ — done by Kiran
+- ~~`sixsiege1414@gmail.com` burner deleted from allowlist AND Firebase Auth users list~~ — done by Kiran
 
 ---
 
-## Session 9 kickoff prompt
+## Session 9 kickoff prompt — Phase 3 reset: brainstorming + spec
 
 > Copy everything between the horizontal rules below into a fresh Claude Code session, after running `/clear` in the psm-generator workspace.
 
+**Note to future-me:** Session 8's original Session 9 kickoff was "configure custom SMTP." That plan was superseded at the end of Session 8 when Kiran described the real Phase 3 vision — a Wise-integrated auto-grading PDF workflow. SMTP drops in priority (see end of this kickoff for why). If that kickoff version is still what a future Claude starts from, stop and re-read this version.
+
 ---
 
-I'm ready to start **Phase 3 Session 9** of psm-generator: configure custom SMTP for Firebase Authentication emails. This session is **LOW risk** — it's entirely Firebase Console + DNS configuration, with zero code changes and zero production client impact. The goal is to get Firebase Auth emails (password reset, email verification) delivered from `noreply@affordabletutoringsolutions.org` via a transactional email service with proper SPF/DKIM/DMARC, so that family setup emails stop landing in spam folders.
+I'm ready to start **Phase 3 Session 9** of psm-generator: the brainstorming + spec session for Phase 3's real scope. This is a **no-code session** modeled on [PHASE_2_SESSION_1.md](PHASE_2_SESSION_1.md), which is the template for a phase-kickoff spec. Output: one document, `docs/PHASE_3_SPEC.md`, that decomposes Phase 3 into right-sized executable sessions the same way Phase 2 Session 1 decomposed Phase 2 into seven.
 
 **Confirm today's date with me at session start before doing anything else.**
 
-### Read these in order before any planning
+### The Phase 3 vision, in Kiran's words
 
-1. **`docs/PHASE_3_SESSION_8.md`** — this file, specifically §"Deviation 3: the Gmail spam problem" and §"Open question A: custom SMTP is a Phase 3 prerequisite." These explain why Session 9 exists and what it has to accomplish.
-2. **`docs/PHASE_3_SESSION_8_PLAN.md`** — for the "don't weaken email_verified" and "admin-issued flow" constraints that are still load-bearing for any future auth changes.
-3. **`memory/project_psm_auth_migration.md`** — for the confirmed state of the ATS domain. `affordabletutoringsolutions.org` is retained indefinitely; this is the sender domain for Session 9.
+> "Tutor assigns PSM to student, it posts to their Wise with a link to the PSM-generator for the student to just go into (ideally with same email as Wise) and the student just needs to enter a PIN or something. There, they can see the PDF of the assignments themselves and have a place to enter their answers as they work through the PDFs kind of like a bubble sheet scantron thing. Then, because the answer keys are also in the OneDrive, the PSM-generator can auto-grade the answers and send the feedback to the tutor and post back to Wise."
 
-### Scope and architecture questions for Session 9 plan time
+Four threads: (1) in-app PDF delivery of worksheets, (2) answer-key data model + auto-grading, (3) two-way Wise API integration, (4) frictionless student/parent auth via Firebase `signInWithEmailLink`. All four are interdependent.
 
-1. **Which transactional email service?** SendGrid, Mailgun, Postmark, and Resend all have free tiers ≥ 100 emails/month which covers the full ~50-family roster with plenty of headroom for password resets, re-sends, and future verification flows. Postmark has the best deliverability reputation of the four but a lower free tier (100 emails/month); Resend is the newest and most developer-friendly but less established. **Lean: Postmark unless Kiran has a pre-existing account with another provider.**
-2. **Which ATS subdomain for SPF/DKIM?** Typically you isolate transactional email under a subdomain like `mail.affordabletutoringsolutions.org` or `auth.affordabletutoringsolutions.org` so a reputation hit on that subdomain doesn't contaminate the main domain's email reputation (which `support@` depends on). Sender becomes something like `noreply@auth.affordabletutoringsolutions.org`. Kiran decision.
-3. **Who controls the ATS domain DNS?** Required to add SPF / DKIM / DMARC records. Is this Google Workspace DNS (if ATS was domain-hosted by Workspace) or a separate registrar? Kiran to confirm at kickoff.
-4. **Do we also want to configure the ActionCodeSettings URL?** Currently Firebase's default action handler at `psm-generator.firebaseapp.com/__/auth/action` handles password reset completion. We could point it at `psm-generator.web.app` (our actual custom domain) for visual consistency with the app. Optional polish, not required for SMTP. Low priority.
+### Read these in order
 
-### Prerequisites before Session 9 starts
+1. **`docs/PHASE_3_SESSION_8.md`** — this file. §"The Phase 3 vision" (this section) is the one-paragraph scope. §"Critical finding about worksheets_catalog.json" (below) has the biggest data-model discovery from Session 8 close.
+2. **`docs/PHASE_2_SESSION_1.md`** — the reference template for how a phase-kickoff spec is written. Read its structure: brainstorm → design decisions → session plan table with risk ratings. `PHASE_3_SPEC.md` should follow the same shape.
+3. **`worksheets_catalog.json`** — read it directly, not through the app. 150 worksheet entries, each with `subject/domain/subdomain/difficulty/title/qs/stu/key`. This is your single most important input for scoping the worksheet-data-model thread.
+4. **`app.jsx`** — specifically `SubmissionEditor` from Session 5 (around line 3400, grep for it) and `TutorSubmissionsPanel` from Session 6. These are the existing pieces the auto-grading thread will plug into. Do NOT redesign from scratch — the answer-entry UI already exists, it just needs a bubble-sheet renderer variant.
+5. **Wise API Postman docs:** https://documenter.getpostman.com/view/17903053/2sA3XPChyE — Kiran confirmed Wise has a public API. Your first research task is reading these docs and understanding: (a) what auth does the API require (OAuth? API key? JWT?), (b) does it have webhooks or is it pull-only, (c) what is the object model for "assignment" / "student" / "session" / "notification," (d) does it expose a stable student email field we can match against Firebase Auth. Spend real time on this — it's a constraint on the other three threads.
+6. **`memory/project_psm_auth_migration.md`** — confirmed state of the ATS domain.
 
-1. **Which email service account.** Kiran decides the provider and creates an account before the session starts. Free tier fine. No credit card needed for any of the four listed.
-2. **DNS admin access for `affordabletutoringsolutions.org`.** Kiran confirms he (or Aidan) can add SPF / DKIM / DMARC records. If DNS is gated on a third party, schedule that coordination before the session.
-3. **Verify Session 8 is clean in prod.** Check that `sixsiege1414@gmail.com` has been deleted from both Firebase Auth users list AND the allowlist collection. Not a blocker, just hygiene.
+### Critical finding about `worksheets_catalog.json` — load this into brainstorming
+
+Session 8 close peeked at the catalog. What's in it:
+
+- 150 entries, flat list
+- Fields per entry: `subject`, `domain`, `subdomain`, `difficulty`, `title`, `qs` (int, question count), `stu` (OneDrive URL to student-facing worksheet PDF), `key` (OneDrive URL to answer-key PDF), `keyTitle`
+- **NOT in it:** the individual questions themselves, the correct answers, or any per-question metadata
+
+**What this means:** when Kiran said "worksheets are structured data," what's structured is the **catalog of worksheet pointers**. The actual question content lives inside the OneDrive PDFs as rendered pages. Auto-grading therefore cannot just "compare JSON to JSON" — there has to exist, somewhere, structured data saying "worksheet X question 3 correct answer is C" because that data does not exist anywhere today.
+
+Three options for acquiring it, which brainstorming must pick between:
+
+1. **Bulk annotate the catalog.** Add `correctAnswers: ["C","A","B",...]` arrays to every entry in `worksheets_catalog.json`. Roughly 1,500 questions total (150 × ~10). Tedious but finite. Most reliable. Unlocks auto-grading immediately on ship. Kiran does the data entry himself (or Aidan), possibly across two or three sittings.
+2. **OCR the answer key PDFs at ingestion time.** Parse `key` URLs, extract text, regex for answer patterns. Fragile — answer key layouts may not be consistent across 150 worksheets, and incorrect extracted answers would silently mis-grade students, which is worse than not auto-grading at all. Not recommended.
+3. **Per-worksheet tutor-entered answer keys.** First time a worksheet is assigned, tutor enters the answer key in a form, cached to Firestore. Distributed tedium instead of bulk tedium. Ships faster (no pre-work), pays later. Good fallback if Option 1 is too much upfront effort.
+
+**Kiran leans toward Option 1** based on the Session 8 conversation, but brainstorming should confirm that's right given the actual data volume and difficulty format. Either way, `correctAnswers` needs to live *in the catalog* (a flat JSON file) or *in Firestore* (a collection like `worksheetKeys/{worksheetId}`) — decide which in brainstorming.
+
+**Adjacent question:** OneDrive as worksheet-PDF host is a SPOF on Kiran's laptop (Session 7 open question E). Phase 3 should migrate the `stu` PDFs (and probably the `key` PDFs) to Firebase Storage as part of the worksheet-data-model thread — but the student-facing workflow doesn't require auto-grading data. The migration and the `correctAnswers` work are separable tasks that can ship in separate sessions.
+
+### Scope and architecture questions brainstorming must resolve
+
+These are the decisions `PHASE_3_SPEC.md` must lock in before any execution session runs.
+
+1. **Wise API capabilities.** The single biggest dependency. Until you've read the Postman docs, nothing else is plannable. Specific questions to answer in the spec:
+   - What auth does Wise use (API key / OAuth / JWT / basic)?
+   - Can psm-generator *push* data into Wise (create an assignment, post feedback) or only pull?
+   - Does Wise emit webhooks for "tutor assigned worksheet" / "session scheduled" that psm-generator can subscribe to?
+   - What is the stable identity field for a student — email? ID? — that psm-generator can match against its own student/parent records?
+   - Is there a sandbox or test workspace, or does all dev hit Kiran's real ATS Wise account?
+2. **Auth model for students/parents.** Kiran committed to `signInWithEmailLink` (Firebase email-link auth — user enters email, gets a link, clicks it, signed in, no password ever). This is a **new third auth path** alongside the Google and email/password flows Session 8 shipped. Decisions:
+   - Does the email-link path replace the password path for students/parents, or coexist with it? (Recommendation: replace. One less thing to support. Session 8's password path stays as the admin/tutor fallback.)
+   - Does the email link come from Firebase directly (requires SMTP fix, Session 8 follow-up A) or from the Wise post (Wise posts a link with a one-time-use token we generate)? The Wise-posted path is more elegant but couples us to Wise for every sign-in; Firebase-emailed is self-contained but requires the SMTP follow-up. Brainstorming decision.
+   - `firestore.rules` currently requires `email_verified == true`. `signInWithEmailLink` sets `emailVerified` automatically on completion (same as password reset does), so the rule survives. Verify this in the spec.
+3. **Worksheet PDF delivery to students.**
+   - Migrate `stu` PDFs from OneDrive to Firebase Storage, yes/no. (Recommendation: yes, but it's separable from the auto-grading thread.)
+   - Rendered in-browser via `pdf.js` (already loaded in `build_index.py` for the existing diagnostic parser) or linked as downloads? (Recommendation: rendered in-browser so the student stays inside the app.)
+4. **Answer entry UI.** `SubmissionEditor` from Session 5 already exists and handles draft autosave. It has a free-form textarea for answers. Phase 3 wants a bubble-sheet grid. Design question: is the bubble-sheet a replacement or a variant?
+   - The `qs` field in the catalog gives the question count. Student sees N radio-button rows, each with A/B/C/D choices. One answer per row. On submit, this serializes into the same `responses` array the existing `allow update` rule at [firestore.rules:108-109](../firestore.rules#L108-L109) already accepts. No rules change required.
+   - The existing `SubmissionEditor` textarea stays as a fallback for worksheets where the bubble-sheet model doesn't fit (e.g., free-response questions). `worksheets_catalog.json` may need an `answerFormat: "multiple-choice" | "free-response"` field to drive this.
+5. **Auto-grading + feedback flow.**
+   - On submit (student moves draft → submitted), the client looks up `correctAnswers[i]` for each question, computes N-correct / M-total, writes it to the submission doc. Same `hasOnly([...])` rule at [firestore.rules:108-109](../firestore.rules#L108-L109) needs to be updated to allow `scoreCorrect / scoreTotal` in the student-write path (currently those fields are tutor-only per Session 6).
+   - **Or:** the student write stays exactly as it is, and auto-grading runs server-side via a Firestore trigger / Cloud Function that writes the score as the tutor would. Downside: requires Cloud Functions, which psm-generator does NOT currently use. First-time addition of server-side code. Significant infra addition.
+   - Brainstorming decision: client-side grading (simpler, requires one rule change, keeps the no-backend invariant) vs server-side (more secure, allows the `correctAnswers` data to stay admin-only, but adds Cloud Functions).
+   - Security note: if grading is client-side, a motivated student could read the `correctAnswers` array out of the client before submitting. That's the cost of keeping the architecture simple. If that's unacceptable, server-side grading is the answer. Brainstorming should ask Kiran which tradeoff he prefers.
+6. **Wise webhook / poll for tutor assignment → psm-generator.** Inbound direction: tutor creates an assignment in Wise, psm-generator learns about it, psm-generator generates/fetches the worksheet for the student. This requires either (a) Wise webhook pointing at a psm-generator endpoint (requires a server to receive it — new infra), or (b) psm-generator polls Wise on some cadence (no infra but introduces latency), or (c) a browser extension / tampermonkey script on the tutor's Wise session (ugly, don't). **Hard brainstorming decision dependent on what the Wise API actually supports.**
+7. **Feedback post-back to Wise.** Outbound direction: after auto-grading, post the score and missed-question report to Wise. Probably a direct API call from the client when a submission transitions to "reviewed" status. Again, gated on API auth model.
+
+### Prerequisites before brainstorming starts
+
+1. **Kiran has read-access to the Wise Postman docs.** Confirmed at Session 8 close.
+2. **Kiran has a Wise account / dev access.** He uses Wise daily as the ATS tutoring platform; dev access might require a separate API key from ATS. Ask early.
+3. **OneDrive access to a sample student PDF + matching answer key PDF** for at least one worksheet, so brainstorming can see the actual format being dealt with. Kiran to share one example.
+4. **Kiran's opinion on bulk-annotate vs deferred-annotate for `correctAnswers`** — resolve this during brainstorming, not after.
+
+### Scope of what Phase 3 will decompose into (rough prior, to be validated in spec)
+
+Based on Session 8's end-of-session understanding. The actual Session 9 spec may differ.
+
+| # | Session | Ships | Risk | Dependency |
+|---|---|---|---|---|
+| 9 | **Phase 3 brainstorming + spec (this session)** | `PHASE_3_SPEC.md` only. Zero code. | None | — |
+| 10 | Wise API integration layer (read-only first) | Client-side Wise client, assignment pull, student-email matching. Probably a new `lib/wise.js` module. | Medium | API auth model |
+| 11 | Student PDF migration: OneDrive → Firebase Storage | Migration script + catalog `stu` URL rewrite + in-browser viewer | Low | — |
+| 12 | Answer-key data model + bulk annotation OR deferred-annotate UI | Depends on Option 1 vs Option 3 decision | Low-Medium | Kiran's Option pick |
+| 13 | `signInWithEmailLink` auth path for students/parents | New flow in `SignInScreen`, possibly new Wise-sourced sign-in link path | Medium | Wise integration for sign-in post path |
+| 14 | Bubble-sheet `SubmissionEditor` variant | New answer-entry UI gated on `answerFormat: "multiple-choice"` | Low | Catalog schema change from #12 |
+| 15 | Auto-grading + feedback post-back to Wise | Client-side grading, score write, Wise outbound post | Medium-High | #10 + #12 |
+| 16 | Custom SMTP for Firebase Auth (deferred from SESSION 8 kickoff) | SendGrid/Postmark + DNS setup | Low | — |
+| 17 | Real family rollout | First cohort via Wise-posted links | Medium | All of the above |
+
+SMTP (formerly the top Phase 3 priority) moves to session 16 because if students/parents never use password auth (they use `signInWithEmailLink` via Wise), SMTP is only relevant for admin-issued tutor accounts, which already use Gmail. Still worth doing, no longer blocking.
 
 ### Constraints
 
-- **No code changes.** Session 9 is pure Firebase Console + DNS. If the session starts suggesting client-side changes, stop and re-plan — something went wrong.
-- **Do NOT rotate Firebase Authentication project credentials.** The existing apiKey, authDomain, etc. are referenced from the client. SMTP config is a separate subsystem and does not require touching the auth config.
-- **Do NOT change the `email_verified` rule.** Same as Session 8 — still load-bearing.
+- **No code in Session 9.** Brainstorming + spec only. If the session starts editing `app.jsx`, stop — something went wrong.
+- **Do NOT pick Wise API answers from the docs without reading them.** Actually read the Postman docs. Don't guess.
+- **Do NOT widen the `email_verified == true` rule.** Still load-bearing.
+- **Do NOT introduce a bundler or npm install.** Same Phase 2 constraint, still holds.
+- **Do NOT add Cloud Functions without Kiran's explicit approval.** Server-side auto-grading is attractive on security grounds but it's a first-time infra addition for this project and a real operational commitment. Brainstorming can *propose* it but cannot *assume* it.
 - **psm-generator commit override still applies** (commit + push directly, short user-voice messages, no Co-Authored-By).
-- **No slop.** Comments only when the *why* is non-obvious.
+- **No slop.** Comments only when the *why* is non-obvious. The spec should lead with decisions, not process.
 
 ### Pause at the first natural checkpoint
 
-- **After the plan is written and before any Firebase Console / DNS changes are made** — Kiran reviews and approves the plan.
-- **After DNS records are added but before Firebase Console SMTP is switched over** — wait for DNS propagation and verify the records resolve correctly before cutting over.
-- **After Firebase Console SMTP is configured** but before declaring success — send a real test email to at least two recipients (Kiran's primary inbox + a throwaway Gmail) and confirm inbox delivery.
+- **After reading the Wise Postman docs and `worksheets_catalog.json`**, before doing any spec writing — report what you learned. Kiran validates your understanding before you commit it to a spec.
+- **After the spec's section on auth model is written**, before the rest of the spec — the `signInWithEmailLink`-via-Wise vs Firebase-SMTP decision is load-bearing for everything downstream.
+- **After the full spec draft exists**, before committing it — Kiran reviews.
 
-Stop at the first one. Report status. Wait for me.
+Stop at the first one. Report. Wait.
 
-### Close out at the end of Session 9
+### Close out
 
-Write `docs/PHASE_3_SESSION_9.md` capturing what actually shipped (vs planned), deviations, and a kickoff prompt for the next Phase 3 session (probably the PDF / OneDrive migration).
+Session 9 closes by committing `PHASE_3_SPEC.md` and writing `docs/PHASE_3_SESSION_9.md` (brainstorming outcome doc — what was decided, what remains unknown, kickoff prompt for Session 10).
 
 ---
