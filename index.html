@@ -973,6 +973,42 @@ async function saveStudentNotes(id, notes){
   catch(e){ console.warn("[Firestore] notes write error:", e); }
 }
 
+// Single-doc subscription used by StudentPortal. Never reads the full
+// /students collection — that would defeat the per-student rules from
+// Phase 2 Session 2. Returns {status, student, error} where status is
+// "loading" | "ready" | "not-found" | "error".
+function usePortalStudent(studentId){
+  const [state, setState] = useState({status:"loading", student:null, error:null});
+  useEffect(()=>{
+    if(!studentId){
+      setState({status:"not-found", student:null, error:null});
+      return;
+    }
+    const ref = studentDocRef(studentId);
+    if(!ref){
+      setState({status:"error", student:null, error:new Error("Firestore not initialized")});
+      return;
+    }
+    setState({status:"loading", student:null, error:null});
+    const unsub = ref.onSnapshot(
+      (snap)=>{
+        if(!snap.exists){
+          setState({status:"not-found", student:null, error:null});
+          return;
+        }
+        const data = snap.data() || {};
+        setState({status:"ready", student:{id:snap.id, ...data}, error:null});
+      },
+      (err)=>{
+        console.warn("[portal] student snapshot error:", err);
+        setState({status:"error", student:null, error:err});
+      }
+    );
+    return ()=>unsub();
+  }, [studentId]);
+  return state;
+}
+
 /* ============ AUTH GATE ============ */
 // Workspace-only Google sign-in. The firestore.rules enforce the same
 // domain check server-side — this component is UX, not security.
