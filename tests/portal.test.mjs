@@ -239,3 +239,84 @@ test('makeDraftPayload: status is always "draft" (never submitted)', () => {
   const p = makeDraftPayload({assignmentId:"asg1", answersText:"anything", isCreate:false, FieldValue:FIELD_VALUE_STUB});
   assert.equal(p.status, "draft");
 });
+
+// ── Session 6: tutor submission review helpers ────────────────────────────
+
+function groupSubmissionsByAssignment(submissions, assignments){
+  const byId = new Map();
+  const orderIdx = new Map();
+  (assignments||[]).forEach((a, i) => {
+    if(a && a.id) orderIdx.set(a.id, i);
+  });
+  (submissions||[]).forEach(s => {
+    if(!s) return;
+    const key = s.assignmentId || "__orphan__";
+    if(!byId.has(key)) byId.set(key, []);
+    byId.get(key).push(s);
+  });
+  const groups = [];
+  byId.forEach((subs, key) => {
+    const assignment = key === "__orphan__"
+      ? null
+      : (assignments||[]).find(a => a && a.id === key) || null;
+    groups.push({assignment, assignmentId: key, submissions: subs});
+  });
+  groups.sort((a, b) => {
+    const ai = orderIdx.has(a.assignmentId) ? orderIdx.get(a.assignmentId) : -1;
+    const bi = orderIdx.has(b.assignmentId) ? orderIdx.get(b.assignmentId) : -1;
+    if(ai === -1 && bi === -1) return 0;
+    if(ai === -1) return 1;
+    if(bi === -1) return -1;
+    return bi - ai;
+  });
+  return groups;
+}
+
+test('groupSubmissionsByAssignment: empty input → empty array', () => {
+  assert.deepEqual(groupSubmissionsByAssignment([], []), []);
+  assert.deepEqual(groupSubmissionsByAssignment(null, null), []);
+});
+
+test('groupSubmissionsByAssignment: groups by assignmentId', () => {
+  const asgs = [{id:"a1"},{id:"a2"}];
+  const subs = [
+    {id:"s1", assignmentId:"a1"},
+    {id:"s2", assignmentId:"a2"},
+    {id:"s3", assignmentId:"a1"},
+  ];
+  const g = groupSubmissionsByAssignment(subs, asgs);
+  assert.equal(g.length, 2);
+  const a1 = g.find(x => x.assignmentId === "a1");
+  assert.equal(a1.submissions.length, 2);
+  assert.equal(a1.assignment.id, "a1");
+});
+
+test('groupSubmissionsByAssignment: newest-assignment-first order', () => {
+  const asgs = [{id:"a1"},{id:"a2"},{id:"a3"}];
+  const subs = [
+    {id:"s1", assignmentId:"a1"},
+    {id:"s2", assignmentId:"a3"},
+    {id:"s3", assignmentId:"a2"},
+  ];
+  const g = groupSubmissionsByAssignment(subs, asgs);
+  assert.deepEqual(g.map(x=>x.assignmentId), ["a3","a2","a1"]);
+});
+
+test('groupSubmissionsByAssignment: orphan submissions go in a null-assignment bucket at the end', () => {
+  const asgs = [{id:"a1"}];
+  const subs = [
+    {id:"s1", assignmentId:"a1"},
+    {id:"s2", assignmentId:"gone"},
+  ];
+  const g = groupSubmissionsByAssignment(subs, asgs);
+  assert.equal(g.length, 2);
+  assert.equal(g[0].assignmentId, "a1");
+  assert.equal(g[1].assignment, null);
+  assert.equal(g[1].submissions[0].id, "s2");
+});
+
+test('groupSubmissionsByAssignment: submissions without assignmentId bucketed as orphans', () => {
+  const g = groupSubmissionsByAssignment([{id:"s1"}], [{id:"a1"}]);
+  assert.equal(g.length, 1);
+  assert.equal(g[0].assignment, null);
+});

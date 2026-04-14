@@ -700,6 +700,40 @@ function pickLatestSubmission(docs){
   return submitted.slice().sort((a,b)=> ms(b) - ms(a))[0];
 }
 
+// Group submissions under their assignment. Newest-assignment-first (matches
+// the tutor's mental model in the rest of StudentProfile). Submissions whose
+// assignment has been deleted fall into a trailing {assignment:null} bucket
+// so the tutor can still see and delete them.
+function groupSubmissionsByAssignment(submissions, assignments){
+  const byId = new Map();
+  const orderIdx = new Map();
+  (assignments||[]).forEach((a, i) => {
+    if(a && a.id) orderIdx.set(a.id, i);
+  });
+  (submissions||[]).forEach(s => {
+    if(!s) return;
+    const key = s.assignmentId || "__orphan__";
+    if(!byId.has(key)) byId.set(key, []);
+    byId.get(key).push(s);
+  });
+  const groups = [];
+  byId.forEach((subs, key) => {
+    const assignment = key === "__orphan__"
+      ? null
+      : (assignments||[]).find(a => a && a.id === key) || null;
+    groups.push({assignment, assignmentId: key, submissions: subs});
+  });
+  groups.sort((a, b) => {
+    const ai = orderIdx.has(a.assignmentId) ? orderIdx.get(a.assignmentId) : -1;
+    const bi = orderIdx.has(b.assignmentId) ? orderIdx.get(b.assignmentId) : -1;
+    if(ai === -1 && bi === -1) return 0;
+    if(ai === -1) return 1;
+    if(bi === -1) return -1;
+    return bi - ai;
+  });
+  return groups;
+}
+
 function canSubmitDraft(submission){
   if(!submission) return false;
   if(submission.status !== "draft") return false;
