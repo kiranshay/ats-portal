@@ -366,6 +366,47 @@ function usePortalStudent(studentId){
   return state;
 }
 
+// Fetches display metadata ({id, name, grade}) for a small list of children
+// in parallel. One-shot .get() per id — labels don't need live updates, and
+// the selected child's full live view still goes through usePortalStudent.
+// Per-child failures fall back to blank name so the switcher stays usable.
+function usePortalChildrenMeta(studentIds){
+  const key = (studentIds || []).join(",");
+  const [state, setState] = useState({
+    status: studentIds && studentIds.length ? "loading" : "idle",
+    children: []
+  });
+  useEffect(()=>{
+    if(!studentIds || studentIds.length === 0){
+      setState({status:"idle", children:[]});
+      return;
+    }
+    if(!window.db){
+      setState({status:"error", children: studentIds.map(id=>({id, name:"", grade:""}))});
+      return;
+    }
+    let cancelled = false;
+    setState({status:"loading", children:[]});
+    Promise.all(studentIds.map(id =>
+      window.db.collection("students").doc(id).get()
+        .then(snap => snap.exists
+          ? {id, name: (snap.data()||{}).name || "", grade: (snap.data()||{}).grade || ""}
+          : {id, name:"", grade:""}
+        )
+        .catch(err => {
+          console.warn("[portal] child meta fetch error:", id, err);
+          return {id, name:"", grade:""};
+        })
+    )).then(children => {
+      if(!cancelled) setState({status:"ready", children});
+    });
+    return ()=>{ cancelled = true; };
+  // key is the stable join of ids — avoids re-running on unrelated re-renders.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  return state;
+}
+
 /* ============ AUTH GATE ============ */
 // Workspace-only Google sign-in. The firestore.rules enforce the same
 // domain check server-side — this component is UX, not security.
