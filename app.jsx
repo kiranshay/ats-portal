@@ -579,6 +579,19 @@ function pickPortalStudentId(entry){
   return ids[0] || "";
 }
 
+// Parent multi-child picker. Given the parent's allowlist entry and the
+// id they last viewed (from localStorage), return the id to render now.
+// Falls back to studentIds[0] when the stored id is stale or missing.
+// Returns "" when there are no linked children. Kept pure for unit testing.
+function pickParentSelectedChildId(entry, storedId){
+  if(!entry) return "";
+  const ids = Array.isArray(entry.studentIds) ? entry.studentIds : [];
+  if(ids.length === 0) return "";
+  if(ids.length === 1) return ids[0];
+  if(storedId && ids.includes(storedId)) return storedId;
+  return ids[0];
+}
+
 // Build the x-ordered points the Score Trends chart plots. A full practice
 // score is any point whose category matches the fullPts regex used in
 // ScoreHistoryPanel. Dateless / NaN points are dropped (can't be plotted).

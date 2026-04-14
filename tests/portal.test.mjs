@@ -30,6 +30,55 @@ test('pickPortalStudentId: multiple studentIds → first one (Session 4 adds swi
   assert.equal(pickPortalStudentId({role:"parent", studentIds:["kid1","kid2"]}), "kid1");
 });
 
+function pickParentSelectedChildId(entry, storedId){
+  if(!entry) return "";
+  const ids = Array.isArray(entry.studentIds) ? entry.studentIds : [];
+  if(ids.length === 0) return "";
+  if(ids.length === 1) return ids[0];
+  if(storedId && ids.includes(storedId)) return storedId;
+  return ids[0];
+}
+
+test('pickParentSelectedChildId: null entry → empty', () => {
+  assert.equal(pickParentSelectedChildId(null, "anything"), "");
+});
+
+test('pickParentSelectedChildId: missing studentIds → empty', () => {
+  assert.equal(pickParentSelectedChildId({role:"parent"}, "x"), "");
+});
+
+test('pickParentSelectedChildId: empty studentIds → empty', () => {
+  assert.equal(pickParentSelectedChildId({role:"parent", studentIds:[]}, "x"), "");
+});
+
+test('pickParentSelectedChildId: single child → that id regardless of stored', () => {
+  assert.equal(
+    pickParentSelectedChildId({role:"parent", studentIds:["only1"]}, "ignored"),
+    "only1"
+  );
+});
+
+test('pickParentSelectedChildId: multi + stored matches → stored', () => {
+  assert.equal(
+    pickParentSelectedChildId({role:"parent", studentIds:["kid1","kid2","kid3"]}, "kid2"),
+    "kid2"
+  );
+});
+
+test('pickParentSelectedChildId: multi + no stored → first', () => {
+  assert.equal(
+    pickParentSelectedChildId({role:"parent", studentIds:["kid1","kid2"]}, ""),
+    "kid1"
+  );
+});
+
+test('pickParentSelectedChildId: multi + stale stored → first (fallback)', () => {
+  assert.equal(
+    pickParentSelectedChildId({role:"parent", studentIds:["kid1","kid2"]}, "removedKid"),
+    "kid1"
+  );
+});
+
 // Operates on a synthetic __pts array shaped like allScoreDataPoints output.
 // The real buildScoreTrendsSeries in app.jsx calls allScoreDataPoints(student);
 // here we inject __pts directly so we can unit-test the filter+sort logic.
