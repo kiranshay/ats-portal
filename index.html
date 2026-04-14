@@ -4084,6 +4084,119 @@ function StudentProfile({p,setProfile,ptab,setPtab,paChk,setPaChk,paSubj,setPaSu
   );
 }
 
+/* ============ STUDENT PORTAL (Phase 2 Session 3) ============ */
+// Read-only view for student/parent roles. Subscribes to a single
+// /students/{id} doc. Never reads the full collection or _private/info.
+function StudentPortal({studentId, onSignOut, currentUserEntry}){
+  const [tab, setTab] = useState("tracking");
+  const {status, student} = usePortalStudent(studentId);
+
+  if(status === "loading"){
+    return (
+      <div data-portal="student" style={{minHeight:"100vh",background:"var(--paper)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <div style={{fontFamily:"var(--font-display)",fontSize:18,color:"var(--ink-mute)"}}>Loading…</div>
+      </div>
+    );
+  }
+
+  if(status === "error"){
+    return (
+      <PortalShell studentName="" onSignOut={onSignOut} currentUserEntry={currentUserEntry}>
+        <div style={{...CARD, padding:"60px 40px", textAlign:"center", margin:"40px auto", maxWidth:520}}>
+          <div style={{fontFamily:"'Fraunces',Georgia,serif",fontStyle:"italic",fontSize:22,color:"#8C2E2E",letterSpacing:-.2}}>
+            Couldn't load your student record. Try reloading.
+          </div>
+        </div>
+      </PortalShell>
+    );
+  }
+
+  if(status === "not-found" || !student){
+    return (
+      <PortalShell studentName="" onSignOut={onSignOut} currentUserEntry={currentUserEntry}>
+        <div style={{...CARD, padding:"60px 40px", textAlign:"center", margin:"40px auto", maxWidth:520}}>
+          <div style={{fontFamily:"'Fraunces',Georgia,serif",fontStyle:"italic",fontSize:22,color:"#66708A",letterSpacing:-.2,marginBottom:10}}>
+            No student record linked to this account.
+          </div>
+          <div style={{fontSize:13,color:"#66708A",lineHeight:1.55}}>
+            If you believe this is a mistake, email your tutor or <span style={{fontFamily:"'IBM Plex Mono',monospace"}}>support@affordabletutoringsolutions.org</span>.
+          </div>
+        </div>
+      </PortalShell>
+    );
+  }
+
+  return (
+    <PortalShell studentName={student.name} studentGrade={student.grade} onSignOut={onSignOut} currentUserEntry={currentUserEntry}>
+      <div style={{display:"flex",gap:28,marginBottom:24,borderBottom:"1px solid rgba(15,26,46,.12)",flexWrap:"wrap"}}>
+        {[
+          {id:"tracking", label:"Score Tracking"},
+          {id:"history",  label:"Assignment History"},
+          {id:"trends",   label:"Score Trends"},
+        ].map(t=>{
+          const active = tab===t.id;
+          return (
+            <button key={t.id} onClick={()=>setTab(t.id)} style={{
+              border:"none",background:"none",cursor:"pointer",padding:"14px 0",
+              fontFamily:"'Fraunces',Georgia,serif",fontVariationSettings:'"opsz" 48',
+              fontSize:15,fontWeight:active?600:500,color:active?"#0F1A2E":"#66708A",
+              borderBottom:active?"2px solid #0F1A2E":"2px solid transparent",marginBottom:-1,
+              letterSpacing:-.1,position:"relative"
+            }}>
+              {t.label}
+              {active&&<span style={{position:"absolute",left:"50%",bottom:-2,width:5,height:5,transform:"translate(-50%,50%) rotate(45deg)",background:"#9A5B1F"}}/>}
+            </button>
+          );
+        })}
+      </div>
+
+      {tab==="tracking" && <PortalTrackingTab student={student}/>}
+      {tab==="history"  && <PortalHistoryTab student={student}/>}
+      {tab==="trends"   && <PortalTrendsTab student={student}/>}
+    </PortalShell>
+  );
+}
+
+function PortalShell({studentName, studentGrade, onSignOut, children}){
+  return (
+    <div data-portal="student" style={{minHeight:"100vh",background:"var(--paper)",padding:"28px 32px 80px"}}>
+      <div style={{maxWidth:960,margin:"0 auto"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:32,flexWrap:"wrap",gap:12}}>
+          <div>
+            <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:600,letterSpacing:1.4,color:"#66708A",textTransform:"uppercase",marginBottom:4}}>
+              Affordable Tutoring Solutions — Student Portal
+            </div>
+            <div style={{fontFamily:"'Fraunces',Georgia,serif",fontVariationSettings:'"opsz" 144',fontSize:36,fontWeight:600,color:"#0F1A2E",letterSpacing:-.6,lineHeight:1.05}}>
+              {studentName || "Welcome"}
+            </div>
+            {studentGrade && (
+              <div style={{marginTop:8}}>
+                <span style={{...mkPill("transparent","#003258"),border:"1px solid rgba(0,50,88,.28)"}}>Grade {studentGrade}</span>
+              </div>
+            )}
+          </div>
+          <button onClick={onSignOut} style={{
+            border:"1px solid rgba(15,26,46,.2)",background:"#fff",color:"#0F1A2E",
+            padding:"10px 16px",borderRadius:8,fontFamily:"'Fraunces',Georgia,serif",fontSize:13,
+            fontWeight:500,cursor:"pointer"
+          }}>Sign out</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function PortalTrackingTab({student}){
+  return <div style={{...CARD, padding:24}}>Score Tracking — coming in Task 7</div>;
+}
+function PortalHistoryTab({student}){
+  return <div style={{...CARD, padding:24}}>Assignment History — coming in Task 8</div>;
+}
+function PortalTrendsTab({student}){
+  return <div style={{...CARD, padding:24}}>Score Trends — coming in Task 10</div>;
+}
+
 /* ============ HEAT MAP HELPERS ============ */
 // Count worksheet + WellEd Domain assignments per {domain, difficulty}
 // Only worksheets and WellEd domain assignments count toward the heat map (not practice exams, not vocab).
