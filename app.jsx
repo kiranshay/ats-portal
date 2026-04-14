@@ -310,6 +310,9 @@ const studentDocRef = (id) => window.db ? window.db.collection("students").doc(i
 const notesDocRef = (id) => window.db
   ? window.db.collection("students").doc(id).collection("_private").doc("info")
   : null;
+const studentSubmissionsCollection = (id) => window.db
+  ? window.db.collection("students").doc(id).collection("submissions")
+  : null;
 
 // Notes are written out-of-band from the main students batch — they change
 // rarely (only on student creation today) and mixing them into every tutor

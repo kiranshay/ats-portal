@@ -981,6 +981,9 @@ const studentDocRef = (id) => window.db ? window.db.collection("students").doc(i
 const notesDocRef = (id) => window.db
   ? window.db.collection("students").doc(id).collection("_private").doc("info")
   : null;
+const studentSubmissionsCollection = (id) => window.db
+  ? window.db.collection("students").doc(id).collection("submissions")
+  : null;
 
 // Notes are written out-of-band from the main students batch — they change
 // rarely (only on student creation today) and mixing them into every tutor
@@ -1034,6 +1037,47 @@ function usePortalStudent(studentId){
     );
     return ()=>unsub();
   }, [studentId]);
+  return state;
+}
+
+// Fetches display metadata ({id, name, grade}) for a small list of children
+// in parallel. One-shot .get() per id — labels don't need live updates, and
+// the selected child's full live view still goes through usePortalStudent.
+// Per-child failures fall back to blank name so the switcher stays usable.
+function usePortalChildrenMeta(studentIds){
+  const key = (studentIds || []).join(",");
+  const [state, setState] = useState({
+    status: studentIds && studentIds.length ? "loading" : "idle",
+    children: []
+  });
+  useEffect(()=>{
+    if(!studentIds || studentIds.length === 0){
+      setState({status:"idle", children:[]});
+      return;
+    }
+    if(!window.db){
+      setState({status:"error", children: studentIds.map(id=>({id, name:"", grade:""}))});
+      return;
+    }
+    let cancelled = false;
+    setState({status:"loading", children:[]});
+    Promise.all(studentIds.map(id =>
+      window.db.collection("students").doc(id).get()
+        .then(snap => snap.exists
+          ? {id, name: (snap.data()||{}).name || "", grade: (snap.data()||{}).grade || ""}
+          : {id, name:"", grade:""}
+        )
+        .catch(err => {
+          console.warn("[portal] child meta fetch error:", id, err);
+          return {id, name:"", grade:""};
+        })
+    )).then(children => {
+      if(!cancelled) setState({status:"ready", children});
+    });
+    return ()=>{ cancelled = true; };
+  // key is the stable join of ids — avoids re-running on unrelated re-renders.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
   return state;
 }
 
@@ -1216,14 +1260,17 @@ const DEV_FAKE_ROLE = (()=>{
     return allowed.includes(r) ? r : null;
   }catch{ return null; }
 })();
-// Optional studentId override for portal dev bypass:
+// Optional studentId override for portal dev bypass. Accepts a single id or
+// a comma-separated list so parent multi-child can be tested locally:
 //   ?dev=1&role=student&studentId=rnbw56f5
+//   ?dev=1&role=parent&studentId=id1,id2,id3
 // When absent and role is student/parent, the portal renders an empty state.
-const DEV_FAKE_STUDENT_ID = (()=>{
-  if(!DEV_BYPASS) return "";
+const DEV_FAKE_STUDENT_IDS = (()=>{
+  if(!DEV_BYPASS) return [];
   try{
-    return new URLSearchParams(location.search).get("studentId") || "";
-  }catch{ return ""; }
+    const raw = new URLSearchParams(location.search).get("studentId") || "";
+    return raw.split(",").map(s=>s.trim()).filter(Boolean);
+  }catch{ return []; }
 })();
 const DEV_FAKE_USER = {
   email: "dev@localhost",
@@ -1236,7 +1283,7 @@ const DEV_FAKE_USER = {
 const DEV_FAKE_ENTRY = {
   email: "dev@localhost",
   role: DEV_FAKE_ROLE || "tutor",
-  studentIds: DEV_FAKE_STUDENT_ID ? [DEV_FAKE_STUDENT_ID] : [],
+  studentIds: DEV_FAKE_STUDENT_IDS,
   active: true,
   addedBy: "dev-bypass",
   addedAt: null,
@@ -1248,6 +1295,19 @@ function pickPortalStudentId(entry){
   if(!entry) return "";
   const ids = Array.isArray(entry.studentIds) ? entry.studentIds : [];
   return ids[0] || "";
+}
+
+// Parent multi-child picker. Given the parent's allowlist entry and the
+// id they last viewed (from localStorage), return the id to render now.
+// Falls back to studentIds[0] when the stored id is stale or missing.
+// Returns "" when there are no linked children. Kept pure for unit testing.
+function pickParentSelectedChildId(entry, storedId){
+  if(!entry) return "";
+  const ids = Array.isArray(entry.studentIds) ? entry.studentIds : [];
+  if(ids.length === 0) return "";
+  if(ids.length === 1) return ids[0];
+  if(storedId && ids.includes(storedId)) return storedId;
+  return ids[0];
 }
 
 // Build the x-ordered points the Score Trends chart plots. A full practice
@@ -1269,6 +1329,14 @@ function buildScoreTrendsSeries(student){
 // gates which app renders.
 function RoleRouter({authUser, onSignOut, currentUserEntry}){
   const role = currentUserEntry?.role || null;
+  if(role === "parent"){
+    const ids = Array.isArray(currentUserEntry?.studentIds) ? currentUserEntry.studentIds : [];
+    if(ids.length > 1){
+      return <ParentPortal onSignOut={onSignOut} currentUserEntry={currentUserEntry}/>;
+    }
+    // Single-child or zero-child parent falls through to the same
+    // single-student path students use.
+  }
   if(role === "student" || role === "parent"){
     const studentId = pickPortalStudentId(currentUserEntry);
     return <StudentPortal studentId={studentId} onSignOut={onSignOut} currentUserEntry={currentUserEntry}/>;
@@ -4141,7 +4209,7 @@ function StudentProfile({p,setProfile,ptab,setPtab,paChk,setPaChk,paSubj,setPaSu
 /* ============ STUDENT PORTAL (Phase 2 Session 3) ============ */
 // Read-only view for student/parent roles. Subscribes to a single
 // /students/{id} doc. Never reads the full collection or _private/info.
-function StudentPortal({studentId, onSignOut, currentUserEntry}){
+function StudentPortal({studentId, onSignOut, currentUserEntry, switcherSlot}){
   const [tab, setTab] = useState("tracking");
   const {status, student} = usePortalStudent(studentId);
 
@@ -4155,7 +4223,7 @@ function StudentPortal({studentId, onSignOut, currentUserEntry}){
 
   if(status === "error"){
     return (
-      <PortalShell studentName="" onSignOut={onSignOut} currentUserEntry={currentUserEntry}>
+      <PortalShell studentName="" onSignOut={onSignOut} currentUserEntry={currentUserEntry} switcherSlot={switcherSlot}>
         <div style={{...CARD, padding:"60px 40px", textAlign:"center", margin:"40px auto", maxWidth:520}}>
           <div style={{fontFamily:"'Fraunces',Georgia,serif",fontStyle:"italic",fontSize:22,color:"#8C2E2E",letterSpacing:-.2}}>
             Couldn't load your student record. Try reloading.
@@ -4167,7 +4235,7 @@ function StudentPortal({studentId, onSignOut, currentUserEntry}){
 
   if(status === "not-found" || !student){
     return (
-      <PortalShell studentName="" onSignOut={onSignOut} currentUserEntry={currentUserEntry}>
+      <PortalShell studentName="" onSignOut={onSignOut} currentUserEntry={currentUserEntry} switcherSlot={switcherSlot}>
         <div style={{...CARD, padding:"60px 40px", textAlign:"center", margin:"40px auto", maxWidth:520}}>
           <div style={{fontFamily:"'Fraunces',Georgia,serif",fontStyle:"italic",fontSize:22,color:"#66708A",letterSpacing:-.2,marginBottom:10}}>
             No student record linked to this account.
@@ -4181,7 +4249,7 @@ function StudentPortal({studentId, onSignOut, currentUserEntry}){
   }
 
   return (
-    <PortalShell studentName={student.name} studentGrade={student.grade} onSignOut={onSignOut} currentUserEntry={currentUserEntry}>
+    <PortalShell studentName={student.name} studentGrade={student.grade} onSignOut={onSignOut} currentUserEntry={currentUserEntry} switcherSlot={switcherSlot}>
       <div style={{display:"flex",gap:28,marginBottom:24,borderBottom:"1px solid rgba(15,26,46,.12)",flexWrap:"wrap"}}>
         {[
           {id:"tracking", label:"Score Tracking"},
@@ -4211,7 +4279,7 @@ function StudentPortal({studentId, onSignOut, currentUserEntry}){
   );
 }
 
-function PortalShell({studentName, studentGrade, onSignOut, children}){
+function PortalShell({studentName, studentGrade, onSignOut, switcherSlot, children}){
   return (
     <div data-portal="student" style={{minHeight:"100vh",background:"var(--paper)",padding:"28px 32px 80px"}}>
       <div style={{maxWidth:960,margin:"0 auto"}}>
@@ -4228,6 +4296,11 @@ function PortalShell({studentName, studentGrade, onSignOut, children}){
                 <span style={{...mkPill("transparent","#003258"),border:"1px solid rgba(0,50,88,.28)"}}>Grade {studentGrade}</span>
               </div>
             )}
+            {switcherSlot && (
+              <div style={{marginTop:14}}>
+                {switcherSlot}
+              </div>
+            )}
           </div>
           <button onClick={onSignOut} style={{
             border:"1px solid rgba(15,26,46,.2)",background:"#fff",color:"#0F1A2E",
@@ -4238,6 +4311,115 @@ function PortalShell({studentName, studentGrade, onSignOut, children}){
         {children}
       </div>
     </div>
+  );
+}
+
+// Segmented control for the parent portal. Controlled: ParentPortal owns
+// selectedId and passes onSelect. Labels prefer student.name, fall back to
+// "Child N" while meta is loading or when a per-child fetch failed.
+function ChildSwitcher({children, selectedId, onSelect}){
+  if(!children || children.length < 2) return null;
+  return (
+    <div role="tablist" aria-label="Choose a child" style={{
+      display:"inline-flex", gap:6, padding:4,
+      border:"1px solid rgba(15,26,46,.18)", borderRadius:10, background:"#fff",
+      flexWrap:"wrap"
+    }}>
+      {children.map((c, i) => {
+        const active = c.id === selectedId;
+        const label = c.name || `Child ${i+1}`;
+        return (
+          <button
+            key={c.id}
+            role="tab"
+            aria-selected={active}
+            onClick={()=>onSelect(c.id)}
+            style={{
+              border:"none", cursor:"pointer", padding:"8px 14px", borderRadius:7,
+              background: active ? "#0F1A2E" : "transparent",
+              color: active ? "#fff" : "#0F1A2E",
+              fontFamily:"'Fraunces',Georgia,serif", fontVariationSettings:'"opsz" 48',
+              fontSize:13, fontWeight: active ? 600 : 500, letterSpacing:-.1,
+              display:"flex", alignItems:"center", gap:8,
+            }}
+          >
+            <span>{label}</span>
+            {c.grade && (
+              <span style={{
+                fontFamily:"'IBM Plex Mono',monospace", fontSize:9, letterSpacing:.8,
+                textTransform:"uppercase",
+                color: active ? "rgba(255,255,255,.65)" : "#66708A",
+              }}>
+                G{c.grade}
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// Parent multi-child wrapper. Owns the selected-child state, persists it in
+// localStorage, pre-fetches sibling labels, and hands one studentId to the
+// existing StudentPortal. Only mounted when role === "parent" and the
+// allowlist entry has ≥2 studentIds.
+const PORTAL_SELECTED_CHILD_KEY = "psm-portal-selected-child";
+
+function readStoredChildId(){
+  try{ return localStorage.getItem(PORTAL_SELECTED_CHILD_KEY) || ""; }
+  catch{ return ""; }
+}
+function writeStoredChildId(id){
+  try{ localStorage.setItem(PORTAL_SELECTED_CHILD_KEY, id || ""); }
+  catch{ /* private mode — ignore */ }
+}
+
+function ParentPortal({onSignOut, currentUserEntry}){
+  const studentIds = Array.isArray(currentUserEntry?.studentIds) ? currentUserEntry.studentIds : [];
+  const idsKey = studentIds.join(",");
+
+  const [selectedId, setSelectedId] = useState(()=>
+    pickParentSelectedChildId(currentUserEntry, readStoredChildId())
+  );
+
+  // Re-validate when linked ids change (allowlist updated mid-session).
+  // Also self-heals localStorage so a stale stored id doesn't linger forever.
+  useEffect(()=>{
+    const next = pickParentSelectedChildId(currentUserEntry, selectedId || readStoredChildId());
+    if(next !== selectedId){
+      setSelectedId(next);
+      writeStoredChildId(next);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idsKey]);
+
+  const meta = usePortalChildrenMeta(studentIds);
+
+  const handleSelect = (id)=>{
+    setSelectedId(id);
+    writeStoredChildId(id);
+  };
+
+  const switcherChildren = meta.children.length
+    ? meta.children
+    : studentIds.map(id=>({id, name:"", grade:""}));
+
+  const switcher = (
+    <ChildSwitcher
+      children={switcherChildren}
+      selectedId={selectedId}
+      onSelect={handleSelect}
+    />
+  );
+
+  return (
+    <StudentPortal
+      studentId={selectedId}
+      onSignOut={onSignOut}
+      currentUserEntry={currentUserEntry}
+      switcherSlot={switcher}
+    />
   );
 }
 
