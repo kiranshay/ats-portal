@@ -5146,15 +5146,17 @@ function SubmissionEditor({studentId, assignment, readOnly, onClose}){
   const {status, submission} = useSubmissionDraft(studentId, assignment.id);
   const {status: catalogStatus, catalog} = useWorksheetCatalog();
 
-  const worksheets = (assignment.worksheets||[]).filter(w => !w.deleted);
   const welledCount = (assignment.welledDomain||[]).filter(w => !w.deleted).length;
   const examCount = (assignment.practiceExams||[]).filter(e => !e.deleted).length;
 
   // Dedupe worksheet ids defensively — if the assignment doc has collisions
-  // or missing ids, suffix with the positional index. Logged once.
-  const worksheetsStable = (()=>{
+  // or missing ids, suffix with the positional index. Memoized on
+  // assignment.worksheets to keep the array reference stable across renders,
+  // which keeps catalogByWorksheetId and the seed effect from firing on every
+  // render (which would infinite-loop via setAnswersByWorksheet).
+  const worksheetsStable = useMemo(()=>{
     const seen = new Set();
-    return worksheets.map((w, idx) => {
+    return (assignment.worksheets||[]).filter(w => !w.deleted).map((w, idx) => {
       let id = w.id;
       if(!id || seen.has(id)){
         const newId = `${id || "w"}-${idx}`;
@@ -5164,7 +5166,7 @@ function SubmissionEditor({studentId, assignment, readOnly, onClose}){
       seen.add(id);
       return {...w, id};
     });
-  })();
+  }, [assignment.worksheets]);
 
   // Build catalogByWorksheetId once per catalog/worksheets change.
   const catalogByWorksheetId = useMemo(()=>{
