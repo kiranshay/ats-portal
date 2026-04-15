@@ -17,29 +17,33 @@ rules_version = '2';
 //
 // Source of truth: docs/superpowers/specs/2026-04-14-session-14-submission-editor-design.md
 
-// Session 14 fallback: simplified rule that does NOT cross-service call
-// Firestore. Cross-service firestore.get() from Storage rules turned out to
-// be unreliable in production (PDFs 403'd despite a valid allowlist entry).
-// This rule gates reads on verified-email Firebase Auth sessions only,
-// which in practice means "anyone on the allowlist" because the rest of the
-// app routes un-allowlisted sign-ins to a "please ask to be added" screen
-// before they can trigger any portal UI that reads worksheets.
+// Session 14 final rule: public read on /worksheets/**, default-deny
+// everything else.
 //
-// Security tradeoff: weaker than the original design — any signed-in
-// verified-email user can fetch any worksheet PDF. For the 51-user pilot
-// this is acceptable; public launch requires per-user signed URLs via a
-// Cloud Function.
+// Why public read: pdf.js fetches PDF URLs via plain fetch() without
+// carrying Firebase Auth tokens. An authenticated rule (request.auth !=
+// null) rejects these fetches even when the user is signed in, because
+// the request headers don't include the Firebase ID token. The two
+// alternatives — loading the Firebase Storage JS SDK to call
+// getDownloadURL() on every render, or generating per-upload download
+// tokens and embedding them in catalog URLs — both add meaningful
+// complexity for worksheets whose content is not proprietary: they are
+// ATS-branded variants of public CollegeBoard practice questions. The
+// business moat is the tutoring, not the PDFs.
+//
+// Admin SDK writes bypass these rules (they use service credentials),
+// so Session 12's upload path and any future admin-side writes continue
+// to work unchanged. Everything outside /worksheets/ stays default-deny.
+//
+// For per-user tracked access (DRM, watermarking, download audit logs),
+// swap this for a Cloud Function that mints short-lived signed URLs. Not
+// Session 14's problem.
 
 service firebase.storage {
   match /b/{bucket}/o {
 
-    function isVerifiedSignedIn() {
-      return request.auth != null
-        && request.auth.token.email_verified == true;
-    }
-
     match /worksheets/{file=**} {
-      allow read: if isVerifiedSignedIn();
+      allow read: if true;
       allow write: if false;  // admin SDK only
     }
 
