@@ -4,7 +4,7 @@
 **Session type:** Brainstorm + spec. **Zero code changes this session.**
 **Parent docs:** [PHASE_3_SESSION_8.md](PHASE_3_SESSION_8.md) · [PHASE_2_SESSION_1.md](PHASE_2_SESSION_1.md) (structural template) · [AUTH_MIGRATION_PLAN.md](AUTH_MIGRATION_PLAN.md)
 **Outcome:** this document, committed to the repo. Session 10 (SMTP) is the first implementation session of Phase 3.
-
+ 
 ---
 
 ## Scope decision
