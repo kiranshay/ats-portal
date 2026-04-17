@@ -7,8 +7,8 @@
 // Session 15 adds:   onSubmissionSubmit Firestore trigger for auto-grading
 //                    + flag-gated Wise score post-back.
 //
-// Session 16 will migrate assignToWise + onSubmissionSubmit's post-back from
-// the Wise chat API to the Wise discussion/announcement API (createAnnouncements).
+// Session 16 migrated assignToWise from the Wise chat API to the discussion
+// (announcement) API. Score post-backs were removed in Session 15.
 
 const fs = require("fs");
 const path = require("path");
@@ -22,6 +22,7 @@ const {
   WISE_WRITE_ENABLED,
   APP_BASE_URL,
   DEV_TEST_RECIPIENT_EMAIL,
+  DEV_TEST_CLASS_ID,
   wiseConfig,
 } = require("./config");
 const { verifyCallerIsAdmin, verifyCallerIsTutor } = require("./auth");
@@ -30,6 +31,8 @@ const {
   resolveWiseUserIdByEmail,
   ensureAdminChat,
   sendChatMessage,
+  resolveClassForStudent,
+  createDiscussion,
 } = require("./wise");
 const { gradeSubmission } = require("./grade");
 
@@ -277,18 +280,22 @@ async function resolveRecipient(cfg, studentDoc) {
 
 // ── assignToWise ──────────────────────────────────────────────────────────
 //
-// Tutor-only. Given { studentId, assignmentId }, posts a Wise chat message
-// to the student's admin (INSTITUTE) chat with a deep link back into the
-// portal. Idempotent at the chat level (reuses an existing admin chat if
-// one exists); NOT idempotent at the message level (calling twice sends two
-// messages, by design — a tutor re-assigning a worksheet should produce a
-// fresh nudge).
+// Tutor-only. Given { studentId, assignmentId }, posts a Wise discussion
+// (announcement) to the student's 1:1 class with a deep link back into
+// the portal. NOT idempotent at the discussion level — calling twice
+// creates two discussions, by design (a tutor re-assigning should produce
+// a fresh notification).
 //
-// Dev-mode behavior: when WISE_WRITE_ENABLED=false, the recipient is
-// redirected to DEV_TEST_RECIPIENT_EMAIL. Real student records on Wise are
-// never touched. See `resolveRecipient` above.
+// Session 16 migrated this from the chat API (ensureAdminChat +
+// sendChatMessage) to the discussion API (resolveClassForStudent +
+// createDiscussion). Wise "discussions" are how tutors communicate new
+// PSM assignments — never as chats, never as score post-backs.
 //
-// Returns: { ok: true, mode, chatId, messageId, reusedChat, deepLink }
+// Dev-mode behavior: when WISE_WRITE_ENABLED=false, the discussion posts
+// to DEV_TEST_CLASS_ID instead of the real student's class. Real student
+// records on Wise are never touched. See `resolveRecipient` above.
+//
+// Returns: { ok: true, mode, classId, deepLink }
 exports.assignToWise = onCall(
   {
     region: "us-central1",
@@ -316,10 +323,6 @@ exports.assignToWise = onCall(
     }
     const student = studentSnap.data() || {};
 
-    // Locate the assignment inline on the student doc. Phase 2 keeps
-    // assignments in a `student.assignments[]` array (see app.jsx). The
-    // display title is synthesized from date + worksheet count since an
-    // assignment can bundle multiple worksheets.
     const assignments = Array.isArray(student.assignments) ? student.assignments : [];
     const assignment = assignments.find((a) => a && a.id === assignmentId);
     if (!assignment) {
@@ -334,38 +337,64 @@ exports.assignToWise = onCall(
       ? (firstTitle || `assignment ${assignment.date || ""}`.trim())
       : `${firstTitle} + ${wsCount - 1} more`;
 
-    const recipient = await resolveRecipient(cfg, student);
-
-    // Cache wiseUserId on the student doc ONLY in real mode and ONLY if we
-    // just resolved it (not already cached). Dev-redirect never writes back.
-    if (recipient.mode === "real" && !student.wiseUserId) {
-      await studentRef.update({ wiseUserId: recipient.wiseUserId });
-    }
-
-    const { chatId, reused } = await ensureAdminChat(cfg, recipient.wiseUserId);
-
     const baseUrl = (APP_BASE_URL.value() || "").replace(/\/+$/, "");
     const deepLink = `${baseUrl}/?a=${encodeURIComponent(assignmentId)}&s=${encodeURIComponent(studentId)}`;
-    const body = `New worksheet: ${title}. Start: ${deepLink}`;
 
-    const messageId = await sendChatMessage(cfg, chatId, body);
+    const writeEnabled = WISE_WRITE_ENABLED.value() === true;
+    let classId;
+    let mode;
 
-    logger.info("assignToWise: sent", {
+    if (!writeEnabled) {
+      // Dev mode: post to the test class, don't touch the real student.
+      const devClassId = (DEV_TEST_CLASS_ID.value() || "").trim();
+      if (!devClassId) {
+        throw new HttpsError(
+          "failed-precondition",
+          "WISE_WRITE_ENABLED is false and DEV_TEST_CLASS_ID is not set."
+        );
+      }
+      classId = devClassId;
+      mode = "dev-redirect";
+    } else {
+      // Real mode: resolve the student's 1:1 class, cache on student doc.
+      if (student.wiseClassId) {
+        classId = student.wiseClassId;
+      } else {
+        const recipient = await resolveRecipient(cfg, student);
+        if (recipient.mode === "real" && !student.wiseUserId) {
+          await studentRef.update({ wiseUserId: recipient.wiseUserId });
+        }
+        classId = await resolveClassForStudent(cfg, recipient.wiseUserId);
+        if (!classId) {
+          throw new HttpsError(
+            "not-found",
+            `No Wise class found for student ${studentId}.`
+          );
+        }
+        await studentRef.update({ wiseClassId: classId });
+      }
+      mode = "real";
+    }
+
+    const discussionTitle = `New PSM: ${title}`;
+    const discussionBody = `You have a new PSM assignment. Start here: ${deepLink}`;
+
+    await createDiscussion(cfg, classId, {
+      title: discussionTitle,
+      description: discussionBody,
+    });
+
+    logger.info("assignToWise: discussion posted", {
       studentId,
       assignmentId,
-      mode: recipient.mode,
-      redirectedFrom: recipient.redirectedFrom || null,
-      chatId,
-      reusedChat: reused,
-      messageId,
+      mode,
+      classId,
     });
 
     return {
       ok: true,
-      mode: recipient.mode,
-      chatId,
-      messageId,
-      reusedChat: reused,
+      mode,
+      classId,
       deepLink,
     };
   }
@@ -451,10 +480,8 @@ exports.sendStudentMessage = onCall(
 // write scoreCorrect/scoreTotal/perQuestion/gradedAt (see firestore.rules
 // line 109's hasOnly clause). This is the intended trust model.
 //
-// Wise post-back: uses the same resolveRecipient() helper as assignToWise,
-// so when WISE_WRITE_ENABLED=false the score message routes to
-// DEV_TEST_RECIPIENT_EMAIL. Session 16 migrates this call from
-// sendChatMessage to the createAnnouncements (discussion) API.
+// No Wise post-back — Session 15 directive removed it entirely. PSM scores
+// live in the portal UI only, never in Wise.
 //
 // Error handling: grade-write errors throw (trigger will retry). Wise
 // post-back errors are logged and swallowed — a failed Wise post must

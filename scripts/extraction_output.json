@@ -2778,7 +2778,8 @@
       },
       {
         "questionId": "b544a348",
-        "correctAnswer": null
+        "correctAnswer": "7",
+        "fallback": true
       },
       {
         "questionId": "686b7cad",
@@ -2839,7 +2840,8 @@
       },
       {
         "questionId": "a1fd2304",
-        "correctAnswer": null
+        "correctAnswer": "1.5, 3/2",
+        "fallback": true
       },
       {
         "questionId": "a7a14e87",
@@ -2862,7 +2864,7 @@
         "correctAnswer": "B"
       }
     ],
-    "answerFormat": "multiple-choice",
+    "answerFormat": "mixed",
     "extractionError": null,
     "countMismatch": false
   },
@@ -2957,7 +2959,8 @@
       },
       {
         "questionId": "f09097b1",
-        "correctAnswer": null
+        "correctAnswer": "22.4, 112/5",
+        "fallback": true
       },
       {
         "questionId": "620abf36",
@@ -2965,7 +2968,8 @@
       },
       {
         "questionId": "4f669597",
-        "correctAnswer": null
+        "correctAnswer": "1.2, 6/5",
+        "fallback": true
       },
       {
         "questionId": "ce314070",
@@ -3047,7 +3051,8 @@
       },
       {
         "questionId": "36ab4122",
-        "correctAnswer": null
+        "correctAnswer": "B",
+        "fallback": true
       },
       {
         "questionId": "5a7ab8e8",
@@ -3169,7 +3174,8 @@
       },
       {
         "questionId": "e62cfe5f",
-        "correctAnswer": null
+        "correctAnswer": "2.6, 13/5",
+        "fallback": true
       },
       {
         "questionId": "a5834ea4",
@@ -3405,7 +3411,8 @@
       },
       {
         "questionId": "9c7741c6",
-        "correctAnswer": null
+        "correctAnswer": "3",
+        "fallback": true
       },
       {
         "questionId": "c307283c",
@@ -3458,7 +3465,8 @@
       },
       {
         "questionId": "fdee0fbf",
-        "correctAnswer": null
+        "correctAnswer": "74",
+        "fallback": true
       },
       {
         "questionId": "b9835972",
@@ -3495,7 +3503,8 @@
     "tuples": [
       {
         "questionId": "c362c210",
-        "correctAnswer": null
+        "correctAnswer": "1.5, 3/2",
+        "fallback": true
       },
       {
         "questionId": "94b48cbf",
@@ -3511,7 +3520,8 @@
       },
       {
         "questionId": "0366d965",
-        "correctAnswer": null
+        "correctAnswer": "30",
+        "fallback": true
       },
       {
         "questionId": "a35c7164",
@@ -3686,7 +3696,8 @@
     "tuples": [
       {
         "questionId": "d1b66ae6",
-        "correctAnswer": null
+        "correctAnswer": "3/2, 1.5",
+        "fallback": true
       },
       {
         "questionId": "ff501705",
@@ -3739,7 +3750,8 @@
       },
       {
         "questionId": "d7bf55e1",
-        "correctAnswer": null
+        "correctAnswer": "180",
+        "fallback": true
       },
       {
         "questionId": "f718c9cf",
@@ -3747,7 +3759,8 @@
       },
       {
         "questionId": "466b87e3",
-        "correctAnswer": null
+        "correctAnswer": "1/2, .5",
+        "fallback": true
       },
       {
         "questionId": "e2e3942f",
@@ -3771,7 +3784,8 @@
       },
       {
         "questionId": "c5082ce3",
-        "correctAnswer": null
+        "correctAnswer": "30",
+        "fallback": true
       },
       {
         "questionId": "092ad67d",
@@ -3890,7 +3904,8 @@
       },
       {
         "questionId": "ee2f611f",
-        "correctAnswer": null
+        "correctAnswer": "28",
+        "fallback": true
       },
       {
         "questionId": "541bef2f",
@@ -3901,7 +3916,7 @@
         "correctAnswer": "B"
       }
     ],
-    "answerFormat": "multiple-choice",
+    "answerFormat": "mixed",
     "extractionError": null,
     "countMismatch": false
   },
@@ -3935,7 +3950,8 @@
       },
       {
         "questionId": "e8f9e117",
-        "correctAnswer": null
+        "correctAnswer": "20",
+        "fallback": true
       },
       {
         "questionId": "d8539e09",
@@ -4020,7 +4036,8 @@
       },
       {
         "questionId": "f11ffa93",
-        "correctAnswer": null
+        "correctAnswer": "117",
+        "fallback": true
       },
       {
         "questionId": "fcb78856",
@@ -4178,7 +4195,8 @@
       },
       {
         "questionId": "911c415b",
-        "correctAnswer": null
+        "correctAnswer": "6632",
+        "fallback": true
       },
       {
         "questionId": "89fc23af",
@@ -4536,7 +4554,8 @@
       },
       {
         "questionId": "fcdf87b7",
-        "correctAnswer": null
+        "correctAnswer": "0, 3",
+        "fallback": true
       },
       {
         "questionId": "652054da",
@@ -4548,10 +4567,11 @@
       },
       {
         "questionId": "6e02cd78",
-        "correctAnswer": null
+        "correctAnswer": "1",
+        "fallback": true
       }
     ],
-    "answerFormat": "multiple-choice",
+    "answerFormat": "mixed",
     "extractionError": null,
     "countMismatch": false
   },
@@ -4589,7 +4609,8 @@
       },
       {
         "questionId": "f2f3fa00",
-        "correctAnswer": null
+        "correctAnswer": "5",
+        "fallback": true
       },
       {
         "questionId": "6ce95fc8",
@@ -4650,7 +4671,8 @@
       },
       {
         "questionId": "97e50fa2",
-        "correctAnswer": null
+        "correctAnswer": "2, 8",
+        "fallback": true
       },
       {
         "questionId": "ebb717ab",
@@ -4825,7 +4847,8 @@
       },
       {
         "questionId": "40c09d66",
-        "correctAnswer": null
+        "correctAnswer": "7/6, 1.166, 1.167",
+        "fallback": true
       },
       {
         "questionId": "34847f8a",
@@ -5003,7 +5026,8 @@
       },
       {
         "questionId": "1dcea480",
-        "correctAnswer": null
+        "correctAnswer": "A",
+        "fallback": true
       },
       {
         "questionId": "b8150b17",
@@ -5072,11 +5096,13 @@
       },
       {
         "questionId": "9ee22c16",
-        "correctAnswer": null
+        "correctAnswer": "3540",
+        "fallback": true
       },
       {
         "questionId": "566759ef",
-        "correctAnswer": null
+        "correctAnswer": "B",
+        "fallback": true
       },
       {
         "questionId": "89f8d08a",
@@ -5084,7 +5110,8 @@
       },
       {
         "questionId": "8193e8cd",
-        "correctAnswer": null
+        "correctAnswer": "1/5, .2",
+        "fallback": true
       },
       {
         "questionId": "89c39d77",
@@ -5149,7 +5176,8 @@
       },
       {
         "questionId": "94237701",
-        "correctAnswer": null
+        "correctAnswer": "1",
+        "fallback": true
       },
       {
         "questionId": "20b69297",
@@ -5169,7 +5197,8 @@
       },
       {
         "questionId": "54d93874",
-        "correctAnswer": null
+        "correctAnswer": "2.6, 13/5",
+        "fallback": true
       },
       {
         "questionId": "3d73a58b",
@@ -5206,7 +5235,8 @@
       },
       {
         "questionId": "3f5398a6",
-        "correctAnswer": null
+        "correctAnswer": "D",
+        "fallback": true
       },
       {
         "questionId": "86636d8f",
@@ -5214,7 +5244,8 @@
       },
       {
         "questionId": "000259aa",
-        "correctAnswer": null
+        "correctAnswer": "C",
+        "fallback": true
       },
       {
         "questionId": "312ba47c",
@@ -5271,11 +5302,13 @@
       },
       {
         "questionId": "8e528129",
-        "correctAnswer": null
+        "correctAnswer": "4.44",
+        "fallback": true
       },
       {
         "questionId": "fea831fc",
-        "correctAnswer": null
+        "correctAnswer": "25.4, 127/5",
+        "fallback": true
       },
       {
         "questionId": "181cc4d6",
@@ -5324,10 +5357,11 @@
       },
       {
         "questionId": "3638f413",
-        "correctAnswer": null
+        "correctAnswer": "30",
+        "fallback": true
       }
     ],
-    "answerFormat": "multiple-choice",
+    "answerFormat": "mixed",
     "extractionError": null,
     "countMismatch": false
   },
@@ -5500,7 +5534,8 @@
       },
       {
         "questionId": "65c49824",
-        "correctAnswer": null
+        "correctAnswer": "8",
+        "fallback": true
       },
       {
         "questionId": "0ea56bb2",
@@ -5508,7 +5543,8 @@
       },
       {
         "questionId": "0231050d",
-        "correctAnswer": null
+        "correctAnswer": "75",
+        "fallback": true
       },
       {
         "questionId": "67c0200a",
@@ -5537,7 +5573,8 @@
       },
       {
         "questionId": "65c49824",
-        "correctAnswer": null
+        "correctAnswer": "8",
+        "fallback": true
       },
       {
         "questionId": "0ea56bb2",
@@ -5545,7 +5582,8 @@
       },
       {
         "questionId": "0231050d",
-        "correctAnswer": null
+        "correctAnswer": "75",
+        "fallback": true
       },
       {
         "questionId": "67c0200a",
@@ -5643,7 +5681,8 @@
       },
       {
         "questionId": "07f2829b",
-        "correctAnswer": null
+        "correctAnswer": "1.3, 13/10",
+        "fallback": true
       }
     ],
     "answerFormat": "mixed",
@@ -5917,7 +5956,8 @@
       },
       {
         "questionId": "7ac5d686",
-        "correctAnswer": null
+        "correctAnswer": "B",
+        "fallback": true
       },
       {
         "questionId": "7fd284ac",
@@ -5929,7 +5969,8 @@
       },
       {
         "questionId": "d0430601",
-        "correctAnswer": null
+        "correctAnswer": "285",
+        "fallback": true
       },
       {
         "questionId": "e821a26d",
@@ -5940,7 +5981,7 @@
         "correctAnswer": "B"
       }
     ],
-    "answerFormat": "multiple-choice",
+    "answerFormat": "mixed",
     "extractionError": null,
     "countMismatch": false
   },
@@ -6081,11 +6122,13 @@
       },
       {
         "questionId": "6626cac3",
-        "correctAnswer": null
+        "correctAnswer": "1/3, .3333, 0.333",
+        "fallback": true
       },
       {
         "questionId": "585de39a",
-        "correctAnswer": null
+        "correctAnswer": "42",
+        "fallback": true
       }
     ],
     "answerFormat": "mixed",
@@ -6126,7 +6169,8 @@
       },
       {
         "questionId": "90eed2e5",
-        "correctAnswer": null
+        "correctAnswer": "C",
+        "fallback": true
       },
       {
         "questionId": "e7d9649f",
@@ -6138,14 +6182,15 @@
       },
       {
         "questionId": "c7e73ece",
-        "correctAnswer": null
+        "correctAnswer": "94",
+        "fallback": true
       },
       {
         "questionId": "308084c5",
         "correctAnswer": "D"
       }
     ],
-    "answerFormat": "multiple-choice",
+    "answerFormat": "mixed",
     "extractionError": null,
     "countMismatch": false
   },
@@ -6187,7 +6232,8 @@
       },
       {
         "questionId": "9ee22c16",
-        "correctAnswer": null
+        "correctAnswer": "3540",
+        "fallback": true
       },
       {
         "questionId": "f4b3672a",
@@ -6202,7 +6248,7 @@
         "correctAnswer": "C"
       }
     ],
-    "answerFormat": "multiple-choice",
+    "answerFormat": "mixed",
     "extractionError": null,
     "countMismatch": false
   },
@@ -6363,7 +6409,8 @@
       },
       {
         "questionId": "13d9a1c3",
-        "correctAnswer": null
+        "correctAnswer": "4",
+        "fallback": true
       },
       {
         "questionId": "a5aee181",
@@ -6387,7 +6434,8 @@
       },
       {
         "questionId": "1c3d613c",
-        "correctAnswer": null
+        "correctAnswer": "20",
+        "fallback": true
       },
       {
         "questionId": "2adbf1b1",
@@ -6440,11 +6488,13 @@
       },
       {
         "questionId": "f7e626b2",
-        "correctAnswer": null
+        "correctAnswer": "D",
+        "fallback": true
       },
       {
         "questionId": "25da87f8",
-        "correctAnswer": null
+        "correctAnswer": "12",
+        "fallback": true
       },
       {
         "questionId": "8027db3f",
@@ -6452,7 +6502,8 @@
       },
       {
         "questionId": "dba6a25a",
-        "correctAnswer": null
+        "correctAnswer": "30",
+        "fallback": true
       },
       {
         "questionId": "2be01bd9",
@@ -6464,7 +6515,8 @@
       },
       {
         "questionId": "fb58c0db",
-        "correctAnswer": null
+        "correctAnswer": "1/6, .1666, .1667, 0.166, 0.167",
+        "fallback": true
       },
       {
         "questionId": "e80d62c6",
@@ -6476,7 +6528,8 @@
       },
       {
         "questionId": "6a3fbec3",
-        "correctAnswer": null
+        "correctAnswer": "4.5, 9/2",
+        "fallback": true
       },
       {
         "questionId": "17912810",
@@ -6554,14 +6607,15 @@
       },
       {
         "questionId": "ec5d4823",
-        "correctAnswer": null
+        "correctAnswer": "360",
+        "fallback": true
       },
       {
         "questionId": "e336a1d2",
         "correctAnswer": "D"
       }
     ],
-    "answerFormat": "multiple-choice",
+    "answerFormat": "mixed",
     "extractionError": null,
     "countMismatch": false
   },
@@ -6725,7 +6779,8 @@
       },
       {
         "questionId": "3563d76d",
-        "correctAnswer": null
+        "correctAnswer": "C",
+        "fallback": true
       },
       {
         "questionId": "dfc420b2",
@@ -6795,11 +6850,13 @@
       },
       {
         "questionId": "f88f27e5",
-        "correctAnswer": null
+        "correctAnswer": "97",
+        "fallback": true
       },
       {
         "questionId": "947a3cde",
-        "correctAnswer": null
+        "correctAnswer": "30",
+        "fallback": true
       },
       {
         "questionId": "a0369739",
@@ -6898,7 +6955,8 @@
     "tuples": [
       {
         "questionId": "bd87bc09",
-        "correctAnswer": null
+        "correctAnswer": "24",
+        "fallback": true
       },
       {
         "questionId": "1429dcdf",
@@ -6914,7 +6972,8 @@
       },
       {
         "questionId": "55bb437a",
-        "correctAnswer": null
+        "correctAnswer": "6",
+        "fallback": true
       },
       {
         "questionId": "ffe862a3",
@@ -6955,7 +7014,8 @@
     "tuples": [
       {
         "questionId": "6933b3d9",
-        "correctAnswer": null
+        "correctAnswer": "0",
+        "fallback": true
       },
       {
         "questionId": "6ab30ce3",
@@ -7012,7 +7072,8 @@
     "tuples": [
       {
         "questionId": "8e7689e0",
-        "correctAnswer": null
+        "correctAnswer": "4",
+        "fallback": true
       },
       {
         "questionId": "74d8b897",
@@ -7073,7 +7134,8 @@
       },
       {
         "questionId": "ab176ad6",
-        "correctAnswer": null
+        "correctAnswer": "11",
+        "fallback": true
       },
       {
         "questionId": "3e577e4a",

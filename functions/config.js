@@ -13,6 +13,8 @@
 //                               during Session 11's first week. Writes that target a
 //                               non-test recipient are rejected while WISE_WRITE_ENABLED
 //                               is false. See kickoff "test recipient pinned" constraint.
+//   DEV_TEST_CLASS_ID         — pinned test class for discussion posts when
+//                               WISE_WRITE_ENABLED is false. Session 16 addition.
 
 const { defineSecret, defineString, defineBoolean } = require("firebase-functions/params");
 
@@ -24,6 +26,7 @@ const WISE_NAMESPACE    = defineSecret("WISE_NAMESPACE");
 const WISE_WRITE_ENABLED       = defineBoolean("WISE_WRITE_ENABLED", { default: false });
 const APP_BASE_URL             = defineString("APP_BASE_URL", { default: "https://psm-generator.web.app" });
 const DEV_TEST_RECIPIENT_EMAIL = defineString("DEV_TEST_RECIPIENT_EMAIL", { default: "" });
+const DEV_TEST_CLASS_ID        = defineString("DEV_TEST_CLASS_ID", { default: "" });
 
 const ALL_WISE_SECRETS = [WISE_API_KEY, WISE_USER_ID, WISE_INSTITUTE_ID, WISE_NAMESPACE];
 
@@ -42,5 +45,6 @@ module.exports = {
   WISE_WRITE_ENABLED,
   APP_BASE_URL,
   DEV_TEST_RECIPIENT_EMAIL,
+  DEV_TEST_CLASS_ID,
   wiseConfig,
 };

@@ -1394,7 +1394,7 @@
       "b8e73b5b",
       "03503d49"
     ],
-    "answerFormat": "multiple-choice"
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -1839,7 +1839,7 @@
       "541bef2f",
       "6c71f3ec"
     ],
-    "answerFormat": "multiple-choice"
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -2099,7 +2099,7 @@
       "95ed0b69",
       "6e02cd78"
     ],
-    "answerFormat": "multiple-choice",
+    "answerFormat": "mixed",
     "stuTitle": "NonLinEQs&SOEs - Medium (10Qs)"
   },
   {
@@ -2411,7 +2411,7 @@
       "69f6717f",
       "3638f413"
     ],
-    "answerFormat": "multiple-choice"
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -2691,7 +2691,7 @@
       "e821a26d",
       "79137c1b"
     ],
-    "answerFormat": "multiple-choice"
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -2790,7 +2790,7 @@
       "c7e73ece",
       "308084c5"
     ],
-    "answerFormat": "multiple-choice"
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -2814,7 +2814,7 @@
       "0108ac2d",
       "6a305cd0"
     ],
-    "answerFormat": "multiple-choice"
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -2972,7 +2972,7 @@
       "ec5d4823",
       "e336a1d2"
     ],
-    "answerFormat": "multiple-choice"
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",

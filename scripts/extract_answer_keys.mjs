@@ -139,6 +139,43 @@ function extractFromPdf(pdfPath) {
     for (const re of FOOTER_MARKERS) out = out.replace(re, "");
     return out.trim();
   };
+  // Fallback extractors for blocks missing the "Correct Answer:" line.
+  // Some CBQB PDFs omit that label entirely — the answer is only in the
+  // Rationale section as "Choice X is correct" (MC) or "The correct
+  // answer is Y" (FR), or in a "Note that X and Y are examples" line.
+  const mcFallbackRe = /Choice ([A-D]) is correct/;
+  const frFallbackRe = /The correct answer is\s+(-?[\d,./]+)/;
+  // "Note that" lines list accepted answer forms and may span a line break.
+  const noteFallbackRe = /Note that (.+?)(?:are|is an?)\s+example/s;
+  const eitherFallbackRe = /(?:either|Either) (-?[\d./]+) or (-?[\d./]+)/;
+
+  // Strip comma-thousands formatting (e.g. "3,540" → "3540") so the grader's
+  // comma-split doesn't misinterpret it as two separate answers.
+  const stripThousands = (s) => s.replace(/(\d),(\d{3})\b/g, "$1$2");
+
+  function fallbackExtract(block) {
+    const mc = block.match(mcFallbackRe);
+    if (mc) return mc[1];
+
+    const note = block.match(noteFallbackRe);
+    if (note) {
+      const raw = note[1].replace(/\s+/g, " ").trim();
+      const cleaned = raw.replace(/,?\s+and\s+/g, ", ").replace(/,\s*$/, "").trim();
+      if (cleaned) return stripThousands(cleaned);
+    }
+
+    const fr = block.match(frFallbackRe);
+    if (fr) {
+      const val = fr[1].replace(/[.,]+$/, "").trim();
+      if (val) return stripThousands(val);
+    }
+
+    const either = block.match(eitherFallbackRe);
+    if (either) return `${either[1].replace(/[.,]$/, "")}, ${either[2].replace(/[.,]$/, "")}`;
+
+    return null;
+  }
+
   for (let i = 0; i < headers.length; i++) {
     const start = headers[i].idx;
     const end = i + 1 < headers.length ? headers[i + 1].idx : text.length;
@@ -148,7 +185,8 @@ function extractFromPdf(pdfPath) {
       const cleaned = stripFooter(am[1].trim());
       tuples.push({ questionId: headers[i].id, correctAnswer: cleaned || null });
     } else {
-      tuples.push({ questionId: headers[i].id, correctAnswer: null });
+      const fb = fallbackExtract(block);
+      tuples.push({ questionId: headers[i].id, correctAnswer: fb, fallback: fb ? true : undefined });
     }
   }
   return { tuples, rawLength: text.length };

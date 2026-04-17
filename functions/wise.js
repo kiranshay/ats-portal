@@ -169,6 +169,68 @@ async function sendChatMessage(cfg, chatId, message) {
   return messageId;
 }
 
+// ── Discussion (announcement) API — Session 16 ──────────────────────────
+//
+// Wise "discussions" are the API's "announcements". They live on a class,
+// not on a user-to-user chat. The tutor posts a discussion to the
+// student's 1:1 class when assigning a new PSM.
+
+// GET /institutes/{institute_id}/classes
+//
+// Returns all classes for the institute. Each class object includes
+// `joinedRequest` (array of enrolled Wise user IDs), which is how we
+// resolve a student's wiseUserId → classId.
+async function listInstituteClasses(cfg) {
+  const url = `${cfg.host}/institutes/${cfg.instituteId}/classes`;
+  const res = await fetch(url, { method: "GET", headers: wiseHeaders(cfg) });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Wise listInstituteClasses ${res.status}: ${text.slice(0, 300)}`);
+  }
+  const body = await res.json();
+  const classes = body && body.data && body.data.classes;
+  return Array.isArray(classes) ? classes : [];
+}
+
+// Scan all institute classes for the one containing this Wise user ID in
+// its `joinedRequest` array. Returns the classId string or null.
+async function resolveClassForStudent(cfg, wiseUserId) {
+  const classes = await listInstituteClasses(cfg);
+  for (const c of classes) {
+    const joined = Array.isArray(c.joinedRequest) ? c.joinedRequest : [];
+    if (joined.includes(wiseUserId)) {
+      return c._id;
+    }
+  }
+  return null;
+}
+
+// POST /user/createAnnouncements
+//
+// Creates a discussion (announcement) on a class. Returns the success
+// message string from the API (no announcement ID in the response — the
+// Wise API only returns "New discussion added successfully!").
+async function createDiscussion(cfg, classId, { title, description }) {
+  const url = `${cfg.host}/user/createAnnouncements`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: wiseHeaders(cfg),
+    body: JSON.stringify({
+      classId,
+      title,
+      description,
+      disableCommenting: false,
+      uploadTokens: "",
+    }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Wise createDiscussion ${res.status}: ${text.slice(0, 300)}`);
+  }
+  const body = await res.json();
+  return (body && body.data) || "ok";
+}
+
 module.exports = {
   userByIdentifierEmail,
   resolveWiseUserIdByEmail,
@@ -176,4 +238,7 @@ module.exports = {
   createAdminChat,
   ensureAdminChat,
   sendChatMessage,
+  listInstituteClasses,
+  resolveClassForStudent,
+  createDiscussion,
 };
