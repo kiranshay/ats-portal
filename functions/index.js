@@ -376,7 +376,8 @@ exports.assignToWise = onCall(
       mode = "real";
     }
 
-    const discussionTitle = `New PSM: ${title}`;
+    const sessionDate = assignment.date || "";
+    const discussionTitle = sessionDate ? `PSM for ${sessionDate}` : `New PSM: ${title}`;
     const discussionBody = `You have a new PSM assignment. Start here: ${deepLink}`;
 
     await createDiscussion(cfg, classId, {
