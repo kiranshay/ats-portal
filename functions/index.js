@@ -23,6 +23,7 @@ const {
   APP_BASE_URL,
   DEV_TEST_RECIPIENT_EMAIL,
   DEV_TEST_CLASS_ID,
+  DEV_TEST_SECTION_ID,
   wiseConfig,
 } = require("./config");
 const { verifyCallerIsAdmin, verifyCallerIsTutor } = require("./auth");
@@ -32,6 +33,9 @@ const {
   ensureAdminChat,
   sendChatMessage,
   resolveClassForStudent,
+  getContentTimeline,
+  resolvePsmSectionId,
+  createAssignment,
   createDiscussion,
 } = require("./wise");
 const { gradeSubmission } = require("./grade");
@@ -287,15 +291,41 @@ async function resolveRecipient(cfg, studentDoc) {
 // a fresh notification).
 //
 // Session 16 migrated this from the chat API (ensureAdminChat +
-// sendChatMessage) to the discussion API (resolveClassForStudent +
-// createDiscussion). Wise "discussions" are how tutors communicate new
-// PSM assignments — never as chats, never as score post-backs.
+// sendChatMessage) to the discussion API (createDiscussion), posting a
+// discussion to the student's 1:1 class with the full PSM instruction
+// text and a deep link to the portal.
 //
 // Dev-mode behavior: when WISE_WRITE_ENABLED=false, the discussion posts
-// to DEV_TEST_CLASS_ID instead of the real student's class. Real student
-// records on Wise are never touched. See `resolveRecipient` above.
+// to DEV_TEST_CLASS_ID. Real student records on Wise are never touched.
 //
 // Returns: { ok: true, mode, classId, deepLink }
+
+function buildPsmDescription(deepLink, worksheets) {
+  const wsList = worksheets
+    .map((w) => `  • ${w.title}`)
+    .join("\n");
+  return [
+    `The recording of today's session has been posted on Wise. Please complete the following worksheets using the PSM instructions posted in the PSMs modules.`,
+    ``,
+    `<b>Important Reminder:</b> Please book your next session in advance, timing it for when you expect to have these PSMs completed. After completing the worksheets, check and mark your work according to the PSM instructions, then upload your marked work as a comment to this PSMs assignment.`,
+    ``,
+    `<b>Portal Link:</b> ${deepLink}`,
+    ``,
+    `<b>Worksheets:</b>`,
+    wsList,
+    ``,
+    `<b>Practice Exams:</b>`,
+    ``,
+    `Please complete Practice Exam # 1 on <b>BlueBook (College Board)</b> using the instructions for BlueBook (College Board) practice exams located in your Wise "Full Practice Exam Instructions" Module - https://bluebook.app.collegeboard.org/. Be sure to follow instructions regarding screenshots of missed questions!`,
+    ``,
+    `  • Practice Exam #1`,
+    ``,
+    `Please complete Practice Exam # 1 on <b>WellEd Labs</b> using the instructions for WellEd Labs practice exams located in your Wise "Full Practice Exam Instructions" Module - https://ats.practicetest.io/sign-in.`,
+    ``,
+    `  • Practice Exam #1`,
+  ].join("\n");
+}
+
 exports.assignToWise = onCall(
   {
     region: "us-central1",
@@ -331,11 +361,6 @@ exports.assignToWise = onCall(
         `Assignment ${assignmentId} not found on student ${studentId}.`
       );
     }
-    const wsCount = Array.isArray(assignment.worksheets) ? assignment.worksheets.length : 0;
-    const firstTitle = (wsCount > 0 && assignment.worksheets[0] && assignment.worksheets[0].title) || "";
-    const title = wsCount <= 1
-      ? (firstTitle || `assignment ${assignment.date || ""}`.trim())
-      : `${firstTitle} + ${wsCount - 1} more`;
 
     const baseUrl = (APP_BASE_URL.value() || "").replace(/\/+$/, "");
     const deepLink = `${baseUrl}/?a=${encodeURIComponent(assignmentId)}&s=${encodeURIComponent(studentId)}`;
@@ -345,7 +370,6 @@ exports.assignToWise = onCall(
     let mode;
 
     if (!writeEnabled) {
-      // Dev mode: post to the test class, don't touch the real student.
       const devClassId = (DEV_TEST_CLASS_ID.value() || "").trim();
       if (!devClassId) {
         throw new HttpsError(
@@ -356,7 +380,6 @@ exports.assignToWise = onCall(
       classId = devClassId;
       mode = "dev-redirect";
     } else {
-      // Real mode: resolve the student's 1:1 class, cache on student doc.
       if (student.wiseClassId) {
         classId = student.wiseClassId;
       } else {
@@ -377,12 +400,13 @@ exports.assignToWise = onCall(
     }
 
     const sessionDate = assignment.date || "";
-    const discussionTitle = sessionDate ? `PSM for ${sessionDate}` : `New PSM: ${title}`;
-    const discussionBody = `You have a new PSM assignment. Start here: ${deepLink}`;
+    const discussionTitle = sessionDate ? `PSM for ${sessionDate}` : "New PSM Assignment";
+    const worksheets = Array.isArray(assignment.worksheets) ? assignment.worksheets : [];
+    const description = buildPsmDescription(deepLink, worksheets);
 
     await createDiscussion(cfg, classId, {
       title: discussionTitle,
-      description: discussionBody,
+      description,
     });
 
     logger.info("assignToWise: discussion posted", {
@@ -398,6 +422,19 @@ exports.assignToWise = onCall(
       classId,
       deepLink,
     };
+  }
+);
+
+// ── listClassSections (temporary, admin-only, for section ID lookup) ─────
+exports.listClassSections = onCall(
+  { region: "us-central1", secrets: ALL_WISE_SECRETS, maxInstances: 1 },
+  async (request) => {
+    await verifyCallerIsAdmin(request);
+    const { classId } = request.data || {};
+    if (!classId) throw new HttpsError("invalid-argument", "classId required");
+    const cfg = wiseConfig();
+    const sections = await getContentTimeline(cfg, classId);
+    return sections.map((s) => ({ id: s._id, name: s.name, entityCount: (s.entities || []).length }));
   }
 );
 

@@ -205,11 +205,68 @@ async function resolveClassForStudent(cfg, wiseUserId) {
   return null;
 }
 
+// GET /user/classes/{classId}/contentTimeline?showSequentialLearningDisabledSections=true
+//
+// Returns the content timeline (sections + their entities) for a class.
+// Used to find the "Post-Session Materials (PSMs)" section ID.
+async function getContentTimeline(cfg, classId) {
+  const url = `${cfg.host}/user/classes/${classId}/contentTimeline?showSequentialLearningDisabledSections=true`;
+  const res = await fetch(url, { method: "GET", headers: wiseHeaders(cfg) });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Wise getContentTimeline ${res.status}: ${text.slice(0, 300)}`);
+  }
+  const body = await res.json();
+  const timeline = body && body.data && body.data.timeline;
+  return Array.isArray(timeline) ? timeline : [];
+}
+
+// Scan a class's content timeline for the PSMs section. Matches section
+// names containing "PSM" (case-insensitive). Returns the section _id or null.
+async function resolvePsmSectionId(cfg, classId) {
+  const sections = await getContentTimeline(cfg, classId);
+  for (const s of sections) {
+    if (s.name && /psm/i.test(s.name)) {
+      return s._id;
+    }
+  }
+  return null;
+}
+
+// POST /teacher/createAssignments
+//
+// Creates an assessment (assignment) inside a content section. This is how
+// PSM assignments land in the "Post-Session Materials (PSMs)" module in
+// each student's 1:1 class.
+async function createAssignment(cfg, { classId, sectionId, topic, description, submitBy, startTime }) {
+  const url = `${cfg.host}/teacher/createAssignments`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: wiseHeaders(cfg),
+    body: JSON.stringify({
+      classId,
+      sectionId,
+      topic,
+      description,
+      maxMarks: "100",
+      submitBy,
+      startTime,
+      criteria: [],
+      uploadTokens: [],
+    }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Wise createAssignment ${res.status}: ${text.slice(0, 300)}`);
+  }
+  const body = await res.json();
+  return (body && body.data) || "ok";
+}
+
 // POST /user/createAnnouncements
 //
-// Creates a discussion (announcement) on a class. Returns the success
-// message string from the API (no announcement ID in the response — the
-// Wise API only returns "New discussion added successfully!").
+// Creates a discussion (announcement) on a class. Used for PSM posts
+// that include the full instruction text with HTML formatting.
 async function createDiscussion(cfg, classId, { title, description }) {
   const url = `${cfg.host}/user/createAnnouncements`;
   const res = await fetch(url, {
@@ -240,5 +297,8 @@ module.exports = {
   sendChatMessage,
   listInstituteClasses,
   resolveClassForStudent,
+  getContentTimeline,
+  resolvePsmSectionId,
+  createAssignment,
   createDiscussion,
 };
