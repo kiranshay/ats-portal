@@ -1,13 +1,15 @@
 name: Deploy to Firebase Hosting
 
-# Session 18A: auto-deploy on push disabled — FIREBASE_TOKEN CI secret is
-# expired (Session 17 Follow-up #3, carried from Session 15/16). Every push
-# was triggering a failed deploy + email notification. Re-enable by either
-# (a) rotating FIREBASE_TOKEN via `firebase login:ci` and updating the
-# GitHub secret, then restoring `push: branches: [main]`, or (b) completing
-# the Workload Identity Federation migration. Manual deploy via
-# `firebase deploy --only hosting` from a logged-in CLI still works.
+# Session 18A: migrated from --token auth to Workload Identity Federation.
+# GitHub Actions mints a short-lived Google access token per run via the
+# google-github-actions/auth action; no long-lived secret to rotate.
+# WIF pool/provider + service account configured in cloud shell:
+#   pool:      projects/456789704122/locations/global/workloadIdentityPools/github-pool
+#   provider:  .../providers/github-provider
+#   sa:        github-deployer@psm-generator.iam.gserviceaccount.com
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 # Only one deploy at a time — if two pushes land back-to-back, cancel the
@@ -15,6 +17,11 @@ on:
 concurrency:
   group: firebase-deploy
   cancel-in-progress: true
+
+# Required for the OIDC token exchange with Google STS.
+permissions:
+  id-token: write
+  contents: read
 
 jobs:
   deploy:
@@ -56,16 +63,21 @@ jobs:
             exit 1
           fi
 
+      # ── Authenticate to Google Cloud via WIF ───────────────────────────
+      # Exchanges the GitHub OIDC token for a short-lived Google access
+      # token via Security Token Service. No FIREBASE_TOKEN secret needed.
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: "projects/456789704122/locations/global/workloadIdentityPools/github-pool/providers/github-provider"
+          service_account: "github-deployer@psm-generator.iam.gserviceaccount.com"
+
       # ── Deploy ─────────────────────────────────────────────────────────
-      # Using firebase-tools directly with a CI token. Org policy blocks
-      # service-account key creation, so the GoogleCloud-style action is
-      # unavailable; the token path is the documented fallback.
+      # firebase-tools picks up the GOOGLE_APPLICATION_CREDENTIALS env var
+      # set by the auth action above. No --token needed.
       - name: Deploy to Firebase Hosting
-        env:
-          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
         run: |
           npx --yes firebase-tools@13 deploy \
             --only hosting,storage \
             --project psm-generator \
-            --token "$FIREBASE_TOKEN" \
             --non-interactive
