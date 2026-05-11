@@ -1,8 +1,14 @@
 name: Deploy to Firebase Hosting
 
+# Session 18A: auto-deploy on push disabled — FIREBASE_TOKEN CI secret is
+# expired (Session 17 Follow-up #3, carried from Session 15/16). Every push
+# was triggering a failed deploy + email notification. Re-enable by either
+# (a) rotating FIREBASE_TOKEN via `firebase login:ci` and updating the
+# GitHub secret, then restoring `push: branches: [main]`, or (b) completing
+# the Workload Identity Federation migration. Manual deploy via
+# `firebase deploy --only hosting` from a logged-in CLI still works.
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 # Only one deploy at a time — if two pushes land back-to-back, cancel the
 # older run so we never race the live site into an older build.
