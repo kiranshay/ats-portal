@@ -3333,6 +3333,89 @@ function AppInner({authUser, onSignOut, currentUserEntry}){
     showToast("Log moved to Trash");
   };
   const delAsg=(aid)=>{const upd=students.map(st=>st.id===profile.id?{...st,assignments:(st.assignments||[]).map(a=>a.id===aid?softDel(a):a)}:st);setStudents(upd);setProfile(upd.find(st=>st.id===profile.id));showToast("Assignment moved to Trash");};
+
+  // Session 18A: PSM editing — per-worksheet operations.
+  //
+  // delWs: soft-removes one worksheet from an active assignment. Refuses
+  //   if any submission already touched that worksheet (the tutor cannot
+  //   yank the rug out from under a student who has answered or
+  //   submitted). hasWorksheetSubmission walks the legacy submissions
+  //   collection for any non-empty studentAnswer on a matching
+  //   worksheetId; this is conservative but cheap.
+  // addWs: appends one or more worksheets to an existing assignment.
+  //   Skips duplicates by id. No restriction on which assignments can be
+  //   extended.
+  //
+  // Both helpers write back through setStudents → the existing Firestore
+  // batch write debounce; no special handling required.
+  const hasWorksheetSubmission = (student, asgId, wsId) => {
+    const subs = Array.isArray(student && student.submissions) ? student.submissions : [];
+    for (const s of subs) {
+      if (!s || s.assignmentId !== asgId) continue;
+      const responses = Array.isArray(s.responses) ? s.responses : [];
+      for (const r of responses) {
+        if (r && r.worksheetId === wsId) {
+          const ans = typeof r.studentAnswer === "string" ? r.studentAnswer.trim() : "";
+          if (ans.length > 0 || (r.flag && r.flag !== null)) return true;
+        }
+      }
+    }
+    return false;
+  };
+  const delWs = (asgId, wsId) => {
+    const student = students.find(st => st.id === profile.id);
+    if (student && hasWorksheetSubmission(student, asgId, wsId)) {
+      showToast("Cannot remove — student already submitted answers for this worksheet");
+      return;
+    }
+    const upd = students.map(st => {
+      if (st.id !== profile.id) return st;
+      return {
+        ...st,
+        assignments: (st.assignments || []).map(a => {
+          if (a.id !== asgId) return a;
+          return {
+            ...a,
+            worksheets: (a.worksheets || []).map(w => w.id === wsId ? softDel(w) : w),
+          };
+        }),
+      };
+    });
+    setStudents(upd);
+    setProfile(upd.find(st => st.id === profile.id));
+    showToast("Worksheet removed");
+  };
+  const addWs = (asgId, wsList) => {
+    if (!wsList || wsList.length === 0) return;
+    const upd = students.map(st => {
+      if (st.id !== profile.id) return st;
+      return {
+        ...st,
+        assignments: (st.assignments || []).map(a => {
+          if (a.id !== asgId) return a;
+          const existing = a.worksheets || [];
+          const existingIds = new Set(existing.filter(w => !w.deleted).map(w => w.id));
+          const toAdd = wsList
+            .filter(ws => !existingIds.has(ws.id))
+            .map(ws => ({
+              id: ws.id,
+              title: ws.title,
+              subject: ws.subject,
+              domain: ws.domain,
+              subdomain: ws.subdomain,
+              difficulty: ws.difficulty,
+              qs: ws.qs,
+              evenOdd: null,
+              timeLimit: null,
+            }));
+          return { ...a, worksheets: [...existing, ...toAdd] };
+        }),
+      };
+    });
+    setStudents(upd);
+    setProfile(upd.find(st => st.id === profile.id));
+    showToast(`Added ${wsList.length} worksheet${wsList.length === 1 ? "" : "s"}`);
+  };
   const delStudent=(id)=>{
     if(!confirm("Move this student to Trash? You can restore them later from the Trash tab.")) return;
     setStudents(prev=>prev.map(st=>st.id===id?softDel(st):st));
@@ -3902,7 +3985,7 @@ function AppInner({authUser, onSignOut, currentUserEntry}){
         {tab==="students"&&profile&&p&&<StudentProfile {...{p,setProfile,ptab,setPtab,
           paChk,setPaChk,paSubj,setPaSubj,paSrch,setPaSrch,savePreAssign,
           paDate,setPaDate,paWeChk,setPaWeChk,paBBPicks,setPaBBPicks,paWEPicks,setPaWEPicks,
-          sfm,setSfm,addScore,delScore,delAsg,setExamScore,setWelledDomainScore,
+          sfm,setSfm,addScore,delScore,delAsg,delWs,addWs,setExamScore,setWelledDomainScore,
           addWelledLog,delWelledLog,
           handleDiagUpload,clearDiagnostics,diagInputRef,diagProfile,showToast,
           students,setStudents,examType,
@@ -4709,9 +4792,15 @@ function StudentsList({students,showAdd,setShowAdd,newS,setNewS,addStudent,openP
 }
 
 /* ============ STUDENT PROFILE ============ */
-function StudentProfile({p,setProfile,ptab,setPtab,paChk,setPaChk,paSubj,setPaSubj,paSrch,setPaSrch,savePreAssign,paDate,setPaDate,paWeChk,setPaWeChk,paBBPicks,setPaBBPicks,paWEPicks,setPaWEPicks,sfm,setSfm,addScore,delScore,delAsg,setExamScore,setWelledDomainScore,addWelledLog,delWelledLog,handleDiagUpload,clearDiagnostics,diagInputRef,diagProfile,showToast,students,setStudents,examType,handleWelledUpload,welledInputRef,customAssignments,setCustomAssignments}){
+function StudentProfile({p,setProfile,ptab,setPtab,paChk,setPaChk,paSubj,setPaSubj,paSrch,setPaSrch,savePreAssign,paDate,setPaDate,paWeChk,setPaWeChk,paBBPicks,setPaBBPicks,paWEPicks,setPaWEPicks,sfm,setSfm,addScore,delScore,delAsg,delWs,addWs,setExamScore,setWelledDomainScore,addWelledLog,delWelledLog,handleDiagUpload,clearDiagnostics,diagInputRef,diagProfile,showToast,students,setStudents,examType,handleWelledUpload,welledInputRef,customAssignments,setCustomAssignments}){
   const[editDateId,setEditDateId]=useState(null);
   const[editDateVal,setEditDateVal]=useState("");
+  // Session 18A: which assignment's "+ add worksheets" picker is open.
+  // Only one at a time. Holds the assignment id.
+  const[addWsAsgId,setAddWsAsgId]=useState(null);
+  const[addWsSrch,setAddWsSrch]=useState("");
+  const[addWsSubj,setAddWsSubj]=useState("All");
+  const[addWsPicks,setAddWsPicks]=useState({});  // wsId -> bool
   const paFiltered = useMemo(()=>ALL_WS.filter(ws=>{
     if(paSubj!=="All"&&ws.subject!==paSubj)return false;
     if(paSrch&&!ws.title.toLowerCase().includes(paSrch.toLowerCase()))return false;
@@ -4801,14 +4890,53 @@ function StudentProfile({p,setProfile,ptab,setPtab,paChk,setPaChk,paSubj,setPaSu
                     <button onClick={()=>delAsg(asg.id)} style={{...mkBtn("transparent","#8C2E2E"),border:"1px solid rgba(140,46,46,.3)",padding:"4px 12px",fontSize:10}}>Remove</button>
                   </div>
                   <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-                    {(asg.worksheets||[]).map(ws=>(
+                    {(asg.worksheets||[]).filter(w=>!w.deleted).map(ws=>(
                       <span key={ws.id||ws.title} style={{background:"#FAF7F2",border:"1px solid rgba(15,26,46,.12)",borderRadius:2,padding:"4px 10px",fontSize:11,color:"#2E3A57",fontFamily:"'IBM Plex Sans',system-ui,sans-serif",display:"inline-flex",alignItems:"center",gap:6}}>
                         {ws.title||ws.name}
                         {ws.evenOdd&&<em style={{color:"#5B4B8A",fontSize:9,fontStyle:"italic"}}>{ws.evenOdd}</em>}
                         <span style={{color:DC[ws.difficulty],fontSize:9,fontWeight:600,letterSpacing:.3,textTransform:"uppercase",fontFamily:"'IBM Plex Mono',monospace"}}>{ws.difficulty}</span>
+                        {/* Session 18A: per-worksheet × remove (blocks if submission exists) */}
+                        {delWs&&ws.id&&<button onClick={()=>{if(confirm(`Remove "${ws.title}" from this PSM?`))delWs(asg.id,ws.id);}} title="Remove this worksheet from the PSM (only if no student submission yet)" style={{background:"none",border:"none",color:"#8C2E2E",cursor:"pointer",fontSize:13,lineHeight:1,padding:"0 2px",marginLeft:2,fontWeight:600}}>×</button>}
                       </span>
                     ))}
+                    {/* Session 18A: "+ Add worksheets" toggle */}
+                    {addWs&&(
+                      <button onClick={()=>{setAddWsAsgId(addWsAsgId===asg.id?null:asg.id);setAddWsPicks({});setAddWsSrch("");}} style={{background:addWsAsgId===asg.id?"#003258":"transparent",color:addWsAsgId===asg.id?"#FAF7F2":"#003258",border:"1px dashed rgba(0,50,88,.4)",borderRadius:2,padding:"4px 10px",fontSize:11,cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace",letterSpacing:.3}}>
+                        {addWsAsgId===asg.id?"− Cancel":"+ Add worksheets"}
+                      </button>
+                    )}
                   </div>
+                  {/* Session 18A: worksheet picker for "+ Add worksheets" */}
+                  {addWs&&addWsAsgId===asg.id&&(
+                    <div style={{marginTop:12,padding:14,background:"#F5F8FB",border:"1px solid rgba(0,50,88,.18)",borderRadius:4}}>
+                      <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
+                        <input type="text" placeholder="Search worksheets…" value={addWsSrch} onChange={e=>setAddWsSrch(e.target.value)} style={{flex:"1 1 200px",padding:"6px 10px",fontSize:12,border:"1px solid rgba(15,26,46,.2)",borderRadius:2,fontFamily:"'IBM Plex Mono',monospace"}}/>
+                        <select value={addWsSubj} onChange={e=>setAddWsSubj(e.target.value)} style={{padding:"6px 10px",fontSize:12,border:"1px solid rgba(15,26,46,.2)",borderRadius:2}}>
+                          <option value="All">All subjects</option>
+                          <option value="Reading & Writing">R&W</option>
+                          <option value="Math">Math</option>
+                        </select>
+                        <button onClick={()=>{const picks=Object.keys(addWsPicks).filter(k=>addWsPicks[k]).map(id=>ALL_WS.find(w=>w.id===id)).filter(Boolean);if(picks.length){addWs(asg.id,picks);setAddWsAsgId(null);setAddWsPicks({});}}} disabled={!Object.values(addWsPicks).some(Boolean)} style={{...mkBtn(Object.values(addWsPicks).some(Boolean)?"#003258":"rgba(15,26,46,.15)","#FAF7F2"),padding:"6px 14px",fontSize:11,cursor:Object.values(addWsPicks).some(Boolean)?"pointer":"not-allowed"}}>
+                          Add selected ({Object.values(addWsPicks).filter(Boolean).length})
+                        </button>
+                      </div>
+                      <div style={{maxHeight:200,overflowY:"auto",fontSize:11}}>
+                        {ALL_WS
+                          .filter(ws=>addWsSubj==="All"||ws.subject===addWsSubj)
+                          .filter(ws=>!addWsSrch||ws.title.toLowerCase().includes(addWsSrch.toLowerCase()))
+                          .filter(ws=>!(asg.worksheets||[]).filter(w=>!w.deleted).find(w=>w.id===ws.id))
+                          .slice(0,40)
+                          .map(ws=>(
+                            <label key={ws.id} style={{display:"flex",alignItems:"center",gap:8,padding:"4px 6px",cursor:"pointer",borderBottom:"1px solid rgba(15,26,46,.05)"}}>
+                              <input type="checkbox" checked={!!addWsPicks[ws.id]} onChange={e=>setAddWsPicks(prev=>({...prev,[ws.id]:e.target.checked}))}/>
+                              <span style={{flex:1,color:"#0F1A2E"}}>{ws.title}</span>
+                              <span style={{color:"#66708A",fontSize:9,letterSpacing:.4,textTransform:"uppercase",fontFamily:"'IBM Plex Mono',monospace"}}>{ws.subject==="Math"?"Math":"R&W"}</span>
+                              <span style={{color:DC[ws.difficulty],fontSize:9,fontWeight:600,letterSpacing:.3,textTransform:"uppercase",fontFamily:"'IBM Plex Mono',monospace"}}>{ws.difficulty}</span>
+                            </label>
+                          ))}
+                      </div>
+                    </div>
+                  )}
                   {(asg.welledDomain||[]).length>0&&<div style={{marginTop:14,padding:14,background:"#F5ECDF",borderRadius:4,border:"1px solid rgba(154,91,31,.2)"}}>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
                       <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:600,color:"#6E3F12",letterSpacing:1.2,textTransform:"uppercase"}}>WellEd Domain Assignments</div>
