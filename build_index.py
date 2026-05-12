@@ -5,7 +5,7 @@ shell_head = r'''<!DOCTYPE html>
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>PSM Generator — Affordable Tutoring Solutions</title>
+<title>SAT Student Portal — Affordable Tutoring Solutions</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%231C2033'/%3E%3Ctext x='50' y='68' font-family='Georgia,serif' font-size='58' font-style='italic' font-weight='700' text-anchor='middle' fill='%23FAF7F2'%3EP%3C/text%3E%3C/svg%3E" />
 
 <!-- Fonts: Fraunces (editorial display serif, variable) + IBM Plex Sans/Mono -->

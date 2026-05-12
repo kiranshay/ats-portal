@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>PSM Generator — Affordable Tutoring Solutions</title>
+<title>SAT Student Portal — Affordable Tutoring Solutions</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%231C2033'/%3E%3Ctext x='50' y='68' font-family='Georgia,serif' font-size='58' font-style='italic' font-weight='700' text-anchor='middle' fill='%23FAF7F2'%3EP%3C/text%3E%3C/svg%3E" />
 
 <!-- Fonts: Fraunces (editorial display serif, variable) + IBM Plex Sans/Mono -->
@@ -1624,7 +1624,7 @@ function LockoutScreen({email, onSignOut}){
         <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:"linear-gradient(90deg,var(--accent) 0,var(--accent) 72px,transparent 72px)"}}/>
         <h2 style={{fontFamily:"var(--font-display)",fontVariationSettings:"'opsz' 72",fontWeight:500,fontSize:22,margin:"0 0 10px",letterSpacing:"-0.01em"}}>Account not authorized</h2>
         <p style={{fontSize:13.5,lineHeight:1.55,color:"var(--ink-soft)",margin:"0 0 18px"}}>
-          You signed in successfully, but this account isn't on the PSM Generator allowlist yet. Send the email below to Kiran or Aidan and they can add you.
+          You signed in successfully, but this account isn't on the SAT Student Portal allowlist yet. Send the email below to Kiran or Aidan and they can add you.
         </p>
         <div style={{
           padding:"12px 14px",borderRadius:8,background:"var(--paper-alt)",
@@ -3125,6 +3125,11 @@ function AppInner({authUser, onSignOut, currentUserEntry}){
 
   // Track whether current state came from Firestore (prevent write-back loops)
   const _fromFirestore = useRef(false);
+  // Session 18C bug fix: keep a ref to current students so the Firestore
+  // listener (registered once via useEffect on []) can compare incoming
+  // snapshots against the latest local state without going stale.
+  const _studentsRef = useRef([]);
+  useEffect(()=>{ _studentsRef.current = students; }, [students]);
 
   // ── Firestore real-time sync (Phase 2 — per-student docs + legacy blob) ──
   // Two listeners: /students is authoritative for student rows; psm-data/main
@@ -3146,9 +3151,34 @@ function AppInner({authUser, onSignOut, currentUserEntry}){
         const data = d.data() || {};
         return { ...data, id: data.id || d.id };
       });
+      // ── Session 18C feedback-loop fix ──────────────────────────────────
+      // Previously the listener always called setStudents(next), which
+      // triggered the write effect ([students] dep changed → another
+      // batched write → another listener tick → forever). The _fromFirestore
+      // flag SHOULD have prevented the write, but it was reset
+      // synchronously before React's effect commit phase ran, so the
+      // effect always saw `false`.
+      //
+      // Two-pronged fix:
+      //   1. JSON-string-compare incoming with current state and skip
+      //      setStudents entirely when nothing actually changed. This is
+      //      the most important guard — Firestore re-fires onSnapshot
+      //      on every doc-version bump even when the byte content is
+      //      identical, so a single user write produces N listener ticks
+      //      (one per affected doc) and each of those would otherwise
+      //      cause its own write-back cycle.
+      //   2. Defer the _fromFirestore.current=false reset to a macrotask
+      //      so the write effect (which runs after commit but BEFORE
+      //      macrotask queue) still sees true and bails.
+      try{
+        const prev = _studentsRef.current || [];
+        const prevJson = JSON.stringify(prev);
+        const nextJson = JSON.stringify(next);
+        if(prevJson === nextJson) return;
+      } catch { /* fall through to setStudents */ }
       _fromFirestore.current = true;
       setStudents(next);
-      _fromFirestore.current = false;
+      setTimeout(()=>{ _fromFirestore.current = false; }, 100);
       setCloudStatus("synced");
       sSave("psm_v4", next);
     }, (err)=>{
@@ -3162,7 +3192,7 @@ function AppInner({authUser, onSignOut, currentUserEntry}){
       if(data.customAssignments){
         _fromFirestore.current = true;
         setCustomAssignments(data.customAssignments);
-        _fromFirestore.current = false;
+        setTimeout(()=>{ _fromFirestore.current = false; }, 100);
         sSave("psm_custom_asg", data.customAssignments);
       }
     }, (err)=>{
@@ -4397,15 +4427,11 @@ function AppInner({authUser, onSignOut, currentUserEntry}){
           <img src="ats_logo.png" alt="ATS" data-psm-logo/>
           <div style={{display:"flex",flexDirection:"column"}}>
             <div data-psm-eyebrow>Affordable Tutoring Solutions · Est. 2023</div>
-            <div data-psm-title>PSM <em>Generator</em></div>
+            <div data-psm-title>SAT Student <em>Portal</em></div>
           </div>
         </div>
         <div data-psm-actions style={{display:"flex",alignItems:"center",flexWrap:"wrap",justifyContent:"flex-end"}}>
-          <div data-psm-exam style={{display:"flex",gap:0,border:"1px solid var(--rule)",borderRadius:999,padding:2}}>
-            {["SAT","PSAT"].map(t=>(
-              <button key={t} data-active={examType===t} onClick={()=>setExamType(t)} style={{padding:"4px 14px",cursor:"pointer"}}>{t}</button>
-            ))}
-          </div>
+          {/* Session 18C: SAT/PSAT toggle removed — only SAT supported now. */}
           <a href="https://tutor.thesatcrashcourse.com/" target="_blank" rel="noopener noreferrer">WellEd</a>
           <a href="https://ats.wise.live/get-started" target="_blank" rel="noopener noreferrer">Wise</a>
           <span data-psm-chip title="Enrolled students" style={{padding:"6px 10px",border:"1px solid var(--rule)",borderRadius:999,color:"var(--ink-soft)"}}>{visibleStudents.length.toString().padStart(2,"0")} students</span>
@@ -4424,40 +4450,6 @@ function AppInner({authUser, onSignOut, currentUserEntry}){
             Import
             <input type="file" accept="application/json" onChange={importData} style={{display:"none"}}/>
           </label>
-          <label title="Import students from a Wise Learner Report CSV (manual export)" style={{cursor:"pointer"}}>
-            Import Wise CSV
-            <input ref={wiseInputRef} type="file" accept=".csv,text/csv" onClick={e=>{e.currentTarget.value="";}} onChange={handleWiseFile} style={{display:"none"}}/>
-          </label>
-          {/* Session 18: Wise API reconcile — checks each existing student
-              against Wise via email lookup. Surfaces who's missing in
-              Wise or has mismatched email. Does NOT bulk-import (the
-              Wise API doesn't expose a 'list all students' endpoint;
-              CSV remains the bulk-import path). Admin-only function. */}
-          <button onClick={async()=>{
-            if(!window.firebase || !window.firebase.app){ alert("Firebase not loaded"); return; }
-            try{
-              showToast("Reconciling with Wise…");
-              const fn = window.firebase.app().functions("us-central1").httpsCallable("reconcileStudentsWithWise");
-              const result = await fn({});
-              const r = result.data || {};
-              const t = r.totals || {};
-              const lines = [
-                `Wise reconcile complete:`,
-                `  ${t.matched||0} matched in Wise`,
-                `  ${t.unmatched||0} not found in Wise`,
-                `  ${t.emailMismatched||0} email mismatched`,
-                `  ${t.noEmail||0} no email on record`,
-                `  ${t.errors||0} errors`,
-              ];
-              alert(lines.join("\n"));
-              console.log("[wise-reconcile]", r);
-            }catch(e){
-              console.warn("[wise-reconcile] failed:", e);
-              alert("Wise reconcile failed: " + (e.message||e));
-            }
-          }} title="Check each student against the Wise API (email lookup). Reports which students Wise doesn't know about. Admin-only." style={{cursor:"pointer",background:"none",border:"none",font:"inherit",color:"inherit",padding:0}}>
-            Wise API check
-          </button>
           {/* Session 18C: full API sync — pull all SAT students from
               Wise, auto-add to allowlist, soft-delete non-SAT students
               that were previously synced. Two-phase: preview → confirm. */}
@@ -5864,7 +5856,7 @@ function StudentPortal({studentId, onSignOut, currentUserEntry, switcherSlot, im
   }
 
   return (
-    <PortalShell studentName={student.name} studentGrade={student.grade} onSignOut={onSignOut} currentUserEntry={currentUserEntry} switcherSlot={switcherSlot} impersonating={impersonating}>
+    <PortalShell studentName={student.name} studentGrade={student.grade} onSignOut={onSignOut} currentUserEntry={currentUserEntry} switcherSlot={switcherSlot} impersonating={impersonating} studentEmail={(student.meta && student.meta.email) || (currentUserEntry && currentUserEntry.email) || ""}>
       <div style={{display:"flex",gap:28,marginBottom:24,borderBottom:"1px solid rgba(15,26,46,.12)",flexWrap:"wrap"}}>
         {[
           {id:"tracking", label:"Score Tracking"},
@@ -5894,7 +5886,83 @@ function StudentPortal({studentId, onSignOut, currentUserEntry, switcherSlot, im
   );
 }
 
-function PortalShell({studentName, studentGrade, onSignOut, switcherSlot, children, impersonating}){
+// Session 18C: external-platform quick links + credentials. Shown at the
+// top of every student-portal tab. WellEd has a shared institutional
+// password ('Ats2025!') with the student's own email; Wise uses the
+// student's own email + password (no shared password — they set their own).
+// Studies-only — does not appear in tutor impersonation banner.
+function StudentExternalLinksCard({studentEmail}){
+  const [showWelledPw, setShowWelledPw] = useState(false);
+  const copy = (txt) => {
+    try { navigator.clipboard.writeText(txt); } catch { /* ignore */ }
+  };
+  const cardStyle = {
+    border:"1px solid rgba(15,26,46,.12)", borderRadius:8,
+    padding:"12px 14px", background:"#FAF7F2",
+    display:"flex", flexDirection:"column", gap:6,
+  };
+  const labelStyle = {
+    fontFamily:"'IBM Plex Mono',monospace", fontSize:8, fontWeight:700,
+    letterSpacing:1.2, textTransform:"uppercase", color:"#66708A",
+  };
+  const credStyle = {
+    fontFamily:"'IBM Plex Mono',monospace", fontSize:11, color:"#0F1A2E",
+    fontWeight:600,
+  };
+  return (
+    <div style={{
+      marginBottom:24,
+      display:"grid", gridTemplateColumns:"1fr 1fr", gap:14,
+    }}>
+      {/* WellEd */}
+      <div style={cardStyle}>
+        <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:6}}>
+          <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:15,fontWeight:600,color:"#6E3F12",letterSpacing:-.1}}>WellEd Labs</div>
+          <a href="https://ats.practicetest.io/sign-in" target="_blank" rel="noopener noreferrer" style={{...mkBtn("#6E3F12","#FAF7F2"),padding:"4px 10px",fontSize:10,letterSpacing:.4,textTransform:"uppercase",fontWeight:700,textDecoration:"none"}}>Open ↗</a>
+        </div>
+        <div style={{fontSize:10,color:"#66708A",lineHeight:1.45}}>
+          For your assigned WellEd domain practices and full practice exams.
+        </div>
+        <div style={{display:"flex",gap:14,flexWrap:"wrap",marginTop:2}}>
+          <div>
+            <div style={labelStyle}>Email</div>
+            <div style={credStyle}>{studentEmail||"—"}</div>
+          </div>
+          <div>
+            <div style={labelStyle}>Password</div>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <div style={credStyle}>{showWelledPw?"Ats2025!":"•••••••"}</div>
+              <button onClick={()=>setShowWelledPw(s=>!s)} style={{border:"1px solid rgba(15,26,46,.18)",background:"#fff",borderRadius:3,padding:"1px 6px",fontSize:9,cursor:"pointer",letterSpacing:.3,textTransform:"uppercase",fontFamily:"'IBM Plex Mono',monospace",color:"#66708A"}}>{showWelledPw?"Hide":"Show"}</button>
+              <button onClick={()=>copy("Ats2025!")} style={{border:"1px solid rgba(15,26,46,.18)",background:"#fff",borderRadius:3,padding:"1px 6px",fontSize:9,cursor:"pointer",letterSpacing:.3,textTransform:"uppercase",fontFamily:"'IBM Plex Mono',monospace",color:"#66708A"}}>Copy</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      {/* Wise */}
+      <div style={cardStyle}>
+        <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:6}}>
+          <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:15,fontWeight:600,color:"#003258",letterSpacing:-.1}}>Wise</div>
+          <a href="https://ats.wise.live/get-started" target="_blank" rel="noopener noreferrer" style={{...mkBtn("#003258","#FAF7F2"),padding:"4px 10px",fontSize:10,letterSpacing:.4,textTransform:"uppercase",fontWeight:700,textDecoration:"none"}}>Open ↗</a>
+        </div>
+        <div style={{fontSize:10,color:"#66708A",lineHeight:1.45}}>
+          Session recordings, scheduling, and class discussions.
+        </div>
+        <div style={{display:"flex",gap:14,flexWrap:"wrap",marginTop:2}}>
+          <div>
+            <div style={labelStyle}>Email</div>
+            <div style={credStyle}>{studentEmail||"—"}</div>
+          </div>
+          <div>
+            <div style={labelStyle}>Password</div>
+            <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9AA3B8",fontStyle:"italic",lineHeight:1.4,maxWidth:180}}>You set this when you first signed in — reset on Wise if forgotten</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PortalShell({studentName, studentGrade, onSignOut, switcherSlot, children, impersonating, studentEmail}){
   return (
     <div data-portal="student" style={{minHeight:"100vh",background:"var(--paper)",padding:"28px 32px 80px"}}>
       {/* Session 18B: tutor/admin impersonation banner (read-only marker) */}
@@ -5933,6 +6001,10 @@ function PortalShell({studentName, studentGrade, onSignOut, switcherSlot, childr
             fontWeight:500,cursor:"pointer"
           }}>Sign out</button>
         </div>
+        {/* Session 18C: WellEd + Wise quick-access cards. Always shown.
+            Renders shared institutional password for WellEd, prompts
+            students to use their own Wise password. */}
+        {studentEmail && !impersonating && <StudentExternalLinksCard studentEmail={studentEmail}/>}
         {children}
       </div>
     </div>
