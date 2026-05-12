@@ -1190,12 +1190,41 @@ async function parseWelledReport(file){
   if(!window.pdfjsLib) throw new Error("pdf.js not loaded");
   const buf = await file.arrayBuffer();
   const pdf = await window.pdfjsLib.getDocument({data:buf}).promise;
+  // Session 18C v3: coordinate-aware text reconstruction. The previous
+  // naive `items.join(" ")` mangled two-column layouts (WellEd's
+  // Category Scores section lists R&W on the left, Math on the right
+  // — flat-joining produces "Craft and Structure Problem-Solving and
+  // Data Analysis ... 10/13 3/6" which the per-domain regex can't
+  // match). Now we sort items by (y desc, x asc), group items with
+  // close y into a single visual row, and produce one joined string
+  // per row — same approach the diagnostic parser uses.
   let fullText = "";
+  let xSortedText = "";  // also build a "left-column-first then right-column" pass
   for(let i=1;i<=pdf.numPages;i++){
     const page = await pdf.getPage(i);
     const tc = await page.getTextContent();
-    fullText += tc.items.map(it=>it.str).join(" ") + "\n";
+    const items = tc.items.map(it=>({s:it.str, x:it.transform[4], y:it.transform[5]}));
+    items.sort((a,b)=>(b.y-a.y)||(a.x-b.x));
+    let lastY=null, line=[];
+    const lines=[];
+    items.forEach(it=>{
+      if(lastY===null||Math.abs(it.y-lastY)>3){
+        if(line.length) lines.push(line.join(" ").trim());
+        line=[it.s]; lastY=it.y;
+      } else line.push(it.s);
+    });
+    if(line.length) lines.push(line.join(" ").trim());
+    fullText += "\n" + lines.join("\n");
+    // Second pass — items sorted strictly by x-then-y so a
+    // left-column-first read order is captured too. WellEd's Category
+    // Scores section places R&W on the left and Math on the right;
+    // without column-aware ordering the domain name and its N/M may
+    // be on different "visual rows" by y but still belong together.
+    const xItems = [...items].sort((a,b)=>(a.x-b.x)||(b.y-a.y));
+    xSortedText += "\n" + xItems.map(it=>it.s).join(" ");
   }
+  // Combined search corpus: regex tries each pass before giving up.
+  const textForSearch = fullText + "\n" + xSortedText;
   const result = {
     fileName:file.name, raw:fullText,
     testName:null, testNumber:null, testedOn:null,
@@ -1209,7 +1238,7 @@ async function parseWelledReport(file){
   };
 
   // Test name and number
-  const tnMatch = fullText.match(/Test name[:\s]*(.+?)(?:\n|Tested)/i);
+  const tnMatch = textForSearch.match(/Test name[:\s]*(.+?)(?:\n|Tested)/i);
   if(tnMatch){
     result.testName = tnMatch[1].trim();
     const numMatch = result.testName.match(/Practice Test\s*#?\s*(\d+)/i);
@@ -1217,13 +1246,13 @@ async function parseWelledReport(file){
   }
   // Fallback test-number detection — also scan body text for "Practice Test #N".
   if(result.testNumber == null){
-    const ptm = fullText.match(/Practice Test\s*#?\s*(\d+)/i);
+    const ptm = textForSearch.match(/Practice Test\s*#?\s*(\d+)/i);
     if(ptm) result.testNumber = parseInt(ptm[1]);
   }
   // Tested-on date — accept several labels + formats. Normalizes to YYYY-MM-DD.
   for(const label of ["Tested on", "Test date", "Date tested", "Taken on", "Date taken"]){
     let m = null;
-    try { m = fullText.match(new RegExp(label + "[:\\s]*([\\d\\/\\-]+|[A-Za-z]+\\s+\\d{1,2},?\\s+\\d{4})", "i")); }
+    try { m = textForSearch.match(new RegExp(label + "[:\\s]*([\\d\\/\\-]+|[A-Za-z]+\\s+\\d{1,2},?\\s+\\d{4})", "i")); }
     catch { m = null; }
     if(m){
       const norm = _normalizeReportDate(m[1]);
@@ -1233,13 +1262,13 @@ async function parseWelledReport(file){
   }
 
   // Total score
-  const totalMatch = fullText.match(/TOTAL SCORE\s+(\d{3,4})/i);
+  const totalMatch = textForSearch.match(/TOTAL\s*SCORE\s+(\d{3,4})/i);
   if(totalMatch) result.totalScore = parseInt(totalMatch[1]);
 
-  // Section scores
-  const rwMatch = fullText.match(/Reading and Writing\s+(\d{3})/i);
+  // Section scores — accept 'and' or '&'
+  const rwMatch = textForSearch.match(/Reading\s*(?:and|&)\s*Writing\s+(\d{3})/i);
   if(rwMatch) result.rwScore = parseInt(rwMatch[1]);
-  const mathMatch = fullText.match(/Math\s+(\d{3})/i);
+  const mathMatch = textForSearch.match(/\bMath\s+(\d{3})\b/i);
   if(mathMatch) result.mathScore = parseInt(mathMatch[1]);
 
   // Determine type
@@ -1250,11 +1279,11 @@ async function parseWelledReport(file){
   // Raw scores per module
   const modRx = /Module\s*(\d)\s*(?:\(([^)]+)\))?\s*:\s*(\d+)\s*\/\s*(\d+)/gi;
   let mm;
-  while((mm=modRx.exec(fullText))!==null){
+  while((mm=modRx.exec(textForSearch))!==null){
     const key = `Module ${mm[1]}${mm[2]?" ("+mm[2]+")":""}`;
     result.rawScores[key] = {correct:parseInt(mm[3]),total:parseInt(mm[4])};
   }
-  const totalRaw = fullText.match(/Total\s*:\s*(\d+)\s*\/\s*(\d+)/i);
+  const totalRaw = textForSearch.match(/Total\s*:\s*(\d+)\s*\/\s*(\d+)/i);
   if(totalRaw) result.rawScores["Total"] = {correct:parseInt(totalRaw[1]),total:parseInt(totalRaw[2])};
 
   // Session 18C v2: WellEd reports do NOT have subskill granularity that
@@ -1276,18 +1305,49 @@ async function parseWelledReport(file){
     ["Problem-Solving & Data Analysis",  "Math",              "problem[\\s\\-]*solving\\s*(?:and|&)\\s*data\\s*analysis"],
     ["Geometry & Trigonometry",          "Math",              "geometry\\s*(?:and|&)\\s*trigonometry"],
   ];
+  // Session 18C v3: domain extraction handles 3 layout variations:
+  //   1. "<Domain Name> <earn>/<poss>"   (single column, inline)
+  //   2. "<Domain Name>" ... "<earn>/<poss>"   (multi-row, same column)
+  //   3. Two-column layout where domain names cluster, then N/M values
+  //      cluster separately. The xSortedText pass catches this.
+  // We try the strictest pattern first, fall back to a "name followed
+  // by N/M anywhere within 80 chars" search.
   for(const [name, subject, srcFrag] of _WELLED_DOMAIN_MAP){
-    let m = null;
-    try { m = fullText.match(new RegExp(srcFrag + "\\s*(\\d+)\\s*\\/\\s*(\\d+)", "i")); }
-    catch { m = null; } // negative lookbehind may not be supported in older browsers; bail safely
-    if(m){
-      const earn = parseInt(m[1]);
-      const poss = parseInt(m[2]);
-      if(Number.isFinite(earn) && Number.isFinite(poss) && poss > 0){
-        result.domains.push({subject, name, earn, poss});
-      }
+    let earn = null, poss = null;
+    // Pattern A: direct adjacency in coordinate-sorted text
+    try {
+      const rxA = new RegExp(srcFrag + "\\s*(\\d+)\\s*\\/\\s*(\\d+)", "i");
+      const ma = textForSearch.match(rxA);
+      if(ma){ earn = parseInt(ma[1]); poss = parseInt(ma[2]); }
+    } catch { /* bail */ }
+    // Pattern B: name followed by N/M within an 80-char window (handles
+    // PDFs where progress-bar glyphs or column gaps inject noise).
+    if(earn == null){
+      try {
+        const rxB = new RegExp(srcFrag + "[\\s\\S]{0,80}?(\\d+)\\s*\\/\\s*(\\d+)", "i");
+        const mb = textForSearch.match(rxB);
+        if(mb){ earn = parseInt(mb[1]); poss = parseInt(mb[2]); }
+      } catch { /* bail */ }
+    }
+    if(earn != null && poss != null && Number.isFinite(earn) && Number.isFinite(poss) && poss > 0 && poss <= 30){
+      // Sanity cap: domains have at most ~20 questions; anything bigger
+      // is almost certainly a false positive grab from a section total.
+      result.domains.push({subject, name, earn, poss});
     }
   }
+  // Debug logging — surface what was parsed so failed extractions are
+  // diagnosable from the console without re-running the file.
+  console.log("[WellEd Parser]", {
+    file: file.name,
+    testNumber: result.testNumber,
+    testedOn: result.testedOn,
+    type: result.type,
+    totalScore: result.totalScore,
+    rwScore: result.rwScore,
+    mathScore: result.mathScore,
+    domainsFound: result.domains.length,
+    domains: result.domains.map(d=>`${d.name} ${d.earn}/${d.poss}`),
+  });
   return result;
 }
 
@@ -3821,7 +3881,16 @@ function AppInner({authUser, onSignOut, currentUserEntry}){
   const addScore=()=>{if(!sfm.testType||!sfm.score)return;const entry={...sfm,id:uid()};const upd=students.map(st=>st.id===profile.id?{...st,scores:[...(st.scores||[]),entry]}:st);setStudents(upd);setProfile(upd.find(st=>st.id===profile.id));setSfm({date:todayStr(),testType:"",score:"",maxScore:"",notes:""});showToast("Score recorded");};
   // Soft-delete — items stay in the array with deleted:true and deletedAt,
   // filtered out of display via live(). Restore + hard-delete live in the Trash tab.
-  const delScore=(sid)=>{const upd=students.map(st=>st.id===profile.id?{...st,scores:(st.scores||[]).map(sc=>sc.id===sid?softDel(sc):sc)}:st);setStudents(upd);setProfile(upd.find(st=>st.id===profile.id));showToast("Score moved to Trash");};
+  const delScore=(sid)=>{
+    if(!profile) return;
+    const sc = (profile.scores||[]).find(s=>s.id===sid);
+    const label = sc ? (sc.testType || sc.date || "this score") : "this score";
+    if(!confirm(`Remove "${label}"? (Soft-delete — recoverable from Firestore.)`)) return;
+    const upd=students.map(st=>st.id===profile.id?{...st,scores:(st.scores||[]).map(sc=>sc.id===sid?softDel(sc):sc)}:st);
+    setStudents(upd);
+    setProfile(upd.find(st=>st.id===profile.id));
+    showToast(`Removed: ${label}`);
+  };
   // Standalone WellEd Domain score logs — continuous tracking per subdomain outside of assignment history
   const addWelledLog=(log)=>{
     const entry = {...log,id:uid()};
@@ -4040,12 +4109,41 @@ function AppInner({authUser, onSignOut, currentUserEntry}){
   /* ============ DIAGNOSTIC UPLOAD ============ */
   const handleDiagUpload = async(files)=>{
     if(!files||!files.length) return;
+    // Session 18C v3: prompt for the actual test date instead of using
+    // today's upload date. ZipGrade PDFs don't carry the test-taken date
+    // in a parseable format, so we ask the tutor. parsedAt then reflects
+    // when the student actually took the diagnostic, which is what
+    // every chart wants for sorting and time-point #1 placement.
+    const defaultDate = todayStr();
+    const dateInput = window.prompt(
+      "Date this diagnostic was TAKEN (not uploaded):\nFormat: YYYY-MM-DD",
+      defaultDate,
+    );
+    if(dateInput === null) return; // user cancelled
+    // Validate / normalize
+    let testDate = (dateInput||"").trim();
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(testDate)){
+      const try1 = testDate.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+      if(try1){
+        const yr = try1[3].length===2 ? `20${try1[3]}` : try1[3];
+        testDate = `${yr}-${String(try1[1]).padStart(2,"0")}-${String(try1[2]).padStart(2,"0")}`;
+      } else if(testDate === "") {
+        testDate = defaultDate;
+      } else {
+        alert(`Couldn't parse date "${dateInput}". Using today instead.`);
+        testDate = defaultDate;
+      }
+    }
     setParsing(true);
     try{
       const results=[];
       for(const f of files){
         try{
           const r = await parseDiagnosticPdf(f);
+          // Override parsedAt with the user-supplied test date so it
+          // anchors chart sorting + appears in legends as the baseline.
+          r.parsedAt = testDate;
+          r.testedOn = testDate;
           results.push(r);
         }catch(err){
           console.error("parse error",f.name,err);
@@ -4061,7 +4159,7 @@ function AppInner({authUser, onSignOut, currentUserEntry}){
         });
         setStudents(upd);
         setProfile(upd.find(st=>st.id===profile.id));
-        showToast(`Parsed ${results.length} diagnostic report${results.length!==1?"s":""}`);
+        showToast(`Parsed ${results.length} diagnostic${results.length!==1?"s":""} (test date: ${testDate})`);
       }
     } finally { setParsing(false); }
   };
@@ -8649,13 +8747,15 @@ function ScoreHistoryPanel({p, sfm, setSfm, addScore, delScore, addWelledLog, de
           </div>}
 
           {/* SECTION 4: Manual entries table */}
-          {(p.scores||[]).length>0 && <div style={{...CARD,padding:20}}>
+          {(p.scores||[]).filter(sc=>!sc.deleted).length>0 && <div style={{...CARD,padding:20}}>
             <SH>Manual Entry Log</SH>
             <div style={{overflowX:"auto"}}>
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
                 <thead><tr>{["Date","Test","Score","Max","%","Notes",""].map(h=><th key={h} style={{padding:"10px 12px",textAlign:"left",fontFamily:"'IBM Plex Mono',monospace",fontSize:9,color:"#66708A",fontWeight:600,letterSpacing:1.2,textTransform:"uppercase",borderBottom:"1px solid rgba(15,26,46,.15)"}}>{h}</th>)}</tr></thead>
                 <tbody>
-                  {[...p.scores].sort((a,b)=>b.date.localeCompare(a.date)).map((sc,i,arr)=>{
+                  {/* Session 18C v3: filter deleted entries — previously
+                      ✕ button soft-deleted but the row stayed visible. */}
+                  {[...p.scores].filter(sc=>!sc.deleted).sort((a,b)=>b.date.localeCompare(a.date)).map((sc,i,arr)=>{
                     const pct=sc.maxScore?Math.round((Number(sc.score)/Number(sc.maxScore))*100):null;
                     return(
                       <tr key={sc.id} style={{borderBottom:i===arr.length-1?"none":"1px solid rgba(15,26,46,.06)"}}>
@@ -8738,7 +8838,10 @@ function allScoreDataPoints(student, submissions = []){
     });
   }
   // 2. Manual scores + WellEd report-parsed scores
-  (student.scores||[]).forEach(sc=>{
+  // Session 18C v3: filter soft-deleted entries so removed scores
+  // actually disappear from charts + legend (previously delScore
+  // marked deleted:true but allScoreDataPoints still processed them).
+  (student.scores||[]).filter(sc=>!sc.deleted).forEach(sc=>{
     // ── WellEd report → section + domain time-points (Session 18C v2) ────
     // WellEd reports are scored practice tests. Their data flows into:
     //   - The diagnostic-shared "R&W Section" / "Math Section" / "Total
