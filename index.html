@@ -1261,15 +1261,98 @@ async function parseWelledReport(file){
     }
   }
 
-  // Total score
-  const totalMatch = textForSearch.match(/TOTAL\s*SCORE\s+(\d{3,4})/i);
-  if(totalMatch) result.totalScore = parseInt(totalMatch[1]);
+  // Session 18C v4: STRICT score extraction with validation.
+  //
+  // Bug being fixed: prior regex like /\bMath\s+(\d{3})\b/i was too
+  // greedy — "Math" appears many times in a WellEd report ("Math",
+  // "Math Section", "Math Section Score", "Advanced Math", "Math
+  // Module 1") and the first 3-digit number after ANY "Math" got
+  // picked up. Same for "Reading and Writing". Resulted in spurious
+  // 200 or 800 readings (200 = min scale floor that shows up in axis
+  // labels, 800 = max that shows up in /800 denominators).
+  //
+  // Strategy:
+  //   1. Find the "TOTAL SCORE" anchor — that's the section-scores
+  //      panel header. Score grid lives within ~400 chars after it.
+  //   2. Within that window, find the THREE largest 3-digit numbers
+  //      in valid score ranges (sections in [200,800], total in
+  //      [400,1600]) by their proximity to known labels.
+  //   3. Validate every extracted value. Reject anything out of range
+  //      or that looks like a denominator (preceded by '/' or
+  //      followed by '/800', '/1600').
+  //   4. Cross-check: if all three are present, rw+math should ≈ total.
+  //      If not, prefer the total + one section (the more confident
+  //      pair).
 
-  // Section scores — accept 'and' or '&'
-  const rwMatch = textForSearch.match(/Reading\s*(?:and|&)\s*Writing\s+(\d{3})/i);
-  if(rwMatch) result.rwScore = parseInt(rwMatch[1]);
-  const mathMatch = textForSearch.match(/\bMath\s+(\d{3})\b/i);
-  if(mathMatch) result.mathScore = parseInt(mathMatch[1]);
+  const _IS_VALID_SECTION = (n) => Number.isFinite(n) && n >= 200 && n <= 800;
+  const _IS_VALID_TOTAL = (n) => Number.isFinite(n) && n >= 400 && n <= 1600;
+
+  // Helper: extract a candidate score from a regex match while rejecting
+  // false-positive contexts (numbers that are part of /800 or 200-800).
+  function _grabScore(text, namePattern, validate){
+    // Match: <label><sep><N> but NOT <label>/N (denominator) and NOT
+    // <label> 200-800 (a range like "scaled 200-800").
+    let rx;
+    try { rx = new RegExp(namePattern + "[\\s:]*(\\d{3,4})\\b(?!\\s*[-/]\\s*\\d)", "i"); }
+    catch { return null; }
+    const m = text.match(rx);
+    if(!m) return null;
+    const n = parseInt(m[1]);
+    return validate(n) ? n : null;
+  }
+
+  // Anchor: find the section-scores block. Most WellEd reports have
+  // "TOTAL SCORE" as the header. Slice ~500 chars from there.
+  const anchorMatch = textForSearch.match(/TOTAL\s*SCORE/i);
+  const scoreBlock = anchorMatch
+    ? textForSearch.slice(anchorMatch.index, anchorMatch.index + 600)
+    : textForSearch.slice(0, 1200); // fallback: search the top of the doc
+
+  // 1. Total — anchor to "TOTAL SCORE" specifically.
+  const totalGrabbed = _grabScore(scoreBlock, "TOTAL\\s*SCORE", _IS_VALID_TOTAL);
+  if(totalGrabbed != null) result.totalScore = totalGrabbed;
+
+  // 2. R&W section. Try labels in order of specificity.
+  for(const lbl of [
+    "Reading\\s*(?:and|&)\\s*Writing\\s*Section",  // most specific
+    "Reading\\s*(?:and|&)\\s*Writing",
+    "R\\s*&?\\s*W\\s*Section",
+  ]){
+    const n = _grabScore(scoreBlock, lbl, _IS_VALID_SECTION);
+    if(n != null){ result.rwScore = n; break; }
+  }
+
+  // 3. Math section. The word "Math" alone is too generic — anchor it
+  // to "Math Section" or require it to appear AFTER R&W in the grid.
+  for(const lbl of [
+    "Math\\s*Section",
+    "(?:^|\\n)\\s*Math\\b",
+  ]){
+    const n = _grabScore(scoreBlock, lbl, _IS_VALID_SECTION);
+    if(n != null){ result.mathScore = n; break; }
+  }
+
+  // 4. Cross-validation: if total and both sections are present,
+  // rw+math should be within 20 points of total (small differences
+  // happen due to the lookup-table conversion; >20 means something's
+  // wrong with the extraction).
+  if(result.totalScore && result.rwScore && result.mathScore){
+    const diff = Math.abs(result.totalScore - (result.rwScore + result.mathScore));
+    if(diff > 20){
+      console.warn("[WellEd Parser] score cross-check failed", {
+        total: result.totalScore, rw: result.rwScore, math: result.mathScore, diff,
+      });
+      // Drop the section that's most suspicious. The total is usually
+      // most reliable because the "TOTAL SCORE" label is unambiguous.
+      const expectedRw = result.totalScore - result.mathScore;
+      const expectedMath = result.totalScore - result.rwScore;
+      if(_IS_VALID_SECTION(expectedRw) && Math.abs(expectedRw - result.rwScore) > 30){
+        result.rwScore = null;
+      } else if(_IS_VALID_SECTION(expectedMath) && Math.abs(expectedMath - result.mathScore) > 30){
+        result.mathScore = null;
+      }
+    }
+  }
 
   // Determine type
   if(result.rwScore && !result.mathScore) result.type = "rw-only";
@@ -3326,33 +3409,28 @@ function AppInner({authUser, onSignOut, currentUserEntry}){
     return ()=>{ unsubStudents(); unsubBlob(); };
   }, []);
 
-  // ── Session 18C: Consultation Student seed (create-only) ──
-  // Seeds the synthetic demo profile ONLY if missing. Previously we
-  // auto-reseeded on version bump, but that overwrites any edits the
-  // tutor made while demoing, AND triggered listener fan-out that
-  // could clobber other in-progress inputs. Manual reset is provided
-  // via the "Reset demo data" button in Students-tab admin actions
-  // (added in this same commit). Once seeded per session,
-  // _consultationSeeded prevents the effect from re-running.
-  const _consultationSeeded = useRef(false);
+  // ── Session 18C v4: Consultation Student DISABLED + auto-cleanup ──
+  // Per Aidan: "remove consultation student profile for now. we will
+  // just use one of our current students as example."
+  //
+  // Seed effect removed. On mount, if the synthetic doc exists in the
+  // roster we permanently delete it (one-shot). Manual recreation would
+  // require re-enabling this effect.
+  const _consultationCleanedUp = useRef(false);
   useEffect(()=>{
-    if(_consultationSeeded.current) return;
-    if(cloudStatus !== "synced") return; // wait for first listener tick
+    if(_consultationCleanedUp.current) return;
+    if(cloudStatus !== "synced") return;
     const existing = students.find(st => st && st.id === CONSULTATION_STUDENT_ID);
-    if(existing) {
-      _consultationSeeded.current = true;
+    if(!existing){
+      _consultationCleanedUp.current = true;
       return;
     }
     const col = studentsCollection();
     if(!col) return;
-    _consultationSeeded.current = true; // mark before async to dedupe
-    const data = makeConsultationStudent();
-    col.doc(CONSULTATION_STUDENT_ID).set({...data, id: CONSULTATION_STUDENT_ID, _dataVersion: CONSULTATION_DATA_VERSION})
-      .then(()=> console.log(`[consultation] seeded v${CONSULTATION_DATA_VERSION}`))
-      .catch((e)=> {
-        _consultationSeeded.current = false; // allow retry next mount
-        console.warn("[consultation] seed failed:", e);
-      });
+    _consultationCleanedUp.current = true;
+    col.doc(CONSULTATION_STUDENT_ID).delete()
+      .then(()=> console.log("[consultation] cleanup: synthetic profile deleted"))
+      .catch(e=> console.warn("[consultation] cleanup failed:", e));
   }, [students, cloudStatus]);
 
   // ── Write students: per-doc batch to /students, dual-write to blob ──
@@ -3885,11 +3963,22 @@ function AppInner({authUser, onSignOut, currentUserEntry}){
     if(!profile) return;
     const sc = (profile.scores||[]).find(s=>s.id===sid);
     const label = sc ? (sc.testType || sc.date || "this score") : "this score";
-    if(!confirm(`Remove "${label}"? (Soft-delete — recoverable from Firestore.)`)) return;
-    const upd=students.map(st=>st.id===profile.id?{...st,scores:(st.scores||[]).map(sc=>sc.id===sid?softDel(sc):sc)}:st);
+    // Session 18C v4: offer hard delete option. Prompt asks; ENTER=soft,
+    // type 'HARD' = remove from the array entirely (no recovery).
+    const choice = window.prompt(
+      `Remove "${label}"?\n\nEnter to SOFT delete (recoverable, won't show in charts).\nType HARD then Enter to permanently delete (cannot be undone).\nCancel to keep.`,
+      ""
+    );
+    if(choice === null) return;
+    const hard = choice.trim().toUpperCase() === "HARD";
+    const upd = students.map(st => {
+      if(st.id !== profile.id) return st;
+      if(hard) return {...st, scores: (st.scores||[]).filter(s=>s.id!==sid)};
+      return {...st, scores: (st.scores||[]).map(s=>s.id===sid?softDel(s):s)};
+    });
     setStudents(upd);
     setProfile(upd.find(st=>st.id===profile.id));
-    showToast(`Removed: ${label}`);
+    showToast(`${hard?"Permanently deleted":"Removed"}: ${label}`);
   };
   // Standalone WellEd Domain score logs — continuous tracking per subdomain outside of assignment history
   const addWelledLog=(log)=>{
@@ -4182,6 +4271,48 @@ function AppInner({authUser, onSignOut, currentUserEntry}){
       for(const f of files){
         try{
           const r = await parseWelledReport(f);
+          // Session 18C v4: confirmation dialog before saving. Lets
+          // tutor verify the parser's output and override any number
+          // the parser got wrong. The parser is heuristic + WellEd
+          // PDF layouts vary, so a manual review checkpoint is the
+          // safety net.
+          const review = window.prompt(
+            [
+              `WellEd report parsed — please review before saving.`,
+              `File: ${f.name}`,
+              `Test #: ${r.testNumber||"?"}`,
+              `Tested on: ${r.testedOn||"unknown"}`,
+              `Type: ${r.type}`,
+              ``,
+              `Scores (edit any cell, comma-separated, leave blank to keep):`,
+              `  total=${r.totalScore||""}  rw=${r.rwScore||""}  math=${r.mathScore||""}`,
+              ``,
+              `Domains found: ${r.domains.length}/8`,
+              ``,
+              `OK to save with these values? (Cancel to skip this file.)`,
+              `To override, type: testDate,total,rw,math`,
+              `Example: 2026-03-03,1230,630,600`,
+              `Or leave blank and click OK to accept the parsed values.`,
+            ].join("\n"),
+            "" // empty default → accept as-is
+          );
+          if(review === null) {
+            showToast(`Skipped: ${f.name}`);
+            continue;
+          }
+          // Apply override if user typed values
+          if(review.trim()){
+            const parts = review.split(",").map(s=>s.trim());
+            const [td, t, rw, m] = parts;
+            if(td && /^\d{4}-\d{2}-\d{2}$/.test(td)) r.testedOn = td;
+            const tnum = parseInt(t);  if(Number.isFinite(tnum)) r.totalScore = tnum;
+            const rwnum = parseInt(rw); if(Number.isFinite(rwnum)) r.rwScore = rwnum;
+            const mnum = parseInt(m);  if(Number.isFinite(mnum)) r.mathScore = mnum;
+            // Recompute type based on what's now present
+            if(r.rwScore && !r.mathScore) r.type = "rw-only";
+            else if(r.mathScore && !r.rwScore) r.type = "math-only";
+            else r.type = "full";
+          }
           // Session 18C v2: build a score entry whose top-line max
           // reflects the actual test scope. Full reports are /1600;
           // section-only reports are /800. The aggregator
@@ -6308,7 +6439,34 @@ function ParentPortal({onSignOut, currentUserEntry}){
 }
 
 function PortalTrackingTab({student, submissions}){
-  // Session 18A: graded submissions feed in as time-points (Gap #2 fix).
+  // Session 18C v4: replace the simplified table view with the full
+  // tutor-side ScoreHistoryPanel in readOnly mode. Same domain cards,
+  // same charts, same TimelineLegend below every chart. Per Aidan:
+  // "you should be replicating the score views that we have on tutors
+  // side, not some BS like what is seen here."
+  //
+  // readOnly hides: quick-add forms, manual entry log table, the
+  // WellEd report upload card. Student sees identical visualizations
+  // but can't edit data. This makes the student dashboard a true
+  // mirror of what their tutor sees on the Score History tab.
+  return (
+    <ScoreHistoryPanel
+      p={student}
+      readOnly={true}
+      // unused in readOnly mode but kept for prop-shape stability
+      sfm={{date:"",testType:"",score:"",max:"",notes:""}}
+      setSfm={()=>{}}
+      addScore={()=>{}}
+      delScore={()=>{}}
+      addWelledLog={()=>{}}
+      delWelledLog={()=>{}}
+    />
+  );
+}
+
+// Kept for reference / not currently rendered. The old portal tracking
+// tab used this simpler view; we superseded it with ScoreHistoryPanel.
+function _LegacyPortalTrackingTab({student, submissions}){
   const pts = allScoreDataPoints(student, submissions);
   const diagProfile = (student.diagnostics||[]).length ? buildDiagnosticProfile(student.diagnostics) : null;
   const welled = (student.welledLogs||[]).filter(l=>!l.deleted);
@@ -8392,7 +8550,7 @@ function TutorSubmissionRow({studentId, submission}){
 }
 
 /* ============ SCORE HISTORY PANEL (inside StudentProfile) ============ */
-function ScoreHistoryPanel({p, sfm, setSfm, addScore, delScore, addWelledLog, delWelledLog, handleWelledUpload, welledInputRef}){
+function ScoreHistoryPanel({p, sfm, setSfm, addScore, delScore, addWelledLog, delWelledLog, handleWelledUpload, welledInputRef, readOnly}){
   // Session 18A: submissions feed graded-submission time-points into the
   // score-tracking pipeline. Wired through useTutorSubmissions which is
   // a live snapshot — the panel updates the moment a student submits.
@@ -8604,7 +8762,7 @@ function ScoreHistoryPanel({p, sfm, setSfm, addScore, delScore, addWelledLog, de
           (which measure baseline subskill mastery); WellEd reports are
           scored practice tests that produce per-section + per-subskill
           time-points. */}
-      {handleWelledUpload && welledInputRef && (
+      {!readOnly && handleWelledUpload && welledInputRef && (
         <div style={{...CARD,marginBottom:16,padding:18,borderLeft:`3px solid #6E3F12`}}>
           <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:14,flexWrap:"wrap"}}>
             <div style={{flex:"1 1 320px"}}>
@@ -8622,9 +8780,9 @@ function ScoreHistoryPanel({p, sfm, setSfm, addScore, delScore, addWelledLog, de
           </div>
         </div>
       )}
-      <div style={{display:"grid",gridTemplateColumns:"340px 1fr",gap:20}}>
-        {/* ========== LEFT: Quick Add ========== */}
-        <div style={{display:"flex",flexDirection:"column",gap:16}}>
+      <div style={{display:"grid",gridTemplateColumns: readOnly ? "1fr" : "340px 1fr",gap:20}}>
+        {/* ========== LEFT: Quick Add — hidden on student/portal side ========== */}
+        {!readOnly && <div style={{display:"flex",flexDirection:"column",gap:16}}>
           {/* WellEd domain logger */}
           <div style={{...CARD,padding:20,borderLeft:`3px solid ${B2}`}}>
             <SH>Log WellEd Domain Score</SH>
@@ -8696,7 +8854,7 @@ function ScoreHistoryPanel({p, sfm, setSfm, addScore, delScore, addWelledLog, de
           </div>
 
           <div style={{fontSize:11,color:"#66708A",lineHeight:1.55,padding:14,background:"#F3EEE4",borderRadius:3,border:"1px solid rgba(15,26,46,.06)",fontStyle:"italic",fontFamily:"'Fraunces',Georgia,serif"}}>Scores from Assignment History and diagnostic PDFs are automatically aggregated here. WellEd logs and manual scores persist independently.</div>
-        </div>
+        </div>}
 
         {/* ========== RIGHT: Aggregated view ========== */}
         <div style={{display:"flex",flexDirection:"column",gap:20}}>
@@ -8747,7 +8905,7 @@ function ScoreHistoryPanel({p, sfm, setSfm, addScore, delScore, addWelledLog, de
           </div>}
 
           {/* SECTION 4: Manual entries table */}
-          {(p.scores||[]).filter(sc=>!sc.deleted).length>0 && <div style={{...CARD,padding:20}}>
+          {!readOnly && (p.scores||[]).filter(sc=>!sc.deleted).length>0 && <div style={{...CARD,padding:20}}>
             <SH>Manual Entry Log</SH>
             <div style={{overflowX:"auto"}}>
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
