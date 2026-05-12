@@ -824,6 +824,10 @@ function parseWiseCsv(text){
 // and skip creation. Wise reconcile also skips this id explicitly.
 
 const CONSULTATION_STUDENT_ID = "__consultation__";
+// Bump this when makeConsultationStudent changes meaningfully. The seed
+// effect compares it against the doc's stored marker and overwrites if
+// it's stale. Lets us refresh synthetic data without manual deletion.
+const CONSULTATION_DATA_VERSION = 2;
 
 function makeConsultationStudent() {
   // Helper to add days/months to a date string YYYY-MM-DD.
@@ -836,7 +840,10 @@ function makeConsultationStudent() {
   // Synthetic timeline: Sep 2025 → Apr 2026, ~8 months of activity.
   const START = "2025-09-01";
 
-  // WellEd Domain log entries — at least 3 per domain showing growth.
+  // WellEd Domain log entries — at least 3 per domain showing realistic
+  // progression. NOT monotonically up — students plateau, dip on hard
+  // material, then rebound. Pattern is +up, ±flat-or-dip, +up so the net
+  // trend is positive but variance looks like a real human curve.
   const welledLogs = [];
   let logIdx = 0;
   const pushLog = (subject, domain, difficulty, score, qs, daysAfterStart) => {
@@ -851,34 +858,45 @@ function makeConsultationStudent() {
     });
   };
 
-  // R&W domains (out of 27)
-  pushLog("Reading & Writing", "Information & Ideas",        "easy",   15, 27,  14);
-  pushLog("Reading & Writing", "Information & Ideas",        "medium", 19, 27,  60);
-  pushLog("Reading & Writing", "Information & Ideas",        "hard",   22, 27, 140);
+  // R&W domains (out of 27). Notice the dips at medium-tier (introduces
+  // harder material, slight regression before mastery on hard).
+  pushLog("Reading & Writing", "Information & Ideas",        "easy",   15, 27,  14);  // baseline
+  pushLog("Reading & Writing", "Information & Ideas",        "medium", 17, 27,  60);  // small gain
+  pushLog("Reading & Writing", "Information & Ideas",        "hard",   15, 27, 105);  // dip on hard
+  pushLog("Reading & Writing", "Information & Ideas",        "hard",   22, 27, 165);  // rebound
   pushLog("Reading & Writing", "Craft & Structure",          "easy",   17, 27,  21);
-  pushLog("Reading & Writing", "Craft & Structure",          "medium", 20, 27,  75);
-  pushLog("Reading & Writing", "Craft & Structure",          "hard",   23, 27, 155);
-  pushLog("Reading & Writing", "Expression of Ideas",        "easy",   16, 27,  28);
-  pushLog("Reading & Writing", "Expression of Ideas",        "medium", 18, 27,  90);
+  pushLog("Reading & Writing", "Craft & Structure",          "medium", 21, 27,  75);  // big gain
+  pushLog("Reading & Writing", "Craft & Structure",          "medium", 19, 27, 120);  // plateau/dip
+  pushLog("Reading & Writing", "Craft & Structure",          "hard",   23, 27, 180);
+  pushLog("Reading & Writing", "Expression of Ideas",        "easy",   18, 27,  28);
+  pushLog("Reading & Writing", "Expression of Ideas",        "medium", 16, 27,  85);  // dip — tricky transitions
   pushLog("Reading & Writing", "Expression of Ideas",        "hard",   21, 27, 170);
-  pushLog("Reading & Writing", "Standard English Conventions","easy",  19, 27,  35);
-  pushLog("Reading & Writing", "Standard English Conventions","medium",22, 27, 105);
-  pushLog("Reading & Writing", "Standard English Conventions","hard",  25, 27, 185);
-  // Math domains (out of 22)
-  pushLog("Math", "Algebra",                         "easy",   14, 22,  18);
-  pushLog("Math", "Algebra",                         "medium", 17, 22,  72);
-  pushLog("Math", "Algebra",                         "hard",   19, 22, 150);
-  pushLog("Math", "Advanced Math",                   "easy",   13, 22,  24);
-  pushLog("Math", "Advanced Math",                   "medium", 16, 22,  84);
-  pushLog("Math", "Advanced Math",                   "hard",   18, 22, 162);
-  pushLog("Math", "Problem-Solving & Data Analysis", "easy",   15, 22,  31);
-  pushLog("Math", "Problem-Solving & Data Analysis", "hard",   18, 22, 110);
+  pushLog("Reading & Writing", "Standard English Conventions","easy",  20, 27,  35);  // strong baseline
+  pushLog("Reading & Writing", "Standard English Conventions","medium",22, 27,  98);
+  pushLog("Reading & Writing", "Standard English Conventions","hard",  21, 27, 145);  // slight regress
+  pushLog("Reading & Writing", "Standard English Conventions","hard",  25, 27, 195);
+
+  // Math domains (out of 22). Same pattern.
+  pushLog("Math", "Algebra",                         "easy",   15, 22,  18);
+  pushLog("Math", "Algebra",                         "medium", 14, 22,  68);  // initial dip
+  pushLog("Math", "Algebra",                         "medium", 18, 22, 115);  // catches up
+  pushLog("Math", "Algebra",                         "hard",   19, 22, 175);
+  pushLog("Math", "Advanced Math",                   "easy",   12, 22,  24);  // weakest start
+  pushLog("Math", "Advanced Math",                   "easy",   16, 22,  72);
+  pushLog("Math", "Advanced Math",                   "medium", 14, 22, 130);  // setback on quadratics
+  pushLog("Math", "Advanced Math",                   "hard",   18, 22, 188);
+  pushLog("Math", "Problem-Solving & Data Analysis", "easy",   16, 22,  31);
+  pushLog("Math", "Problem-Solving & Data Analysis", "hard",   17, 22, 110);
   pushLog("Math", "Problem-Solving & Data Analysis", "hard",   20, 22, 178);
   pushLog("Math", "Geometry & Trigonometry",         "easy",   13, 22,  38);
-  pushLog("Math", "Geometry & Trigonometry",         "hard",   16, 22, 118);
+  pushLog("Math", "Geometry & Trigonometry",         "easy",   17, 22,  92);
+  pushLog("Math", "Geometry & Trigonometry",         "hard",   14, 22, 140);  // dip on trig
   pushLog("Math", "Geometry & Trigonometry",         "hard",   19, 22, 192);
 
-  // Practice exam scores — diagnostic + two follow-ups showing growth.
+  // Practice exam scores — diagnostic + multiple checkpoints with
+  // realistic ups/downs but net positive trend. Total goes 1050 → 1090 →
+  // 1080 (dip) → 1140 → 1170 → 1260 (final). Each section also moves
+  // independently — math regresses slightly mid-program before rebounding.
   const scores = [
     {
       id: "consult_score_1",
@@ -889,27 +907,57 @@ function makeConsultationStudent() {
       rwScore: 540,
       mathScore: 510,
       isDiagnostic: true,
-      notes: "Baseline practice exam.",
+      notes: "Baseline practice exam (no prep yet).",
     },
     {
       id: "consult_score_2",
-      date: dayShift(START, 100),
+      date: dayShift(START, 45),
+      testType: "WellEd Full — Practice Test 2",
+      score: 1090,
+      maxScore: 1600,
+      rwScore: 560,
+      mathScore: 530,
+      notes: "First post-prep test — modest gain.",
+    },
+    {
+      id: "consult_score_3",
+      date: dayShift(START, 95),
+      testType: "BlueBook Full — Practice Test 2",
+      score: 1080,
+      maxScore: 1600,
+      rwScore: 570,
+      mathScore: 510,
+      notes: "Math regressed under timed conditions; R&W still climbing.",
+    },
+    {
+      id: "consult_score_4",
+      date: dayShift(START, 130),
       testType: "WellEd Full — Practice Test 5",
       score: 1140,
       maxScore: 1600,
       rwScore: 580,
       mathScore: 560,
-      notes: "Mid-program checkpoint, ~90 points up.",
+      notes: "Math recovers after Advanced Math drills.",
     },
     {
-      id: "consult_score_3",
-      date: dayShift(START, 200),
+      id: "consult_score_5",
+      date: dayShift(START, 165),
+      testType: "BlueBook Full — Practice Test 4",
+      score: 1170,
+      maxScore: 1600,
+      rwScore: 600,
+      mathScore: 570,
+      notes: "Solid week. R&W now consistently 600+.",
+    },
+    {
+      id: "consult_score_6",
+      date: dayShift(START, 210),
       testType: "BlueBook Full — Practice Test 3",
       score: 1260,
       maxScore: 1600,
       rwScore: 640,
       mathScore: 620,
-      notes: "Late-program practice; 210 pts above baseline.",
+      notes: "Final pre-test practice. +210 from baseline.",
     },
   ];
 
@@ -3119,29 +3167,32 @@ function AppInner({authUser, onSignOut, currentUserEntry}){
     return ()=>{ unsubStudents(); unsubBlob(); };
   }, []);
 
-  // ── Session 18C: Consultation Student seed ──────────────────────────────
-  // Once the students listener has hydrated, check if the consultation
-  // demo profile exists. If not, seed it. Idempotent: runs once per
-  // session, no-ops on subsequent loads. Any authorized tutor/admin can
-  // trigger creation — there's nothing tutor-specific about the data.
+  // ── Session 18C: Consultation Student seed (+ refresh on version bump) ──
+  // Seeds the synthetic demo profile if missing. Also rewrites it when
+  // CONSULTATION_DATA_VERSION advances past whatever's stored on the doc,
+  // so we can refine the demo data without manual cleanup. Once seeded
+  // per session, _consultationSeeded prevents loops.
   const _consultationSeeded = useRef(false);
   useEffect(()=>{
     if(_consultationSeeded.current) return;
     if(cloudStatus !== "synced") return; // wait for first listener tick
-    if(!students || students.length === 0) {
-      // Empty roster — listener fired but found no docs. Still seed so
-      // a brand-new project gets the demo profile.
-    }
-    if(students.find(st => st && st.id === CONSULTATION_STUDENT_ID)) {
-      _consultationSeeded.current = true;
-      return;
-    }
+    const existing = students.find(st => st && st.id === CONSULTATION_STUDENT_ID);
     const col = studentsCollection();
     if(!col) return;
+    // Already-seeded path: only rewrite if the stored data version is
+    // stale. This lets us refine synthetic data in subsequent commits
+    // without overwriting on every page load.
+    if(existing) {
+      const storedVer = Number(existing._dataVersion || 0);
+      if(storedVer >= CONSULTATION_DATA_VERSION) {
+        _consultationSeeded.current = true;
+        return;
+      }
+    }
     _consultationSeeded.current = true; // mark before async to dedupe
     const data = makeConsultationStudent();
-    col.doc(CONSULTATION_STUDENT_ID).set({...data, id: CONSULTATION_STUDENT_ID})
-      .then(()=> console.log("[consultation] seeded synthetic demo profile"))
+    col.doc(CONSULTATION_STUDENT_ID).set({...data, id: CONSULTATION_STUDENT_ID, _dataVersion: CONSULTATION_DATA_VERSION})
+      .then(()=> console.log(`[consultation] seeded v${CONSULTATION_DATA_VERSION}`))
       .catch((e)=> {
         _consultationSeeded.current = false; // allow retry next mount
         console.warn("[consultation] seed failed:", e);
@@ -5379,8 +5430,7 @@ function StudentProfile({p,setProfile,ptab,setPtab,paChk,setPaChk,paSubj,setPaSu
               <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                 <input ref={diagInputRef} type="file" multiple accept="application/pdf" onChange={e=>handleDiagUpload(e.target.files)} style={{display:"none"}}/>
                 <button onClick={()=>diagInputRef.current?.click()} style={{...mkBtn(B2,"#FAF7F2"),padding:"8px 16px",fontSize:11,fontWeight:600,letterSpacing:.3,textTransform:"uppercase"}}>Upload Diagnostic PDF</button>
-                <input ref={welledInputRef} type="file" multiple accept="application/pdf" onChange={e=>handleWelledUpload(e.target.files)} style={{display:"none"}}/>
-                <button onClick={()=>welledInputRef.current?.click()} style={{...mkBtn("transparent","#6E3F12"),border:"1px solid rgba(154,91,31,.4)",padding:"8px 16px",fontSize:11}}>Upload WellEd Report</button>
+                {/* Session 18C: WellEd report upload moved to Score History tab — different metric class. */}
                 {(p.diagnostics||[]).length>0&&<button onClick={clearDiagnostics} style={{...mkBtn("transparent","#8C2E2E"),border:"1px solid rgba(140,46,46,.3)",padding:"8px 14px",fontSize:11}}>Clear</button>}
               </div>
             </div>
@@ -5584,7 +5634,7 @@ function StudentProfile({p,setProfile,ptab,setPtab,paChk,setPaChk,paSubj,setPaSu
 
       {/* SCORE HISTORY (aggregated from all sources) */}
       {ptab==="scores"&&(
-        <ScoreHistoryPanel p={p} sfm={sfm} setSfm={setSfm} addScore={addScore} delScore={delScore} addWelledLog={addWelledLog} delWelledLog={delWelledLog}/>
+        <ScoreHistoryPanel p={p} sfm={sfm} setSfm={setSfm} addScore={addScore} delScore={delScore} addWelledLog={addWelledLog} delWelledLog={delWelledLog} handleWelledUpload={handleWelledUpload} welledInputRef={welledInputRef}/>
       )}
     </div>
   );
@@ -6016,6 +6066,11 @@ function PortalEmptyInline({copy}){
 }
 function PortalHistoryTab({student, studentId, currentUserEntry, deepLinkAssignmentId, submissions}){
   const [openAssignmentId, setOpenAssignmentId] = useState(null);
+  // Session 18A: per-worksheet click-through. When openWorksheetId is
+  // set, SubmissionEditor renders ONLY that worksheet; submitting it
+  // returns to the PSM detail list (openAssignmentId still set, but
+  // openWorksheetId clears) so the student can pick the next worksheet.
+  const [openWorksheetId, setOpenWorksheetId] = useState(null);
   const assignments = (student.assignments||[]).filter(a=>!a.deleted);
   // Session 15: build a quick {assignmentId → submission} map so each card
   // can render a done pill + auto-grade score in the header. If multiple
@@ -6046,16 +6101,35 @@ function PortalHistoryTab({student, studentId, currentUserEntry, deepLinkAssignm
     const asg = assignments.find(a => a.id === openAssignmentId);
     if(!asg){
       setOpenAssignmentId(null);
+      setOpenWorksheetId(null);
       return null;
     }
+    // Session 18A: drill-down state machine.
+    //   no openWorksheetId → render PSM detail (worksheet list with pills)
+    //   openWorksheetId set → render SubmissionEditor in single-worksheet
+    //                          mode for just that worksheet.
+    if(openWorksheetId){
+      return (
+        <SubmissionEditor
+          studentId={studentId}
+          assignment={asg}
+          focusWorksheetId={openWorksheetId}
+          readOnly={!canEdit || !!impersonating}
+          onClose={()=>setOpenWorksheetId(null)}
+        />
+      );
+    }
+    // PSM detail view — worksheet list with status pills + practice exam
+    // / WellEd domain rows for everything else assigned.
     return (
-      <SubmissionEditor
+      <AssignmentDetailView
+        student={student}
         studentId={studentId}
         assignment={asg}
-        // Session 18B: impersonation forces read-only regardless of
-        // assignment state, so tutors viewing as a student can't
-        // accidentally answer questions or hit submit.
-        readOnly={!canEdit || !!impersonating}
+        submissions={submissions}
+        canEdit={canEdit}
+        impersonating={impersonating}
+        onOpenWorksheet={(wsId)=>setOpenWorksheetId(wsId)}
         onClose={()=>setOpenAssignmentId(null)}
       />
     );
@@ -6647,11 +6721,149 @@ function renderMixedRow(i, value, onChange, isLocked){
   );
 }
 
+// Session 18A: PSM detail view. Shown when the student opens a PSM from
+// their history. Lists every worksheet in the PSM as a clickable card with
+// per-worksheet status (Not started / In progress / Submitted / Graded).
+// Clicking a card opens that worksheet's SubmissionEditor in single-WS
+// mode. Submitting one comes back here so the student sees what's left.
+function AssignmentDetailView({student, studentId, assignment, submissions, canEdit, impersonating, onOpenWorksheet, onClose}){
+  // Per-worksheet status is derived from two sources:
+  //   1. legacy submissions/{subId} — responses[] entries tagged by
+  //      worksheetId (the existing whole-PSM submission model).
+  //   2. assignments/{aid}/worksheetSubmissions/{wsId} — new per-WS docs
+  //      from the 18A wire-up (live for users with the flag enabled).
+  // We prefer the per-WS doc when it exists for a worksheet; fall back to
+  // the legacy submission's responses[] for any worksheet without one.
+  const perWs = useWorksheetSubmissions(studentId, assignment.id);
+  const legacy = (submissions || []).find(s => s && s.assignmentId === assignment.id) || null;
+
+  const worksheets = (assignment.worksheets || []).filter(w => !w.deleted);
+  const welledDomain = (assignment.welledDomain || []).filter(w => !w.deleted);
+  const practiceExams = (assignment.practiceExams || []).filter(e => !e.deleted);
+
+  // Compute one of: not-started | in-progress | submitted | graded
+  // per worksheet from whichever data source has the freshest info.
+  function statusFor(wsId){
+    const perDoc = perWs.byWorksheet[wsId];
+    if(perDoc){
+      if(typeof perDoc.scoreCorrect === "number") return { kind: "graded", score: `${perDoc.scoreCorrect} / ${perDoc.scoreTotal}` };
+      if(perDoc.status === "submitted") return { kind: "submitted" };
+      const hasAnyAnswer = (perDoc.responses || []).some(r => (r.studentAnswer || "").trim() !== "");
+      return hasAnyAnswer ? { kind: "in-progress" } : { kind: "not-started" };
+    }
+    if(legacy && legacy.status === "submitted"){
+      // Whole-PSM submission — every worksheet is "submitted" once the PSM
+      // is locked. Score is at the PSM level so we don't surface a per-WS
+      // score here; the student sees the overall grade banner inside the
+      // editor.
+      return { kind: "submitted" };
+    }
+    if(legacy && Array.isArray(legacy.responses)){
+      const has = legacy.responses.some(r => r && r.worksheetId === wsId && (r.studentAnswer || "").trim() !== "");
+      return has ? { kind: "in-progress" } : { kind: "not-started" };
+    }
+    return { kind: "not-started" };
+  }
+
+  const STATUS_STYLE = {
+    "not-started":  { bg: "transparent",  fg: "#66708A",  border: "rgba(15,26,46,.18)", label: "Not started"  },
+    "in-progress":  { bg: "#FFF1DE",      fg: "#9A5B1F",  border: "rgba(154,91,31,.4)", label: "In progress"  },
+    "submitted":    { bg: "#E9F0F6",      fg: "#003258",  border: "rgba(0,50,88,.35)",  label: "Submitted"    },
+    "graded":       { bg: "#E4F0E2",      fg: "#4C7A4C",  border: "rgba(76,122,76,.4)", label: "Graded"       },
+  };
+
+  // Roll-up progress for the header pill.
+  const statuses = worksheets.map(w => statusFor(w.id).kind);
+  const doneCount = statuses.filter(k => k === "submitted" || k === "graded").length;
+
+  return (
+    <div style={{...CARD, padding:"24px 22px"}}>
+      <button onClick={onClose} style={SUBMIT_EDITOR_BACK_BTN}>← Back to my assignments</button>
+      <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginTop:14,gap:12,flexWrap:"wrap"}}>
+        <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:24,fontWeight:600,color:"#0F1A2E",letterSpacing:-.2}}>
+          {assignment.date || assignment.dateAssigned || "Assignment"}
+        </div>
+        {worksheets.length > 0 && (
+          <span style={{...mkPill("transparent","#003258"),border:"1px solid rgba(0,50,88,.28)"}}>
+            {doneCount} / {worksheets.length} done
+          </span>
+        )}
+      </div>
+      <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#66708A",letterSpacing:.6,textTransform:"uppercase",marginTop:6,marginBottom:18}}>
+        Click a worksheet to answer it. Submit each one and come back here for the next.
+      </div>
+
+      {worksheets.length > 0 && (
+        <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:18}}>
+          {worksheets.map(w => {
+            const st = statusFor(w.id);
+            const sty = STATUS_STYLE[st.kind] || STATUS_STYLE["not-started"];
+            const isDone = st.kind === "submitted" || st.kind === "graded";
+            const ctaLabel = isDone ? "Review →" : "Answer →";
+            return (
+              <button
+                key={w.id}
+                onClick={() => onOpenWorksheet(w.id)}
+                disabled={!canEdit && !isDone}
+                style={{
+                  textAlign:"left",
+                  padding:"14px 16px",
+                  borderRadius:6,
+                  border:`1px solid ${sty.border}`,
+                  background:"#fff",
+                  cursor:"pointer",
+                  display:"flex",
+                  alignItems:"center",
+                  gap:14,
+                  flexWrap:"wrap",
+                  fontFamily:"inherit",
+                }}
+              >
+                <div style={{flex:"1 1 200px",minWidth:0}}>
+                  <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:15,color:"#0F1A2E",fontWeight:600,letterSpacing:-.1}}>
+                    {w.title || `${w.domain||""} — ${w.difficulty||""}`}
+                  </div>
+                  <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#66708A",marginTop:2}}>
+                    {w.subject||""}{w.domain?` · ${w.domain}`:""}{w.difficulty?` · ${w.difficulty}`:""}{w.evenOdd?` · ${w.evenOdd}`:""}
+                  </div>
+                </div>
+                <span style={{
+                  fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:600,
+                  letterSpacing:.6,textTransform:"uppercase",
+                  padding:"4px 10px",borderRadius:3,
+                  background:sty.bg, color:sty.fg, border:`1px solid ${sty.border}`,
+                  flexShrink:0,
+                }}>
+                  {st.kind === "graded" ? `Graded · ${st.score}` : sty.label}
+                </span>
+                <span style={{
+                  fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#0F1A2E",
+                  letterSpacing:.6,textTransform:"uppercase",fontWeight:600,flexShrink:0,
+                }}>{ctaLabel}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {(welledDomain.length > 0 || practiceExams.length > 0) && (
+        <div style={{padding:"12px 14px",background:"#FAF7F2",borderRadius:6,border:"1px solid rgba(15,26,46,.08)",fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#66708A",lineHeight:1.6}}>
+          This PSM also includes{" "}
+          {welledDomain.length > 0 && <span><strong>{welledDomain.length}</strong> WellEd domain practice{welledDomain.length===1?"":"s"}</span>}
+          {welledDomain.length > 0 && practiceExams.length > 0 && " and "}
+          {practiceExams.length > 0 && <span><strong>{practiceExams.length}</strong> practice exam{practiceExams.length===1?"":"s"}</span>}
+          {". Do those on WellEd / BlueBook — tutor logs the scores."}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Per-assignment submission entry. Drill-in from PortalHistoryTab. Parents
 // reach this in readOnly mode — never editable. Students in editable mode
 // autosave drafts to /students/{id}/submissions/{subId} on a 750ms debounce
 // and lock to "submitted" via a single write when they click Submit.
-function SubmissionEditor({studentId, assignment, readOnly, onClose}){
+function SubmissionEditor({studentId, assignment, readOnly, onClose, focusWorksheetId}){
   const {status, submission} = useSubmissionDraft(studentId, assignment.id);
   const {status: catalogStatus, catalog} = useWorksheetCatalog();
 
@@ -6663,9 +6875,12 @@ function SubmissionEditor({studentId, assignment, readOnly, onClose}){
   // assignment.worksheets to keep the array reference stable across renders,
   // which keeps catalogByWorksheetId and the seed effect from firing on every
   // render (which would infinite-loop via setAnswersByWorksheet).
+  //
+  // Session 18A: when focusWorksheetId is set (drill-down from PSM detail),
+  // filter to just that one worksheet so the student answers one at a time.
   const worksheetsStable = useMemo(()=>{
     const seen = new Set();
-    return (assignment.worksheets||[]).filter(w => !w.deleted).map((w, idx) => {
+    let list = (assignment.worksheets||[]).filter(w => !w.deleted).map((w, idx) => {
       let id = w.id;
       if(!id || seen.has(id)){
         const newId = `${id || "w"}-${idx}`;
@@ -6675,7 +6890,11 @@ function SubmissionEditor({studentId, assignment, readOnly, onClose}){
       seen.add(id);
       return {...w, id};
     });
-  }, [assignment.worksheets]);
+    if(focusWorksheetId){
+      list = list.filter(w => w.id === focusWorksheetId);
+    }
+    return list;
+  }, [assignment.worksheets, focusWorksheetId]);
 
   // Build catalogByWorksheetId once per catalog/worksheets change.
   const catalogByWorksheetId = useMemo(()=>{
@@ -6966,7 +7185,7 @@ function SubmissionEditor({studentId, assignment, readOnly, onClose}){
 
   return (
     <div style={{...CARD, padding:"24px 22px"}}>
-      <button onClick={onClose} style={SUBMIT_EDITOR_BACK_BTN}>← Back to assignments</button>
+      <button onClick={onClose} style={SUBMIT_EDITOR_BACK_BTN}>← {focusWorksheetId ? "Back to PSM" : "Back to my assignments"}</button>
       <div style={{fontFamily:"'Fraunces',Georgia,serif", fontSize:22, fontWeight:600, color:"#0F1A2E", marginTop:14, marginBottom:6, letterSpacing:-.2}}>
         {assignment.date || assignment.dateAssigned || "Assignment"}
       </div>
@@ -7049,7 +7268,7 @@ function SubmissionEditor({studentId, assignment, readOnly, onClose}){
             onClick={handleSubmit}
             style={submitEnabled ? SUBMIT_BTN_STYLE : SUBMIT_BTN_STYLE_DISABLED}
           >
-            {submittingState ? "Submitting…" : "Submit"}
+            {submittingState ? "Submitting…" : (focusWorksheetId ? "Submit worksheet" : "Submit")}
           </button>
         </div>
       )}
@@ -7384,9 +7603,37 @@ function TutorSubmissionsPanel({student}){
 function TutorSubmissionRow({studentId, submission}){
   const isDraft = submission.status === "draft";
   const isReviewed = isSubmissionReviewed(submission);
-  const answerText = (()=>{
-    const r = Array.isArray(submission.responses) ? submission.responses[0] : null;
-    return (r && typeof r.studentAnswer === "string") ? r.studentAnswer : "";
+  // Session 18A bug fix: previously this returned only responses[0]'s
+  // studentAnswer — broken for any submission with multiple worksheets
+  // or more than one response (the nested shape introduced in Phase 2
+  // Session 4). Now we render all responses grouped by worksheetId so
+  // the tutor can see every answer the student submitted.
+  //
+  // Two shapes to support:
+  //   - Legacy single-blob: 1 response with worksheetId === null and
+  //     studentAnswer holds the whole free-text answer block.
+  //   - Nested per-question: responses[i] = {worksheetId, questionIndex,
+  //     studentAnswer, flag?}. We bucket by worksheetId, sort by
+  //     questionIndex, and render "1. B  2. C  3. blank" per worksheet.
+  const answerDisplay = (()=>{
+    const responses = Array.isArray(submission.responses) ? submission.responses : [];
+    if(responses.length === 0) return null;
+    // Legacy single-blob
+    if(responses.length === 1 && (responses[0].worksheetId === null || responses[0].worksheetId === undefined)){
+      const a = typeof responses[0].studentAnswer === "string" ? responses[0].studentAnswer : "";
+      return { kind: "legacy", text: a };
+    }
+    // Nested — group by worksheetId
+    const groups = {};
+    for(const r of responses){
+      const wId = r.worksheetId || "(unknown)";
+      if(!groups[wId]) groups[wId] = [];
+      groups[wId][Number(r.questionIndex) || 0] = {
+        ans: typeof r.studentAnswer === "string" ? r.studentAnswer : "",
+        flag: r.flag || null,
+      };
+    }
+    return { kind: "nested", groups };
   })();
 
   // Local inputs seed from the doc. Empty string is the "unset" sentinel so
@@ -7520,9 +7767,54 @@ function TutorSubmissionRow({studentId, submission}){
           </span>
         )}
       </div>
-      <div style={{whiteSpace:"pre-wrap",fontFamily:"'Fraunces',Georgia,serif",fontSize:14,color:"#0F1A2E",lineHeight:1.55,padding:"10px 14px",background:"#FAF7F2",borderRadius:4,border:"1px solid rgba(15,26,46,.08)"}}>
-        {answerText || <span style={{color:"#66708A",fontStyle:"italic"}}>No answer text.</span>}
-      </div>
+      {/* Session 18A: render all submitted answers (was previously
+          showing only responses[0] which truncated multi-question/multi-
+          worksheet submissions to a single value). */}
+      {!answerDisplay && (
+        <div style={{padding:"10px 14px",background:"#FAF7F2",borderRadius:4,border:"1px solid rgba(15,26,46,.08)",color:"#66708A",fontStyle:"italic",fontFamily:"'Fraunces',Georgia,serif"}}>
+          No answer text.
+        </div>
+      )}
+      {answerDisplay && answerDisplay.kind === "legacy" && (
+        <div style={{whiteSpace:"pre-wrap",fontFamily:"'Fraunces',Georgia,serif",fontSize:14,color:"#0F1A2E",lineHeight:1.55,padding:"10px 14px",background:"#FAF7F2",borderRadius:4,border:"1px solid rgba(15,26,46,.08)"}}>
+          {answerDisplay.text || <span style={{color:"#66708A",fontStyle:"italic"}}>No answer text.</span>}
+        </div>
+      )}
+      {answerDisplay && answerDisplay.kind === "nested" && (
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {Object.keys(answerDisplay.groups).map(wId => {
+            const entries = answerDisplay.groups[wId];
+            // entries can be sparse (gaps from out-of-order writes) — iterate by length
+            const wsObj = (Array.isArray(submission.responses) ? submission.responses : [])
+              .find(r => r && r.worksheetId === wId);
+            return (
+              <div key={wId} style={{padding:"10px 14px",background:"#FAF7F2",borderRadius:4,border:"1px solid rgba(15,26,46,.08)"}}>
+                <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:600,color:"#66708A",letterSpacing:1.2,textTransform:"uppercase",marginBottom:8}}>
+                  {wId === "(unknown)" ? "Unknown worksheet" : `Worksheet ${wId}`}
+                </div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:"6px 14px",fontFamily:"'IBM Plex Mono',monospace",fontSize:13,color:"#0F1A2E"}}>
+                  {entries.map((e, i) => {
+                    if(!e) return null;
+                    const ans = (e.ans || "").trim();
+                    const isBlank = ans.length === 0;
+                    const flagIcon = e.flag === "star" ? "★" : e.flag === "question" ? "?" : null;
+                    const flagColor = e.flag === "star" ? "#9A5B1F" : e.flag === "question" ? "#5C4178" : null;
+                    return (
+                      <span key={i} style={{display:"inline-flex",alignItems:"center",gap:4}}>
+                        <span style={{color:"#66708A"}}>{i+1}.</span>
+                        <span style={{color:isBlank?"#9AA3B8":"#0F1A2E",fontStyle:isBlank?"italic":"normal",fontWeight:isBlank?400:600}}>
+                          {isBlank ? "blank" : ans}
+                        </span>
+                        {flagIcon && <span style={{color:flagColor,fontWeight:700,marginLeft:2}}>{flagIcon}</span>}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
       {!isDraft && (
         <div style={{marginTop:12,display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
           <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,color:"#66708A",letterSpacing:1.2,textTransform:"uppercase"}}>Score</span>
@@ -7578,7 +7870,7 @@ function TutorSubmissionRow({studentId, submission}){
 }
 
 /* ============ SCORE HISTORY PANEL (inside StudentProfile) ============ */
-function ScoreHistoryPanel({p, sfm, setSfm, addScore, delScore, addWelledLog, delWelledLog}){
+function ScoreHistoryPanel({p, sfm, setSfm, addScore, delScore, addWelledLog, delWelledLog, handleWelledUpload, welledInputRef}){
   const pts = allScoreDataPoints(p);
   const [expanded,setExpanded] = useState({}); // {domainKey: true}
   const [diffFilter,setDiffFilter] = useState("all"); // all|easy|medium|hard|comprehensive
@@ -7775,6 +8067,29 @@ function ScoreHistoryPanel({p, sfm, setSfm, addScore, delScore, addWelledLog, de
 
   return(
     <div>
+      {/* Session 18C: WellEd Practice Exam Report upload — moved from
+          Diagnostics tab. Different metric class from ZipGrade diagnostics
+          (which measure baseline subskill mastery); WellEd reports are
+          scored practice tests that produce per-section + per-subskill
+          time-points. */}
+      {handleWelledUpload && welledInputRef && (
+        <div style={{...CARD,marginBottom:16,padding:18,borderLeft:`3px solid #6E3F12`}}>
+          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:14,flexWrap:"wrap"}}>
+            <div style={{flex:"1 1 320px"}}>
+              <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:600,letterSpacing:1.4,color:"#6E3F12",textTransform:"uppercase",marginBottom:6}}>WellEd Practice Exam Report</div>
+              <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:18,fontWeight:600,color:"#0F1A2E",letterSpacing:-.2,marginBottom:6}}>Upload a scored practice test</div>
+              <div style={{fontSize:12,color:"#66708A",lineHeight:1.55,maxWidth:520}}>
+                For full / Reading-only / Math-only WellEd practice exam PDFs. The parser extracts
+                scaled section scores + per-subskill breakdown. <em>Different from the Diagnostics
+                tab</em> — diagnostics are baseline (one-time mastery snapshots), these are scored
+                practice tests that show progress over time.
+              </div>
+            </div>
+            <input ref={welledInputRef} type="file" multiple accept="application/pdf" onChange={e=>handleWelledUpload(e.target.files)} style={{display:"none"}}/>
+            <button onClick={()=>welledInputRef.current?.click()} style={{...mkBtn("#6E3F12","#FAF7F2"),padding:"10px 18px",fontSize:11,fontWeight:600,letterSpacing:.4,textTransform:"uppercase",flexShrink:0}}>Upload WellEd Report</button>
+          </div>
+        </div>
+      )}
       <div style={{display:"grid",gridTemplateColumns:"340px 1fr",gap:20}}>
         {/* ========== LEFT: Quick Add ========== */}
         <div style={{display:"flex",flexDirection:"column",gap:16}}>
