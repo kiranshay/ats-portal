@@ -5276,12 +5276,14 @@ function StudentExternalLinksCard({studentEmail}){
         </div>
         <div style={{display:"flex",gap:14,flexWrap:"wrap",marginTop:2}}>
           <div>
-            <div style={labelStyle}>Email</div>
+            <div style={labelStyle}>Email / Phone</div>
             <div style={credStyle}>{studentEmail||"—"}</div>
           </div>
-          <div>
-            <div style={labelStyle}>Password</div>
-            <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9AA3B8",fontStyle:"italic",lineHeight:1.4,maxWidth:180}}>You set this when you first signed in — reset on Wise if forgotten</div>
+          <div style={{flex:"1 1 200px",minWidth:0}}>
+            <div style={labelStyle}>How to sign in</div>
+            <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#0F1A2E",lineHeight:1.5,maxWidth:260}}>
+              One-time PIN via email or phone, <em>or</em> use the 4-digit login code Wise provided to you.
+            </div>
           </div>
         </div>
       </div>
