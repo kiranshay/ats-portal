@@ -6083,6 +6083,42 @@ function SubmissionEditor({studentId, assignment, readOnly, onClose}){
 
   const isLockedNow = readOnly || localStatus === "submitted";
 
+  // Session 18A wire-up: when PER_WORKSHEET_SUBMIT_ENABLED is flipped on
+  // (localStorage flag for opt-in smoke testing), write to per-worksheet
+  // docs at students/{sid}/assignments/{aid}/worksheetSubmissions/{wsId}
+  // instead of (or in addition to) the legacy submissions collection.
+  // Flag default OFF — legacy path unchanged for everyone until flipped.
+  const _perWsWriteEnabled = perWorksheetSubmitEnabled();
+  const writePerWsDraft = async () => {
+    const col = studentAssignmentWorksheetSubmissionsCollection(studentId, assignment.id);
+    if(!col) return;
+    const FV = firebase.firestore.FieldValue;
+    const writes = [];
+    for(const wId of Object.keys(answersByWorksheet)){
+      const answers = answersByWorksheet[wId] || [];
+      const flags = (flagsByWorksheetRef => flagsByWorksheetRef && flagsByWorksheetRef[wId])(flagsByWorksheet) || [];
+      const entry = catalogByWorksheetId[wId];
+      const expected = entry?.questionIds?.length ?? answers.length;
+      const responses = [];
+      for(let i = 0; i < expected; i++){
+        const flag = flags[i] === "star" || flags[i] === "question" ? flags[i] : null;
+        responses.push({
+          questionIndex: i,
+          studentAnswer: typeof answers[i] === "string" ? answers[i] : "",
+          flag,
+        });
+      }
+      writes.push(col.doc(wId).set({
+        worksheetId: wId,
+        responses,
+        status: "draft",
+        updatedAt: FV.serverTimestamp(),
+        createdAt: FV.serverTimestamp(),
+      }, { merge: true }));
+    }
+    await Promise.all(writes).catch(e => console.warn("[portal] per-ws draft write error:", e));
+  };
+
   writeDraftRef.current = async () => {
     if(isLockedNow) return;
     const col = studentSubmissionsCollection(studentId);
@@ -6100,6 +6136,12 @@ function SubmissionEditor({studentId, assignment, readOnly, onClose}){
           catalogByWorksheetId,
           isCreate: !submissionIdRef.current,
         });
+    // Session 18A wire-up: dual-write to per-WS path when flag on.
+    // Legacy write is kept as the canonical until the flag is flipped
+    // globally; this lets us validate per-WS reads alongside legacy.
+    if(_perWsWriteEnabled && !legacyMode){
+      writePerWsDraft();
+    }
     try{
       if(!submissionIdRef.current){
         const newRef = col.doc();

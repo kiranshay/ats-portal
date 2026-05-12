@@ -38,7 +38,7 @@ const {
   createAssignment,
   createDiscussion,
 } = require("./wise");
-const { gradeSubmission } = require("./grade");
+const { gradeSubmission, gradeWorksheetSubmission } = require("./grade");
 
 admin.initializeApp();
 
@@ -672,6 +672,117 @@ exports.onSubmissionSubmit = onDocumentUpdated(
     });
     logger.info("onSubmissionSubmit: graded", {
       sid, subId,
+      scoreCorrect: result.scoreCorrect,
+      scoreTotal:   result.scoreTotal,
+    });
+  }
+);
+
+// ── onWorksheetSubmissionSubmit (Session 18A) ─────────────────────────────
+//
+// Per-worksheet grading trigger. Mirrors onSubmissionSubmit but scoped to
+// a single worksheet at students/{sid}/assignments/{aid}/worksheetSubmissions/{wsId}.
+// Fires only when status flips draft → submitted. Reads the assignment to
+// find the worksheet entry (for evenOdd subset), the catalog row, and the
+// questionKeys for that worksheet's question IDs, then runs
+// gradeWorksheetSubmission and writes the score back to the same doc.
+//
+// Coexists with the legacy onSubmissionSubmit trigger — only the per-WS
+// write path (gated on PER_WORKSHEET_SUBMIT_ENABLED on the client) reaches
+// this trigger; legacy writes still go through onSubmissionSubmit.
+
+exports.onWorksheetSubmissionSubmit = onDocumentUpdated(
+  {
+    document: "students/{sid}/assignments/{aid}/worksheetSubmissions/{wsId}",
+    region: "us-central1",
+    maxInstances: 10,
+    timeoutSeconds: 120,
+  },
+  async (event) => {
+    const before = event.data && event.data.before && event.data.before.data();
+    const after  = event.data && event.data.after  && event.data.after.data();
+    if (!before || !after) {
+      logger.warn("onWorksheetSubmissionSubmit: missing snapshot");
+      return;
+    }
+    if (before.status !== "draft" || after.status !== "submitted") return;
+    if (after.gradedAt) {
+      logger.info("onWorksheetSubmissionSubmit: already graded, skipping", event.params);
+      return;
+    }
+
+    const { sid, aid, wsId } = event.params;
+    logger.info("onWorksheetSubmissionSubmit: start", { sid, aid, wsId });
+
+    const db = admin.firestore();
+    const studentRef = db.collection("students").doc(sid);
+    const studentSnap = await studentRef.get();
+    if (!studentSnap.exists) {
+      logger.error("onWorksheetSubmissionSubmit: student not found", { sid });
+      return;
+    }
+    const student = studentSnap.data() || {};
+    const assignment = (student.assignments || []).find((a) => a && a.id === aid);
+    if (!assignment) {
+      logger.warn("onWorksheetSubmissionSubmit: assignment not found", { sid, aid });
+      return;
+    }
+    const worksheet = (assignment.worksheets || []).find((w) => w && w.id === wsId);
+    if (!worksheet) {
+      logger.warn("onWorksheetSubmissionSubmit: worksheet not on assignment", { sid, aid, wsId });
+      return;
+    }
+
+    const catalogByTitle = loadCatalogByTitle();
+    if (!catalogByTitle) {
+      logger.error("onWorksheetSubmissionSubmit: catalog missing", { sid, aid, wsId });
+      return;
+    }
+    const catalogRow = catalogByTitle.get(worksheet.title);
+    if (!catalogRow) {
+      await event.data.after.ref.update({
+        gradedAt: admin.firestore.FieldValue.serverTimestamp(),
+        gradeSkipReason: "no-catalog-row",
+      });
+      return;
+    }
+
+    // Fetch questionKeys for this worksheet's questionIds only.
+    const questionKeysById = new Map();
+    const qIds = Array.isArray(catalogRow.questionIds) ? catalogRow.questionIds : [];
+    if (qIds.length > 0) {
+      const refs = qIds.map((id) => db.collection("questionKeys").doc(id));
+      const snaps = await db.getAll(...refs);
+      for (const s of snaps) {
+        if (s.exists) questionKeysById.set(s.id, s.data());
+      }
+    }
+
+    const result = gradeWorksheetSubmission({
+      worksheetSubmission: after,
+      worksheet,
+      catalogRow,
+      questionKeysById,
+    });
+
+    if (result.status === "skipped") {
+      logger.info("onWorksheetSubmissionSubmit: skipped", { sid, aid, wsId, reason: result.reason });
+      await event.data.after.ref.update({
+        gradedAt: admin.firestore.FieldValue.serverTimestamp(),
+        gradeSkipReason: result.reason,
+      });
+      return;
+    }
+
+    await event.data.after.ref.update({
+      status:       "graded",
+      scoreCorrect: result.scoreCorrect,
+      scoreTotal:   result.scoreTotal,
+      perQuestion:  result.perQuestion,
+      gradedAt:     admin.firestore.FieldValue.serverTimestamp(),
+    });
+    logger.info("onWorksheetSubmissionSubmit: graded", {
+      sid, aid, wsId,
       scoreCorrect: result.scoreCorrect,
       scoreTotal:   result.scoreTotal,
     });

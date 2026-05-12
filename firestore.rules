@@ -134,6 +134,30 @@ service cloud.firestore {
         allow write:  if isTutorOrAdmin();
         allow delete: if isTutorOrAdmin();
       }
+
+      // ── Per-worksheet submissions (Session 18A) ──────────────────────
+      // Each PSM (assignment) can have one worksheetSubmission doc per
+      // worksheet. Same access semantics as /submissions but scoped to
+      // assignments/{aid}/worksheetSubmissions/{wsId}. doc id == wsId so
+      // collisions are impossible. The status field gates the same
+      // draft → submitted lifecycle. The onWorksheetSubmissionSubmit
+      // trigger writes scoreCorrect/scoreTotal/perQuestion/status:graded
+      // via Admin SDK.
+      match /assignments/{aid}/worksheetSubmissions/{wsId} {
+        allow read: if canReadStudent(studentId);
+
+        allow create: if isLinkedToStudent(studentId)
+          && request.resource.data.status == 'draft';
+
+        allow update: if isLinkedToStudent(studentId)
+          && resource.data.status == 'draft'
+          && request.resource.data.status in ['draft', 'submitted']
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['status', 'responses', 'updatedAt', 'submittedAt']);
+
+        allow write:  if isTutorOrAdmin();
+        allow delete: if isTutorOrAdmin();
+      }
     }
 
   }
