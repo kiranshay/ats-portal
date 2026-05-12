@@ -3167,28 +3167,25 @@ function AppInner({authUser, onSignOut, currentUserEntry}){
     return ()=>{ unsubStudents(); unsubBlob(); };
   }, []);
 
-  // ── Session 18C: Consultation Student seed (+ refresh on version bump) ──
-  // Seeds the synthetic demo profile if missing. Also rewrites it when
-  // CONSULTATION_DATA_VERSION advances past whatever's stored on the doc,
-  // so we can refine the demo data without manual cleanup. Once seeded
-  // per session, _consultationSeeded prevents loops.
+  // ── Session 18C: Consultation Student seed (create-only) ──
+  // Seeds the synthetic demo profile ONLY if missing. Previously we
+  // auto-reseeded on version bump, but that overwrites any edits the
+  // tutor made while demoing, AND triggered listener fan-out that
+  // could clobber other in-progress inputs. Manual reset is provided
+  // via the "Reset demo data" button in Students-tab admin actions
+  // (added in this same commit). Once seeded per session,
+  // _consultationSeeded prevents the effect from re-running.
   const _consultationSeeded = useRef(false);
   useEffect(()=>{
     if(_consultationSeeded.current) return;
     if(cloudStatus !== "synced") return; // wait for first listener tick
     const existing = students.find(st => st && st.id === CONSULTATION_STUDENT_ID);
+    if(existing) {
+      _consultationSeeded.current = true;
+      return;
+    }
     const col = studentsCollection();
     if(!col) return;
-    // Already-seeded path: only rewrite if the stored data version is
-    // stale. This lets us refine synthetic data in subsequent commits
-    // without overwriting on every page load.
-    if(existing) {
-      const storedVer = Number(existing._dataVersion || 0);
-      if(storedVer >= CONSULTATION_DATA_VERSION) {
-        _consultationSeeded.current = true;
-        return;
-      }
-    }
     _consultationSeeded.current = true; // mark before async to dedupe
     const data = makeConsultationStudent();
     col.doc(CONSULTATION_STUDENT_ID).set({...data, id: CONSULTATION_STUDENT_ID, _dataVersion: CONSULTATION_DATA_VERSION})
@@ -4317,10 +4314,40 @@ function AppInner({authUser, onSignOut, currentUserEntry}){
             Import
             <input type="file" accept="application/json" onChange={importData} style={{display:"none"}}/>
           </label>
-          <label title="Import students from a Wise Learner Report CSV" style={{cursor:"pointer"}}>
-            Import Wise
+          <label title="Import students from a Wise Learner Report CSV (manual export)" style={{cursor:"pointer"}}>
+            Import Wise CSV
             <input ref={wiseInputRef} type="file" accept=".csv,text/csv" onClick={e=>{e.currentTarget.value="";}} onChange={handleWiseFile} style={{display:"none"}}/>
           </label>
+          {/* Session 18: Wise API reconcile — checks each existing student
+              against Wise via email lookup. Surfaces who's missing in
+              Wise or has mismatched email. Does NOT bulk-import (the
+              Wise API doesn't expose a 'list all students' endpoint;
+              CSV remains the bulk-import path). Admin-only function. */}
+          <button onClick={async()=>{
+            if(!window.firebase || !window.firebase.app){ alert("Firebase not loaded"); return; }
+            try{
+              showToast("Reconciling with Wise…");
+              const fn = window.firebase.app().functions("us-central1").httpsCallable("reconcileStudentsWithWise");
+              const result = await fn({});
+              const r = result.data || {};
+              const t = r.totals || {};
+              const lines = [
+                `Wise reconcile complete:`,
+                `  ${t.matched||0} matched in Wise`,
+                `  ${t.unmatched||0} not found in Wise`,
+                `  ${t.emailMismatched||0} email mismatched`,
+                `  ${t.noEmail||0} no email on record`,
+                `  ${t.errors||0} errors`,
+              ];
+              alert(lines.join("\n"));
+              console.log("[wise-reconcile]", r);
+            }catch(e){
+              console.warn("[wise-reconcile] failed:", e);
+              alert("Wise reconcile failed: " + (e.message||e));
+            }
+          }} title="Check each student against the Wise API (email lookup). Reports which students Wise doesn't know about. Admin-only." style={{cursor:"pointer",background:"none",border:"none",font:"inherit",color:"inherit",padding:0}}>
+            Wise API check
+          </button>
           <div data-psm-user title={authUser.email} style={{
             display:"inline-flex",alignItems:"center",gap:8,
             padding:"4px 4px 4px 12px",border:"1px solid var(--rule)",borderRadius:999,
@@ -5363,7 +5390,7 @@ function StudentProfile({p,setProfile,ptab,setPtab,paChk,setPaChk,paSubj,setPaSu
                       <div key={idx} style={{display:"flex",alignItems:"center",gap:10,fontSize:11,marginBottom:4}}>
                         <span style={{flex:1,color:"#6E3F12",fontWeight:500}}>{i.label}</span>
                         <span style={{fontSize:9,color:"#66708A",fontFamily:"'IBM Plex Mono',monospace",letterSpacing:.4,textTransform:"uppercase"}}>Score</span>
-                        <input type="number" min="0" max={wMax} placeholder="0" value={i.score||""} onChange={e=>setWelledDomainScore(asg.id,idx,e.target.value)} style={{width:54,padding:"4px 8px",border:"1px solid rgba(154,91,31,.35)",borderRadius:2,fontSize:11,textAlign:"right",fontFamily:"'IBM Plex Mono',monospace",background:"#fff"}}/>
+                        <ScoreInput min="0" max={wMax} placeholder="0" value={i.score||""} onCommit={v=>setWelledDomainScore(asg.id,idx,v)} style={{width:54,padding:"4px 8px",border:"1px solid rgba(154,91,31,.35)",borderRadius:2,fontSize:11,textAlign:"right",fontFamily:"'IBM Plex Mono',monospace",background:"#fff"}}/>
                         <span style={{fontSize:10,color:"#6E3F12",fontWeight:600,minWidth:28,fontFamily:"'IBM Plex Mono',monospace"}}>/ {wMax}</span>
                       </div>
                     );})}
@@ -5389,10 +5416,10 @@ function StudentProfile({p,setProfile,ptab,setPtab,paChk,setPaChk,paSubj,setPaSu
                         <span style={{flex:"1 1 200px",fontWeight:500,color:"#003258"}}>{ex.platform} Practice Test #{ex.number||"?"}{isFull?"":" (Section)"}</span>
                         {isFull ? (<>
                           <span style={{fontSize:9,color:"#66708A",fontFamily:"'IBM Plex Mono',monospace",letterSpacing:.4,textTransform:"uppercase"}}>R&amp;W</span>
-                          <input type="number" min="0" max="800" placeholder="0" value={rw} onChange={e=>setExamScore(asg.id,idx,{rwScore:e.target.value})} style={examInp}/>
+                          <ScoreInput min="0" max="800" placeholder="0" value={rw} onCommit={v=>setExamScore(asg.id,idx,{rwScore:v})} style={examInp}/>
                           <span style={{fontSize:10,color:"#003258",fontWeight:600,fontFamily:"'IBM Plex Mono',monospace"}}>/ 800</span>
                           <span style={{fontSize:9,color:"#66708A",fontFamily:"'IBM Plex Mono',monospace",letterSpacing:.4,textTransform:"uppercase"}}>Math</span>
-                          <input type="number" min="0" max="800" placeholder="0" value={math} onChange={e=>setExamScore(asg.id,idx,{mathScore:e.target.value})} style={examInp}/>
+                          <ScoreInput min="0" max="800" placeholder="0" value={math} onCommit={v=>setExamScore(asg.id,idx,{mathScore:v})} style={examInp}/>
                           <span style={{fontSize:10,color:"#003258",fontWeight:600,fontFamily:"'IBM Plex Mono',monospace"}}>/ 800</span>
                           {(rw||math) && <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:13,fontWeight:600,color:"#003258",marginLeft:6,fontVariantNumeric:"tabular-nums"}}>= {total}/1600</span>}
                         </>) : (<>
@@ -5402,7 +5429,7 @@ function StudentProfile({p,setProfile,ptab,setPtab,paChk,setPaChk,paSubj,setPaSu
                             <option value="Math">Math</option>
                           </select>
                           <span style={{fontSize:9,color:"#66708A",fontFamily:"'IBM Plex Mono',monospace",letterSpacing:.4,textTransform:"uppercase"}}>Score</span>
-                          <input type="number" min="0" max="800" placeholder="0" value={ex.score||""} onChange={e=>setExamScore(asg.id,idx,{score:e.target.value})} style={examInp}/>
+                          <ScoreInput min="0" max="800" placeholder="0" value={ex.score||""} onCommit={v=>setExamScore(asg.id,idx,{score:v})} style={examInp}/>
                           <span style={{fontSize:10,color:"#003258",fontWeight:600,fontFamily:"'IBM Plex Mono',monospace"}}>/ 800</span>
                         </>)}
                       </div>
@@ -6364,6 +6391,64 @@ function InlinePdfViewer({url}){
         </div>
       )}
     </div>
+  );
+}
+
+// Session 18A bug fix: a number input that does NOT round-trip every
+// keystroke through global state. Internal state holds the in-progress
+// value while the user is typing; the parent's onCommit fires on blur
+// or after a 1.5s pause. This eliminates the race where Firestore
+// listener ticks (from another tutor's writes, the consultation seed,
+// dual-write to psm-data/main, or per-doc snapshot fan-out) clobber
+// half-typed input. The previous design called setStudents on every
+// keystroke, so each tick fired a listener that replaced state with
+// Firestore's view — wiping the in-progress edit.
+function ScoreInput({value, onCommit, min, max, placeholder, style, title}){
+  const [local, setLocal] = useState(value == null ? "" : String(value));
+  const dirtyRef = useRef(false);
+  const lastCommittedRef = useRef(value == null ? "" : String(value));
+  const debounceRef = useRef(null);
+  // External value updates while NOT being edited should sync into local
+  // state. While editing (dirty), we ignore external changes so they
+  // can't clobber typing.
+  useEffect(()=>{
+    const incoming = value == null ? "" : String(value);
+    if(dirtyRef.current) return;
+    if(incoming !== local) setLocal(incoming);
+    lastCommittedRef.current = incoming;
+  }, [value]);
+  const commit = (next) => {
+    dirtyRef.current = false;
+    if(next === lastCommittedRef.current) return;
+    lastCommittedRef.current = next;
+    onCommit(next);
+  };
+  return (
+    <input
+      type="number"
+      min={min}
+      max={max}
+      placeholder={placeholder}
+      value={local}
+      title={title}
+      onChange={(e)=>{
+        dirtyRef.current = true;
+        setLocal(e.target.value);
+        if(debounceRef.current) clearTimeout(debounceRef.current);
+        // Auto-commit 1.5s after the last keystroke so paste-and-tab-out
+        // patterns work too. The blur handler will fire first if the
+        // user clicks/tabs away sooner — the dirty flag prevents double
+        // commits.
+        debounceRef.current = setTimeout(()=>{
+          if(dirtyRef.current) commit(local + ""); // ref of latest may lag — use closure
+        }, 1500);
+      }}
+      onBlur={()=>{
+        if(debounceRef.current){ clearTimeout(debounceRef.current); debounceRef.current = null; }
+        commit(local);
+      }}
+      style={style}
+    />
   );
 }
 
