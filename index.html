@@ -8475,41 +8475,104 @@ function TutorSubmissionRow({studentId, submission}){
           {answerDisplay.text || <span style={{color:"#66708A",fontStyle:"italic"}}>No answer text.</span>}
         </div>
       )}
-      {answerDisplay && answerDisplay.kind === "nested" && (
+      {answerDisplay && answerDisplay.kind === "nested" && (() => {
+        // Session 18C v5: per-question grading overlay. The submission
+        // doc carries perQuestion:[{worksheetId, questionIndex, correct,
+        // correctAnswer, ...}] populated by onSubmissionSubmit. We
+        // index it by (worksheetId, questionIndex) so each rendered
+        // answer chip can be colored green (correct), red (wrong, with
+        // correct answer in parens), or gray (skipped / ungraded).
+        const perQByKey = new Map();
+        if(Array.isArray(submission.perQuestion)){
+          for(const pq of submission.perQuestion){
+            if(!pq) continue;
+            perQByKey.set(`${pq.worksheetId}|${pq.questionIndex}`, pq);
+          }
+        }
+        return (
         <div style={{display:"flex",flexDirection:"column",gap:10}}>
           {Object.keys(answerDisplay.groups).map(wId => {
             const entries = answerDisplay.groups[wId];
-            // entries can be sparse (gaps from out-of-order writes) — iterate by length
-            const wsObj = (Array.isArray(submission.responses) ? submission.responses : [])
-              .find(r => r && r.worksheetId === wId);
             return (
               <div key={wId} style={{padding:"10px 14px",background:"#FAF7F2",borderRadius:4,border:"1px solid rgba(15,26,46,.08)"}}>
-                <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:600,color:"#66708A",letterSpacing:1.2,textTransform:"uppercase",marginBottom:8}}>
-                  {wId === "(unknown)" ? "Unknown worksheet" : `Worksheet ${wId}`}
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,gap:8,flexWrap:"wrap"}}>
+                  <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:600,color:"#66708A",letterSpacing:1.2,textTransform:"uppercase"}}>
+                    {wId === "(unknown)" ? "Unknown worksheet" : `Worksheet ${wId}`}
+                  </div>
+                  {/* Per-worksheet right/wrong tally derived from perQuestion */}
+                  {(()=>{
+                    const wsResults = (submission.perQuestion||[]).filter(pq => pq && pq.worksheetId === wId);
+                    if(wsResults.length === 0) return null;
+                    const ok = wsResults.filter(pq => pq.correct === true).length;
+                    const wrong = wsResults.filter(pq => pq.correct === false).length;
+                    const ungraded = wsResults.filter(pq => pq.correct === null || pq.correct === undefined).length;
+                    return (
+                      <div style={{display:"flex",gap:6,fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:600,letterSpacing:.6}}>
+                        <span style={{color:"#4C7A4C"}}>✓ {ok}</span>
+                        <span style={{color:"#8C2E2E"}}>✗ {wrong}</span>
+                        {ungraded > 0 && <span style={{color:"#9A5B1F"}}>— {ungraded}</span>}
+                      </div>
+                    );
+                  })()}
                 </div>
-                <div style={{display:"flex",flexWrap:"wrap",gap:"6px 14px",fontFamily:"'IBM Plex Mono',monospace",fontSize:13,color:"#0F1A2E"}}>
+                {/* Color-coded per-question grid */}
+                <div style={{display:"flex",flexWrap:"wrap",gap:"6px 12px",fontFamily:"'IBM Plex Mono',monospace",fontSize:13}}>
                   {entries.map((e, i) => {
                     if(!e) return null;
                     const ans = (e.ans || "").trim();
                     const isBlank = ans.length === 0;
                     const flagIcon = e.flag === "star" ? "★" : e.flag === "question" ? "?" : null;
                     const flagColor = e.flag === "star" ? "#9A5B1F" : e.flag === "question" ? "#5C4178" : null;
+                    // Look up grading result for this exact slot.
+                    const pq = perQByKey.get(`${wId}|${i}`);
+                    let bg = "#fff", fg = "#0F1A2E", border = "rgba(15,26,46,.12)", reveal = null;
+                    if(pq){
+                      if(pq.correct === true){
+                        bg = "#E4F0E2"; fg = "#2D5A2D"; border = "rgba(76,122,76,.4)";
+                      } else if(pq.correct === false){
+                        bg = "#F4DADA"; fg = "#7A2020"; border = "rgba(140,46,46,.4)";
+                        reveal = pq.correctAnswer; // show the right answer in parens
+                      } else {
+                        bg = "#FFF1DE"; fg = "#7A5318"; border = "rgba(154,91,31,.4)";
+                      }
+                    }
                     return (
-                      <span key={i} style={{display:"inline-flex",alignItems:"center",gap:4}}>
-                        <span style={{color:"#66708A"}}>{i+1}.</span>
-                        <span style={{color:isBlank?"#9AA3B8":"#0F1A2E",fontStyle:isBlank?"italic":"normal",fontWeight:isBlank?400:600}}>
+                      <span key={i} style={{
+                        display:"inline-flex",alignItems:"center",gap:4,
+                        padding:"3px 8px",borderRadius:4,
+                        background:bg, color:fg, border:`1px solid ${border}`,
+                      }}>
+                        <span style={{opacity:.7,fontWeight:500}}>{i+1}.</span>
+                        <span style={{fontStyle:isBlank?"italic":"normal",fontWeight:isBlank?400:600,opacity:isBlank?.65:1}}>
                           {isBlank ? "blank" : ans}
                         </span>
-                        {flagIcon && <span style={{color:flagColor,fontWeight:700,marginLeft:2}}>{flagIcon}</span>}
+                        {reveal && (
+                          <span style={{opacity:.8,fontWeight:500}}>
+                            (✓ {reveal})
+                          </span>
+                        )}
+                        {flagIcon && (
+                          <span style={{color:flagColor,fontWeight:700,marginLeft:2}} title={e.flag === "star" ? "Student starred — had trouble" : "Student question mark — guessed/skipped"}>
+                            {flagIcon}
+                          </span>
+                        )}
                       </span>
                     );
                   })}
                 </div>
+                {/* Legend hint — only render when we have flagged questions */}
+                {entries.some(e => e && e.flag) && (
+                  <div style={{marginTop:8,fontFamily:"'IBM Plex Mono',monospace",fontSize:9,color:"#66708A",letterSpacing:.4,lineHeight:1.5}}>
+                    <span style={{color:"#9A5B1F",fontWeight:700,marginRight:4}}>★</span> student starred (had trouble)
+                    <span style={{marginLeft:14,color:"#5C4178",fontWeight:700,marginRight:4}}>?</span> student question mark (guessed)
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
-      )}
+        );
+      })()}
       {!isDraft && (
         <div style={{marginTop:12,display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
           <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,color:"#66708A",letterSpacing:1.2,textTransform:"uppercase"}}>Score</span>
