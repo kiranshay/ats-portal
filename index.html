@@ -3954,7 +3954,11 @@ function AppInner({authUser, onSignOut, currentUserEntry}){
     const upd=students.map(st=>st.id===profile.id?{...st,assignments:[...(st.assignments||[]),entry]}:st);
     const totalItems=ids.length+weIds.length+bbArr.length+weArr.length;
     setStudents(upd);setProfile(upd.find(st=>st.id===profile.id));setPaChk({});setPaWeChk({});setPaBBPicks([]);setPaWEPicks([]);showToast(`${totalItems} item(s) pre-assigned`);
-    assignToWise(profile.id, entry.id, showToast);
+    // Session 18C v5: pre-assigned PSMs no longer auto-post to Wise.
+    // Per Aidan: pre-assigns are planning placeholders the tutor stages
+    // ahead of a session — they shouldn't show up in the student's Wise
+    // class discussion until the tutor formally assigns them (via the
+    // Generator → Save flow, which still calls assignToWise).
   };
   const addScore=()=>{if(!sfm.testType||!sfm.score)return;const entry={...sfm,id:uid()};const upd=students.map(st=>st.id===profile.id?{...st,scores:[...(st.scores||[]),entry]}:st);setStudents(upd);setProfile(upd.find(st=>st.id===profile.id));setSfm({date:todayStr(),testType:"",score:"",maxScore:"",notes:""});showToast("Score recorded");};
   // Soft-delete — items stay in the array with deleted:true and deletedAt,
@@ -6439,33 +6443,44 @@ function ParentPortal({onSignOut, currentUserEntry}){
 }
 
 function PortalTrackingTab({student, submissions}){
-  // Session 18C v4: replace the simplified table view with the full
-  // tutor-side ScoreHistoryPanel in readOnly mode. Same domain cards,
-  // same charts, same TimelineLegend below every chart. Per Aidan:
-  // "you should be replicating the score views that we have on tutors
-  // side, not some BS like what is seen here."
-  //
-  // readOnly hides: quick-add forms, manual entry log table, the
-  // WellEd report upload card. Student sees identical visualizations
-  // but can't edit data. This makes the student dashboard a true
-  // mirror of what their tutor sees on the Score History tab.
+  // Session 18C v5: ScoreHistoryPanel in readOnly mode wraps fine for
+  // tutors but caused blank-page crashes for student auth (likely a
+  // hook ordering issue with useTutorSubmissions inside it under the
+  // student's narrower Firestore permissions). Wrapped in an
+  // ErrorBoundary so a render error falls through to the legacy view
+  // instead of taking the whole portal down.
   return (
-    <ScoreHistoryPanel
-      p={student}
-      readOnly={true}
-      // unused in readOnly mode but kept for prop-shape stability
-      sfm={{date:"",testType:"",score:"",max:"",notes:""}}
-      setSfm={()=>{}}
-      addScore={()=>{}}
-      delScore={()=>{}}
-      addWelledLog={()=>{}}
-      delWelledLog={()=>{}}
-    />
+    <PortalErrorBoundary fallback={<_LegacyPortalTrackingTab student={student} submissions={submissions}/>}>
+      <ScoreHistoryPanel
+        p={student}
+        readOnly={true}
+        sfm={{date:"",testType:"",score:"",max:"",notes:""}}
+        setSfm={()=>{}}
+        addScore={()=>{}}
+        delScore={()=>{}}
+        addWelledLog={()=>{}}
+        delWelledLog={()=>{}}
+      />
+    </PortalErrorBoundary>
   );
 }
 
-// Kept for reference / not currently rendered. The old portal tracking
-// tab used this simpler view; we superseded it with ScoreHistoryPanel.
+// Tiny class-component error boundary. Catches render errors in the
+// readOnly ScoreHistoryPanel and falls back to the legacy view so
+// students never see a blank portal.
+class PortalErrorBoundary extends React.Component {
+  constructor(props){ super(props); this.state = {hasError:false, error:null}; }
+  static getDerivedStateFromError(error){ return {hasError:true, error}; }
+  componentDidCatch(error, info){ console.warn("[PortalErrorBoundary]", error, info); }
+  render(){
+    if(this.state.hasError) return this.props.fallback;
+    return this.props.children;
+  }
+}
+
+// Legacy compact view — was the portal tracking tab before v4. Kept as
+// the ErrorBoundary fallback so students always see SOMETHING even if
+// the new ScoreHistoryPanel mirror errors out.
 function _LegacyPortalTrackingTab({student, submissions}){
   const pts = allScoreDataPoints(student, submissions);
   const diagProfile = (student.diagnostics||[]).length ? buildDiagnosticProfile(student.diagnostics) : null;
@@ -8554,8 +8569,12 @@ function ScoreHistoryPanel({p, sfm, setSfm, addScore, delScore, addWelledLog, de
   // Session 18A: submissions feed graded-submission time-points into the
   // score-tracking pipeline. Wired through useTutorSubmissions which is
   // a live snapshot — the panel updates the moment a student submits.
+  //
+  // Session 18C v5: useTutorSubmissions catches its own errors and
+  // returns {submissions:[], error}, so an auth-timing failure on the
+  // student-portal path won't propagate up and blank the portal.
   const {submissions: panelSubmissions} = useTutorSubmissions(p?.id);
-  const pts = allScoreDataPoints(p, panelSubmissions);
+  const pts = allScoreDataPoints(p, panelSubmissions || []);
   const [expanded,setExpanded] = useState({}); // {domainKey: true}
   const [diffFilter,setDiffFilter] = useState("all"); // all|easy|medium|hard|comprehensive
   const [wlog,setWlog] = useState({date:todayStr(),subject:"Reading & Writing",domain:"Information & Ideas",difficulty:"medium",score:"",notes:""});
