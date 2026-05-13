@@ -7265,7 +7265,7 @@ function isInSubset(i, subset){
   return true;
 }
 
-function WorksheetBlock({worksheet, catalogEntry, answers, onAnswersChange, flags, onFlagsChange, isLocked, indexLabel, results}){
+function WorksheetBlock({worksheet, catalogEntry, answers, onAnswersChange, flags, onFlagsChange, isLocked, indexLabel, results, showResults}){
   const hasCatalog = !!(catalogEntry && Array.isArray(catalogEntry.questionIds) && catalogEntry.questionIds.length > 0);
   const format = hasCatalog ? catalogEntry.answerFormat : null;
   const pdfUrl = (catalogEntry && catalogEntry.stu) || worksheet.url || null;
@@ -7379,7 +7379,12 @@ function WorksheetBlock({worksheet, catalogEntry, answers, onAnswersChange, flag
                   {isLocked && (
                     <FlagBadge flag={(results && results[i] && results[i].flag) || currentFlag}/>
                   )}
-                  {isLocked && results && (
+                  {/* Session 18C v7: only reveal right/wrong + correct
+                      answer AFTER the student submits. While drafting,
+                      results is null anyway (grader hasn't fired); but
+                      gate on showResults explicitly so a future
+                      readOnly preview-while-drafting flow can't leak. */}
+                  {showResults && results && (
                     <AnswerResultIndicator result={results[i]}/>
                   )}
                 </div>
@@ -7972,12 +7977,13 @@ function SubmissionEditor({studentId, assignment, readOnly, onClose, focusWorksh
         </div>
       )}
 
-      {/* Session 18C v6: at-a-glance review chip grid for the locked
-          submission. Same component used in the tutor's review panel,
-          rendered here so the student can quickly scan which questions
-          they got right/wrong + their flags without scrolling the full
-          editor. Only renders when graded data is available. */}
-      {isLocked && submission && Array.isArray(submission.perQuestion) && submission.perQuestion.length > 0 && (
+      {/* Session 18C v7: review grid is gated on submission.status ===
+          "submitted" specifically, not the broader isLocked. Per Aidan:
+          'I don't want them to see if it is right and wrong as they
+          answer, only after they submit.' isLocked also covers readOnly
+          (parent/impersonation) views where the submission could still
+          be in draft state — we want no result-leakage there either. */}
+      {submission && submission.status === "submitted" && Array.isArray(submission.perQuestion) && submission.perQuestion.length > 0 && (
         <SubmissionReviewGrid
           worksheets={worksheetsStable}
           perQuestion={submission.perQuestion}
@@ -8033,6 +8039,7 @@ function SubmissionEditor({studentId, assignment, readOnly, onClose, focusWorksh
             isLocked={isLocked}
             indexLabel={`Worksheet ${idx+1} of ${worksheetsStable.length}`}
             results={perQuestionByWorksheet[w.id]}
+            showResults={submission && submission.status === "submitted"}
           />
         ))
       )}
