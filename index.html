@@ -2513,6 +2513,19 @@ function getImpersonateStudentId(){
 
 function RoleRouter({authUser, onSignOut, currentUserEntry}){
   const role = currentUserEntry?.role || null;
+  // Session 18C v8: diagnostic logging — when a student reports a
+  // blank/wrong page, this gives us the exact entry state from the
+  // console.
+  if(typeof window !== "undefined" && !window._loggedRoleOnce){
+    window._loggedRoleOnce = true;
+    console.log("[RoleRouter]", {
+      email: (currentUserEntry && currentUserEntry.email) || (authUser && authUser.email) || null,
+      role,
+      studentIds: (currentUserEntry && currentUserEntry.studentIds) || [],
+      url: typeof location !== "undefined" ? location.href : "",
+      stashed: (typeof sessionStorage !== "undefined") ? sessionStorage.getItem(PENDING_ASSIGNMENT_KEY) : null,
+    });
+  }
 
   // Session 18B: admin/tutor impersonation. Renders the student portal
   // for the target studentId, with a banner indicating read-only view.
@@ -2541,7 +2554,46 @@ function RoleRouter({authUser, onSignOut, currentUserEntry}){
     const studentId = pickPortalStudentId(currentUserEntry);
     return <StudentPortal studentId={studentId} onSignOut={onSignOut} currentUserEntry={currentUserEntry}/>;
   }
-  return <AppInner authUser={authUser} onSignOut={onSignOut} currentUserEntry={currentUserEntry}/>;
+  // Session 18C v8: tutor/admin → tutor app. Any OTHER role (or no role
+  // at all) lands here — used to silently fall through to AppInner,
+  // which crashes for non-tutors because they don't have Firestore
+  // permission for tutor reads (no /students/* list, no admin allowlist
+  // access, etc.). That crash + no top-level error boundary = blank
+  // page, which is what Michael was seeing when his allowlist entry
+  // came back without role:'student' set.
+  //
+  // Now: if role is tutor/admin, show the tutor app. Anything else
+  // shows a helpful diagnostic screen instead of a blank crash.
+  if(role === "tutor" || role === "admin"){
+    return <AppInner authUser={authUser} onSignOut={onSignOut} currentUserEntry={currentUserEntry}/>;
+  }
+  // Unrecognized / missing role.
+  return (
+    <div style={{minHeight:"100vh",background:"var(--paper)",display:"flex",alignItems:"center",justifyContent:"center",padding:"24px"}}>
+      <div style={{...CARD, padding:"40px 32px", maxWidth: 520, textAlign:"left"}}>
+        <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,fontWeight:700,letterSpacing:1.4,color:"#9A5B1F",textTransform:"uppercase",marginBottom:6}}>
+          Account not configured
+        </div>
+        <h2 style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:22,fontWeight:600,color:"#0F1A2E",margin:"0 0 14px",letterSpacing:-.2}}>
+          Hi {(currentUserEntry && currentUserEntry.email) || (authUser && authUser.email) || "there"} — your account is signed in but missing a role.
+        </h2>
+        <div style={{fontSize:13,color:"#66708A",lineHeight:1.6,marginBottom:16}}>
+          We see your allowlist entry but it doesn't have a role set yet
+          (student / parent / tutor / admin). Please contact your tutor to
+          have your role configured. Once that's done, click your portal
+          link again.
+        </div>
+        <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#66708A",marginBottom:18,padding:"8px 10px",background:"rgba(15,26,46,.04)",borderRadius:4,wordBreak:"break-all"}}>
+          email: {(currentUserEntry && currentUserEntry.email) || (authUser && authUser.email) || "(unknown)"}<br/>
+          role: {role || "(not set)"}<br/>
+          studentIds: {JSON.stringify((currentUserEntry && currentUserEntry.studentIds) || [])}
+        </div>
+        <button onClick={onSignOut} style={{...mkBtn("transparent","#0F1A2E"),border:"1px solid rgba(15,26,46,.2)",padding:"10px 18px",fontSize:12}}>
+          Sign out
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function App(){
