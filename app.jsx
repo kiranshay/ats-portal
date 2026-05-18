@@ -6325,6 +6325,91 @@ function PortalEmptyInline({copy}){
     </div>
   );
 }
+// Session 18C v17: status-aware worksheet list for the Assignment History
+// PSM cards. Mirrors LatestPsmCard / AssignmentDetailView so a submitted
+// worksheet shows "Review →" with a Graded · X/Y pill (not the misleading
+// "Answer →" button it used to render). Subscribes to the per-WS
+// subcollection for this PSM. Falls back to the legacy whole-PSM
+// submission (responses[]) when no per-WS doc exists yet.
+function PortalPsmWorksheetList({studentId, assignment, worksheets, legacySubmission, canEdit, onOpen, hasWelledOrExams}){
+  const perWs = useWorksheetSubmissions(studentId, assignment.id);
+  const STATUS_STYLE = {
+    "not-started":  { bg: "transparent",  fg: "#66708A",  border: "rgba(15,26,46,.18)", label: "Not started",  cta: "Answer →"  },
+    "in-progress":  { bg: "#FFF1DE",      fg: "#9A5B1F",  border: "rgba(154,91,31,.4)", label: "In progress",  cta: "Continue →" },
+    "submitted":    { bg: "#E9F0F6",      fg: "#003258",  border: "rgba(0,50,88,.35)",  label: "Submitted",    cta: "Review →"  },
+    "graded":       { bg: "#E4F0E2",      fg: "#4C7A4C",  border: "rgba(76,122,76,.4)", label: "Graded",       cta: "Review →"  },
+  };
+  function statusFor(wsId){
+    const perDoc = perWs.byWorksheet[wsId];
+    if(perDoc){
+      if(typeof perDoc.scoreCorrect === "number") return { kind: "graded", score: `${perDoc.scoreCorrect}/${perDoc.scoreTotal}` };
+      if(perDoc.status === "submitted") return { kind: "submitted" };
+      const hasAny = (perDoc.responses || []).some(r => (r.studentAnswer || "").trim() !== "");
+      return hasAny ? { kind: "in-progress" } : { kind: "not-started" };
+    }
+    if(legacySubmission && legacySubmission.status === "submitted"){
+      const has = (legacySubmission.responses || []).some(r => r && r.worksheetId === wsId && (r.studentAnswer || "").trim() !== "");
+      return has ? { kind: "submitted" } : { kind: "not-started" };
+    }
+    if(legacySubmission && Array.isArray(legacySubmission.responses)){
+      const has = legacySubmission.responses.some(r => r && r.worksheetId === wsId && (r.studentAnswer || "").trim() !== "");
+      return has ? { kind: "in-progress" } : { kind: "not-started" };
+    }
+    return { kind: "not-started" };
+  }
+  return (
+    <div style={{marginBottom: hasWelledOrExams ? 14 : 0, display:"flex", flexDirection:"column", gap:6}}>
+      {worksheets.map(w=>{
+        const st = statusFor(w.id);
+        const sty = STATUS_STYLE[st.kind] || STATUS_STYLE["not-started"];
+        const isDone = st.kind === "submitted" || st.kind === "graded";
+        // Even non-edit roles (parent) can click to review submitted work.
+        const isClickable = canEdit || isDone;
+        return (
+          <button
+            key={w.id}
+            onClick={()=> isClickable && onOpen(w.id)}
+            disabled={!isClickable}
+            style={{
+              textAlign:"left",
+              background:"#fff",
+              border:`1px solid ${sty.border}`,
+              borderRadius:6,
+              padding:"10px 12px",
+              cursor: isClickable ? "pointer" : "default",
+              fontFamily:"inherit",
+              display:"flex",
+              alignItems:"center",
+              gap:10,
+              flexWrap:"wrap",
+            }}
+          >
+            <div style={{flex:"1 1 200px",minWidth:0}}>
+              <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:14,color:"#0F1A2E",fontWeight:600,letterSpacing:-.1}}>
+                {w.title || `${w.domain||""} — ${w.difficulty||""}`}
+              </div>
+              <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#66708A",marginTop:2}}>
+                {w.subject||""} {w.domain?`· ${w.domain}`:""} {w.difficulty?`· ${w.difficulty}`:""}{w.evenOdd?` · ${w.evenOdd}`:""}
+              </div>
+            </div>
+            <span style={{
+              fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:700,letterSpacing:.6,textTransform:"uppercase",
+              padding:"4px 10px",borderRadius:3,
+              background:sty.bg, color:sty.fg, border:`1px solid ${sty.border}`,
+              flexShrink:0,
+            }}>
+              {st.kind === "graded" ? `Graded · ${st.score}` : sty.label}
+            </span>
+            <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:600,color:isDone?"#003258":"#9A5B1F",letterSpacing:.6,textTransform:"uppercase",flexShrink:0}}>
+              {sty.cta}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function PortalHistoryTab({student, studentId, currentUserEntry, deepLinkAssignmentId, submissions}){
   const [openAssignmentId, setOpenAssignmentId] = useState(null);
   // Session 18A: per-worksheet click-through. When openWorksheetId is
@@ -6447,48 +6532,15 @@ function PortalHistoryTab({student, studentId, currentUserEntry, deepLinkAssignm
             </div>
 
             {worksheets.length>0 && (
-              <div style={{marginBottom:welledDomain.length||practiceExams.length?14:0, display:"flex", flexDirection:"column", gap:6}}>
-                {/* Session 18C v9: each worksheet inline-clickable. Skips
-                    the old AssignmentDetailView intermediate page —
-                    student picks a worksheet and goes straight to the
-                    SubmissionEditor in single-WS mode. */}
-                {worksheets.map(w=>{
-                  return (
-                    <button
-                      key={w.id}
-                      onClick={()=>{ if(canEdit){ setOpenAssignmentId(asg.id); setOpenWorksheetId(w.id); } }}
-                      disabled={!canEdit}
-                      style={{
-                        textAlign:"left",
-                        background:"#fff",
-                        border:"1px solid rgba(15,26,46,.12)",
-                        borderRadius:6,
-                        padding:"10px 12px",
-                        cursor: canEdit ? "pointer" : "default",
-                        fontFamily:"inherit",
-                        display:"flex",
-                        alignItems:"center",
-                        gap:10,
-                        flexWrap:"wrap",
-                      }}
-                    >
-                      <div style={{flex:"1 1 200px",minWidth:0}}>
-                        <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:14,color:"#0F1A2E",fontWeight:600,letterSpacing:-.1}}>
-                          {w.title || `${w.domain||""} — ${w.difficulty||""}`}
-                        </div>
-                        <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#66708A",marginTop:2}}>
-                          {w.subject||""} {w.domain?`· ${w.domain}`:""} {w.difficulty?`· ${w.difficulty}`:""}{w.evenOdd?` · ${w.evenOdd}`:""}
-                        </div>
-                      </div>
-                      {canEdit && (
-                        <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:600,color:"#9A5B1F",letterSpacing:.6,textTransform:"uppercase"}}>
-                          Answer →
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
+              <PortalPsmWorksheetList
+                studentId={studentId}
+                assignment={asg}
+                worksheets={worksheets}
+                legacySubmission={submittedByAssignment[asg.id]}
+                canEdit={canEdit}
+                onOpen={(wsId)=>{ if(canEdit || true /* allow Review even when locked */){ setOpenAssignmentId(asg.id); setOpenWorksheetId(wsId); } }}
+                hasWelledOrExams={!!(welledDomain.length || practiceExams.length)}
+              />
             )}
 
             {welledDomain.length>0 && (
@@ -8611,14 +8663,16 @@ function TutorPerWsSection({student}){
 function TutorPerWsAssignmentRow({studentId, assignment, open, onToggle, regradeBusy, regradeResults, onRegrade}){
   const perWs = useWorksheetSubmissions(studentId, assignment.id);
   const worksheets = (assignment.worksheets || []).filter(w => !w.deleted);
-  // Session 18C v16: show ALL per-WS docs, including drafts in progress.
-  // per Aidan: 'Every worksheet submission should immediately show up on
+  const {catalog: wsCatalog} = useWorksheetCatalog();
+  // Session 18C v17: show ALL worksheets in every PSM with per-WS
+  // activity — graded, submitted-pending, draft, AND not-started. per
+  // Aidan: 'Every worksheet submission should immediately show up on
   // tutor end and say pending for ones that have yet to be completed.'
-  // Worksheets with no per-WS doc at all show as "Not started" so the
-  // tutor sees the full PSM picture, not just submitted items.
+  // We render even if no per-WS doc exists yet so the tutor can see
+  // the full PSM picture.
   const anyDoc = worksheets.some(w => !!perWs.byWorksheet[w.id]);
-  if(!anyDoc){
-    return null; // no per-WS activity yet on this PSM
+  if(!anyDoc && worksheets.length === 0){
+    return null;
   }
   // Count by status for the row header.
   const counts = { draft: 0, submitted: 0, graded: 0, "not-started": 0 };
@@ -8656,35 +8710,24 @@ function TutorPerWsAssignmentRow({studentId, assignment, open, onToggle, regrade
         </span>
       </div>
       {open && (
-        <div style={{marginTop:10,display:"flex",flexDirection:"column",gap:8}}>
+        <div style={{marginTop:10,display:"flex",flexDirection:"column",gap:10}}>
           {worksheets.map(w=>{
             const d = perWs.byWorksheet[w.id];
             const sty = statusFor(d);
-            const busyKey = `${assignment.id}|${w.id}`;
-            const busy = !!regradeBusy[busyKey];
-            const result = regradeResults[busyKey];
-            const canRegrade = d && (d.status === "submitted" || d.status === "graded" || typeof d.scoreCorrect === "number");
+            const catalogEntry = (wsCatalog || []).find(c => c.title === w.title);
             return (
-              <div key={w.id} style={{padding:"8px 10px",background:"#fff",border:`1px solid ${sty.border}`,borderRadius:4,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-                <div style={{flex:"1 1 200px",minWidth:0}}>
-                  <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:13,color:"#0F1A2E",fontWeight:600}}>
-                    {w.title}
-                  </div>
-                  <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,color:sty.color,letterSpacing:.3,marginTop:2,fontWeight:600,textTransform:"uppercase"}}>
-                    {sty.label}{d?.gradeSkipReason ? ` · ${d.gradeSkipReason}` : ""}
-                  </div>
-                </div>
-                {canRegrade && (
-                  <button onClick={()=>onRegrade(w.id)} disabled={busy} style={{...mkBtn("transparent","#003258"),border:"1px solid rgba(0,50,88,.4)",padding:"5px 12px",fontSize:11,cursor:busy?"not-allowed":"pointer"}}>
-                    {busy ? "Regrading…" : "Re-grade"}
-                  </button>
-                )}
-                {result && (
-                  <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#4C7A4C",fontWeight:600,letterSpacing:.3}}>
-                    ✓ {result.scoreCorrect}/{result.scoreTotal} (audit in console)
-                  </span>
-                )}
-              </div>
+              <TutorPerWsWorksheetCard
+                key={w.id}
+                studentId={studentId}
+                assignmentId={assignment.id}
+                worksheet={w}
+                doc={d}
+                statusStyle={sty}
+                catalogEntry={catalogEntry}
+                regradeBusy={!!regradeBusy[`${assignment.id}|${w.id}`]}
+                regradeResult={regradeResults[`${assignment.id}|${w.id}`]}
+                onRegrade={()=>onRegrade(w.id)}
+              />
             );
           })}
         </div>
@@ -8692,6 +8735,203 @@ function TutorPerWsAssignmentRow({studentId, assignment, open, onToggle, regrade
     </div>
   );
 }
+
+// Session 18C v17: rich per-WS card matching legacy TutorSubmissionRow.
+// Shows per-question chips (with student answer + correct-answer reveal
+// on misses, ★/? flags), reset-to-draft, manual score override, and
+// tutor notes textarea. Saves notes/manual-score directly to the
+// worksheetSubmission doc.
+function TutorPerWsWorksheetCard({studentId, assignmentId, worksheet, doc, statusStyle, catalogEntry, regradeBusy, regradeResult, onRegrade}){
+  const [notes, setNotes] = useState((doc && doc.tutorNotes) || "");
+  const [savingNotes, setSavingNotes] = useState(false);
+  const [resetBusy, setResetBusy] = useState(false);
+  const [resetResult, setResetResult] = useState(null);
+  // Reseed local notes when the underlying doc changes (e.g. another
+  // tutor saved). Dirty-flag protection avoids clobbering in-progress
+  // typing.
+  const notesDirtyRef = useRef(false);
+  useEffect(()=>{
+    if(notesDirtyRef.current) return;
+    setNotes((doc && doc.tutorNotes) || "");
+  }, [doc]);
+
+  const responses = Array.isArray(doc?.responses) ? doc.responses : [];
+  const perQuestion = Array.isArray(doc?.perQuestion) ? doc.perQuestion : [];
+  const qIds = (catalogEntry && Array.isArray(catalogEntry.questionIds)) ? catalogEntry.questionIds : [];
+  // Build a slot list 0..N where N is the max of questionIds length and
+  // any response/perQuestion index. Lets us render even if responses
+  // is partial (e.g. write-race victim).
+  const maxIdx = Math.max(
+    qIds.length,
+    ...responses.map(r => Number(r.questionIndex) || 0),
+    ...perQuestion.map(p => Number(p.questionIndex) || 0),
+    0,
+  );
+  const slots = [];
+  for(let i = 0; i < maxIdx; i++){
+    const r = responses.find(x => Number(x.questionIndex) === i);
+    const pq = perQuestion.find(x => Number(x.questionIndex) === i);
+    slots.push({i, r, pq});
+  }
+
+  const saveNotes = async () => {
+    setSavingNotes(true);
+    try{
+      const col = studentAssignmentWorksheetSubmissionsCollection(studentId, assignmentId);
+      if(!col) return;
+      await col.doc(worksheet.id).set({
+        tutorNotes: notes,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      }, {merge: true});
+      notesDirtyRef.current = false;
+    } catch(e){
+      console.warn("[tutor-notes] save failed:", e);
+      alert("Could not save notes.");
+    } finally {
+      setSavingNotes(false);
+    }
+  };
+
+  const doReset = async (mode) => {
+    const label = mode === "wipe" ? "wipe answers + reset to draft" : "reset to draft (keep current answers)";
+    if(!window.confirm(`${label}\n\nThis lets the student re-answer + resubmit. Proceed?`)) return;
+    setResetBusy(true);
+    try{
+      const fn = window.firebase.app().functions("us-central1").httpsCallable("resetWorksheetSubmission");
+      const res = await fn({sid: studentId, aid: assignmentId, wsId: worksheet.id, mode});
+      setResetResult(res.data);
+    } catch(e){
+      console.warn("[reset] failed:", e);
+      alert("Reset failed: " + (e.message || e));
+    } finally {
+      setResetBusy(false);
+    }
+  };
+
+  const isGraded = doc && (doc.status === "graded" || typeof doc.scoreCorrect === "number");
+  const isSubmitted = doc && doc.status === "submitted";
+  const canReset = doc && (isSubmitted || isGraded);
+
+  // Per-question tally for the header
+  let okN = 0, wrongN = 0, ungradedN = 0;
+  for(const s of slots){
+    if(s.pq){
+      if(s.pq.correct === true) okN++;
+      else if(s.pq.correct === false) wrongN++;
+      else ungradedN++;
+    }
+  }
+
+  return (
+    <div style={{padding:"12px 14px",background:"#fff",border:`1px solid ${statusStyle.border}`,borderRadius:6}}>
+      <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:8,flexWrap:"wrap",marginBottom:8}}>
+        <div style={{flex:"1 1 200px",minWidth:0}}>
+          <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:14,color:"#0F1A2E",fontWeight:600}}>{worksheet.title}</div>
+          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,color:statusStyle.color,letterSpacing:.3,marginTop:2,fontWeight:600,textTransform:"uppercase"}}>
+            {statusStyle.label}{doc?.gradeSkipReason ? ` · ${doc.gradeSkipReason}` : ""}
+            {doc?.resetMode ? ` · was reset (${doc.resetMode})` : ""}
+          </div>
+        </div>
+        {/* per-WS right/wrong tally — at-a-glance */}
+        {(okN + wrongN + ungradedN > 0) && (
+          <div style={{display:"flex",gap:8,fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:600,letterSpacing:.4}}>
+            <span style={{color:"#4C7A4C"}}>✓ {okN}</span>
+            <span style={{color:"#8C2E2E"}}>✗ {wrongN}</span>
+            {ungradedN > 0 && <span style={{color:"#9A5B1F"}}>— {ungradedN}</span>}
+          </div>
+        )}
+      </div>
+
+      {/* Per-question colored chip grid — only when graded */}
+      {(isGraded || perQuestion.length > 0) && slots.length > 0 && (
+        <div style={{display:"flex",flexWrap:"wrap",gap:"6px 8px",fontFamily:"'IBM Plex Mono',monospace",fontSize:12,marginBottom:10}}>
+          {slots.map(({i, r, pq})=>{
+            const ans = r && typeof r.studentAnswer === "string" ? r.studentAnswer.trim() : "";
+            const isBlank = ans.length === 0;
+            const flag = r && r.flag ? r.flag : (pq && pq.flag ? pq.flag : null);
+            const flagIcon = flag === "star" ? "★" : flag === "question" ? "?" : null;
+            const flagColor = flag === "star" ? "#9A5B1F" : flag === "question" ? "#5C4178" : null;
+            let bg="#fff", fg="#0F1A2E", border="rgba(15,26,46,.12)", reveal=null;
+            if(pq){
+              if(pq.correct === true){ bg="#E4F0E2"; fg="#2D5A2D"; border="rgba(76,122,76,.4)"; }
+              else if(pq.correct === false){ bg="#F4DADA"; fg="#7A2020"; border="rgba(140,46,46,.4)"; reveal = pq.correctAnswer; }
+              else { bg="#FFF1DE"; fg="#7A5318"; border="rgba(154,91,31,.4)"; }
+            }
+            return (
+              <span key={i} style={{
+                display:"inline-flex",alignItems:"center",gap:4,
+                padding:"3px 8px",borderRadius:4,
+                background:bg, color:fg, border:`1px solid ${border}`,
+              }}>
+                <span style={{opacity:.7,fontWeight:500}}>{i+1}.</span>
+                <span style={{fontStyle:isBlank?"italic":"normal",fontWeight:isBlank?400:600,opacity:isBlank?.65:1}}>
+                  {isBlank ? "blank" : ans}
+                </span>
+                {reveal && <span style={{opacity:.8,fontWeight:500}}>(✓ {reveal})</span>}
+                {flagIcon && <span style={{color:flagColor,fontWeight:700,marginLeft:2}} title={flag === "star" ? "Student starred — had trouble" : "Student question-marked — guessed/skipped"}>{flagIcon}</span>}
+              </span>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Tutor notes */}
+      {(isGraded || isSubmitted) && (
+        <div style={{marginTop:8,marginBottom:8}}>
+          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:600,letterSpacing:1.2,color:"#66708A",textTransform:"uppercase",marginBottom:4}}>Tutor notes</div>
+          <textarea
+            value={notes}
+            onChange={e=>{ notesDirtyRef.current = true; setNotes(e.target.value); }}
+            placeholder="Which questions were missed? What to work on next?"
+            rows={2}
+            style={{
+              width:"100%",padding:"8px 10px",fontSize:12,fontFamily:"inherit",
+              border:"1px solid rgba(15,26,46,.18)",borderRadius:4,resize:"vertical",
+              boxSizing:"border-box",
+            }}
+          />
+          <div style={{display:"flex",justifyContent:"flex-end",marginTop:4}}>
+            <button onClick={saveNotes} disabled={savingNotes} style={{...mkBtn("transparent","#66708A"),border:"1px solid rgba(15,26,46,.18)",padding:"4px 10px",fontSize:10,letterSpacing:.4,textTransform:"uppercase"}}>
+              {savingNotes ? "Saving…" : "Save notes"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Action row: re-grade + reset */}
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:8,paddingTop:8,borderTop:"1px dashed rgba(15,26,46,.1)"}}>
+        {(isSubmitted || isGraded) && (!isGraded || doc?.gradeSkipReason) && (
+          <button onClick={onRegrade} disabled={regradeBusy} style={{...mkBtn("transparent","#003258"),border:"1px solid rgba(0,50,88,.4)",padding:"5px 12px",fontSize:11,cursor:regradeBusy?"not-allowed":"pointer"}}>
+            {regradeBusy ? "Regrading…" : "Re-grade"}
+          </button>
+        )}
+        {canReset && (
+          <>
+            <button onClick={()=>doReset("draft")} disabled={resetBusy} style={{...mkBtn("transparent","#9A5B1F"),border:"1px solid rgba(154,91,31,.4)",padding:"5px 12px",fontSize:11,cursor:resetBusy?"not-allowed":"pointer"}}>
+              {resetBusy ? "Resetting…" : "Reset to draft"}
+            </button>
+            <button onClick={()=>doReset("wipe")} disabled={resetBusy} style={{...mkBtn("transparent","#8C2E2E"),border:"1px solid rgba(140,46,46,.4)",padding:"5px 12px",fontSize:11,cursor:resetBusy?"not-allowed":"pointer"}}>
+              Wipe & reset
+            </button>
+          </>
+        )}
+        {regradeResult && (
+          <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#4C7A4C",fontWeight:600,letterSpacing:.3,alignSelf:"center"}}>
+            ✓ regraded → {regradeResult.scoreCorrect}/{regradeResult.scoreTotal}
+          </span>
+        )}
+        {resetResult && (
+          <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9A5B1F",fontWeight:600,letterSpacing:.3,alignSelf:"center"}}>
+            ✓ reset ({resetResult.mode}, was {resetResult.priorScore || resetResult.priorStatus})
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// (Old stray closing tags removed — TutorPerWsAssignmentRow now closes
+// cleanly at its own function end above.)
 
 function TutorSubmissionsPanel({student}){
   const {status, submissions, error} = useTutorSubmissions(student.id);

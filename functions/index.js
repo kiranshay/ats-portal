@@ -1259,3 +1259,97 @@ exports.broadcastToSatStudents = onCall(
     };
   },
 );
+
+// ── resetWorksheetSubmission (Session 18C v17) ────────────────────────────
+// Admin/tutor-only. Flips a worksheetSubmissions doc back to draft state
+// so the student can re-answer + resubmit. Used to recover docs that lost
+// data via the pre-v15 write race (where only the first answer persisted
+// and submit locked the partial data).
+//
+// Modes:
+//   mode: "draft"  → status=draft, clears scoreCorrect/scoreTotal/perQuestion/
+//                    gradedAt/submittedAt/gradeSkipReason. responses stay
+//                    intact so the student sees whatever did persist as a
+//                    starting point. dirty/createdAt preserved.
+//   mode: "wipe"   → as "draft" but also wipes responses to []. fresh
+//                    start. use when responses are misaligned/corrupted.
+//
+// Logs everything to cloud function logs tagged [RESET].
+//
+// Payload: { sid, aid, wsId, mode: "draft" | "wipe" }
+
+exports.resetWorksheetSubmission = onCall(
+  {
+    region: "us-central1",
+    secrets: ALL_WISE_SECRETS,
+    maxInstances: 5,
+    timeoutSeconds: 60,
+  },
+  async (request) => {
+    const { sid, aid, wsId, mode } = (request.data || {});
+    try {
+      await verifyCallerIsTutor(request);
+      if (!sid || !aid || !wsId) {
+        throw new HttpsError("invalid-argument", "sid, aid, wsId required");
+      }
+      const resetMode = (mode === "wipe") ? "wipe" : "draft";
+      const db = admin.firestore();
+      const ref = db.collection("students").doc(sid)
+        .collection("assignments").doc(aid)
+        .collection("worksheetSubmissions").doc(wsId);
+      const snap = await ref.get();
+      if (!snap.exists) {
+        throw new HttpsError("not-found", "worksheetSubmission doc not found");
+      }
+      const before = snap.data() || {};
+      const FV = admin.firestore.FieldValue;
+      const update = {
+        status: "draft",
+        scoreCorrect: FV.delete(),
+        scoreTotal: FV.delete(),
+        perQuestion: FV.delete(),
+        gradedAt: FV.delete(),
+        submittedAt: FV.delete(),
+        gradeSkipReason: FV.delete(),
+        updatedAt: FV.serverTimestamp(),
+        // Audit fields so we can see this was a manual reset.
+        resetAt: FV.serverTimestamp(),
+        resetBy: request.auth && request.auth.token && request.auth.token.email || null,
+        resetMode,
+      };
+      if (resetMode === "wipe") {
+        update.responses = [];
+      }
+      await ref.update(update);
+
+      logger.info("[RESET]", {
+        sid, aid, wsId,
+        mode: resetMode,
+        beforeStatus: before.status,
+        beforeScoreCorrect: before.scoreCorrect,
+        beforeScoreTotal: before.scoreTotal,
+        beforeResponseCount: Array.isArray(before.responses) ? before.responses.length : 0,
+        resetBy: update.resetBy,
+      });
+
+      return {
+        status: "draft",
+        mode: resetMode,
+        priorStatus: before.status,
+        priorScore: (typeof before.scoreCorrect === "number" && typeof before.scoreTotal === "number")
+          ? `${before.scoreCorrect}/${before.scoreTotal}` : null,
+      };
+    } catch (err) {
+      if (err instanceof HttpsError) {
+        logger.warn("[RESET]", { sid, aid, wsId, code: err.code, message: err.message });
+        throw err;
+      }
+      logger.error("[RESET] unhandled exception", {
+        sid, aid, wsId,
+        message: err && err.message,
+        stack: err && err.stack,
+      });
+      throw new HttpsError("internal", (err && err.message) || "reset failed");
+    }
+  },
+);
