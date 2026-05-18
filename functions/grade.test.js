@@ -617,3 +617,105 @@ test("gradeWorksheetSubmission: empty responses → skipped", () => {
   assert.equal(res.status, "skipped");
   assert.equal(res.reason, "no-responses");
 });
+
+// Session 18C v14: grader robustness for "answer matches but marked wrong"
+// edge cases. These are the kinds of values that have caused student
+// reports in the wild.
+
+test("gradeOne: whitespace + case insensitive MC", () => {
+  assert.equal(gradeOne("a", "A"), true);
+  assert.equal(gradeOne(" A ", "A"), true);
+  assert.equal(gradeOne("A\n", "A"), true);
+  assert.equal(gradeOne("A", " A "), true);
+});
+
+test("gradeOne: numeric canonicalization equivalents", () => {
+  assert.equal(gradeOne("5", "5"), true);
+  assert.equal(gradeOne("5.0", "5"), true);
+  assert.equal(gradeOne("5", "5.0"), true);
+  assert.equal(gradeOne(".5", "0.5"), true);
+  assert.equal(gradeOne("0.5", ".5"), true);
+  assert.equal(gradeOne("-0.25", "-.25"), true);
+});
+
+test("gradeOne: multi-answer FR (commas)", () => {
+  assert.equal(gradeOne(".25", "1/4, .25, 0.25"), true);
+  assert.equal(gradeOne("1/4", "1/4, .25, 0.25"), true);
+  assert.equal(gradeOne("0.25", "1/4, .25, 0.25"), true);
+  assert.equal(gradeOne("0.26", "1/4, .25, 0.25"), false);
+});
+
+test("gradeOne: empty/blank student answer never matches", () => {
+  assert.equal(gradeOne("", "A"), false);
+  assert.equal(gradeOne(null, "A"), false);
+  assert.equal(gradeOne(undefined, "A"), false);
+  assert.equal(gradeOne("   ", "A"), false);
+});
+
+test("gradeOne: MC mismatch is rejected", () => {
+  assert.equal(gradeOne("A", "B"), false);
+  assert.equal(gradeOne("C", "A"), false);
+});
+
+test("gradeWorksheetSubmission: emits audit trail with raw + normalized", () => {
+  const worksheet = { id: "w1", title: "MC Worksheet" };
+  const catalogRow = {
+    title: "MC Worksheet",
+    answerFormat: "multiple-choice",
+    questionIds: ["q1", "q2"],
+  };
+  const questionKeysById = new Map([
+    ["q1", { correctAnswer: "A" }],
+    ["q2", { correctAnswer: "B" }],
+  ]);
+  const worksheetSubmission = {
+    worksheetId: "w1",
+    responses: [
+      { questionIndex: 0, studentAnswer: "A" },
+      { questionIndex: 1, studentAnswer: " a " },  // case + whitespace
+    ],
+  };
+  const res = gradeWorksheetSubmission({ worksheetSubmission, worksheet, catalogRow, questionKeysById });
+  assert.equal(res.status, "graded");
+  assert.equal(res.scoreCorrect, 1);
+  assert.equal(res.scoreTotal, 2);
+  assert.ok(Array.isArray(res.audit));
+  assert.equal(res.audit.length, 2);
+  // First audit entry: matched
+  assert.equal(res.audit[0].qid, "q1");
+  assert.equal(res.audit[0].studentAnswer, "A");
+  assert.equal(res.audit[0].correctAnswer, "A");
+  assert.equal(res.audit[0].normStudent, "A");
+  assert.equal(res.audit[0].normCorrect, "A");
+  assert.equal(res.audit[0].verdict, "correct");
+  // Second audit entry: " a " vs "B" → wrong, but normalization shows
+  // it normalized to A correctly (just != B)
+  assert.equal(res.audit[1].qid, "q2");
+  assert.equal(res.audit[1].studentAnswer, " a ");
+  assert.equal(res.audit[1].correctAnswer, "B");
+  assert.equal(res.audit[1].normStudent, "A");
+  assert.equal(res.audit[1].normCorrect, "B");
+  assert.equal(res.audit[1].verdict, "wrong");
+});
+
+test("gradeWorksheetSubmission: audit shows skip reasons", () => {
+  const worksheet = { id: "w1", title: "MC Worksheet" };
+  const catalogRow = {
+    title: "MC Worksheet",
+    answerFormat: "multiple-choice",
+    questionIds: ["q1", "q2"],
+  };
+  const questionKeysById = new Map([
+    ["q1", { correctAnswer: "A" }],
+    // q2 missing
+  ]);
+  const worksheetSubmission = {
+    worksheetId: "w1",
+    responses: [
+      { questionIndex: 0, studentAnswer: "A" },
+      { questionIndex: 1, studentAnswer: "B" },
+    ],
+  };
+  const res = gradeWorksheetSubmission({ worksheetSubmission, worksheet, catalogRow, questionKeysById });
+  assert.equal(res.audit[1].reason, "missing-key");
+});

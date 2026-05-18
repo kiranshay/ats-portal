@@ -319,27 +319,49 @@ function gradeWorksheetSubmission({ worksheetSubmission, worksheet, catalogRow, 
   let scoreCorrect = 0;
   let scoreTotal = 0;
   const perQuestion = [];
+  // Session 18C v14: detailed grading audit trail. Every response gets
+  // an audit entry showing the raw inputs and the comparison verdict,
+  // so when a student reports "graded wrong but my answer matches" we
+  // can read the cloud-function logs and see EXACTLY what was compared.
+  const audit = [];
 
   for (const r of responses) {
     const qi = Number(r.questionIndex);
     if (qi < 0 || qi >= qIds.length) {
+      audit.push({ qi, reason: "questionIndex-out-of-range", studentAnswer: r.studentAnswer });
       perQuestion.push({ questionIndex: qi, questionId: null, correct: null, skipReason: "questionIndex-out-of-range", flag: r.flag || null });
       continue;
     }
     if (!isInSubset(qi, worksheet.evenOdd)) {
+      audit.push({ qi, reason: "not-in-subset", subset: worksheet.evenOdd, studentAnswer: r.studentAnswer });
       perQuestion.push({ questionIndex: qi, questionId: null, correct: null, skipReason: "not-in-subset", flag: r.flag || null });
       continue;
     }
     const qid = qIds[qi];
     const key = questionKeysById.get(qid);
     if (!key || key.correctAnswer === undefined) {
+      audit.push({ qi, qid, reason: "missing-key", studentAnswer: r.studentAnswer });
       perQuestion.push({ questionIndex: qi, questionId: qid, correct: null, skipReason: "missing-key", flag: r.flag || null });
       continue;
     }
     const flag = r.flag || null;
-    const isCorrect = flag === "question" ? false : gradeOne(r.studentAnswer, key.correctAnswer);
+    const rawStudent = r.studentAnswer;
+    const rawCorrect = key.correctAnswer;
+    const normStudent = normalize(rawStudent);
+    const normCorrect = normalize(rawCorrect);
+    const isCorrect = flag === "question" ? false : gradeOne(rawStudent, rawCorrect);
     scoreTotal += 1;
     if (isCorrect) scoreCorrect += 1;
+    audit.push({
+      qi, qid,
+      studentAnswer: rawStudent,
+      correctAnswer: rawCorrect,
+      normStudent,
+      normCorrect,
+      flag,
+      isMcAnswerCheck: isMcAnswer(rawCorrect),
+      verdict: isCorrect ? "correct" : (flag === "question" ? "question-flag→wrong" : "wrong"),
+    });
     perQuestion.push({
       questionIndex: qi,
       questionId: qid,
@@ -350,9 +372,9 @@ function gradeWorksheetSubmission({ worksheetSubmission, worksheet, catalogRow, 
   }
 
   if (scoreTotal === 0) {
-    return { status: "skipped", reason: "all-questions-unsupported-or-missing" };
+    return { status: "skipped", reason: "all-questions-unsupported-or-missing", audit };
   }
-  return { status: "graded", scoreCorrect, scoreTotal, perQuestion };
+  return { status: "graded", scoreCorrect, scoreTotal, perQuestion, audit };
 }
 
 // ── Exports (test + trigger surface) ──────────────────────────────────────

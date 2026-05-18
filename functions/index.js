@@ -789,12 +789,123 @@ exports.onWorksheetSubmissionSubmit = onDocumentUpdated(
       perQuestion:  result.perQuestion,
       gradedAt:     admin.firestore.FieldValue.serverTimestamp(),
     });
-    logger.info("onWorksheetSubmissionSubmit: graded", {
+    // Session 18C v14: full per-question audit log so we can debug
+    // any "graded wrong but my answer matches" reports without
+    // re-running anything. Look for [GRADE AUDIT] in cloud function
+    // logs filtered by sid/aid/wsId.
+    logger.info("[GRADE AUDIT] onWorksheetSubmissionSubmit graded", {
       sid, aid, wsId,
       scoreCorrect: result.scoreCorrect,
       scoreTotal:   result.scoreTotal,
+      worksheetTitle: worksheet.title,
+      catalogQuestionIds: qIds,
+      audit: result.audit || [],
     });
   }
+);
+
+// ── regradeWorksheetSubmission (Session 18C v14) ──────────────────────────
+// Admin/tutor-only. Lets you re-run grading on a worksheetSubmissions doc
+// without flipping its status. Useful when:
+//   - A student reports their submission was scored incorrectly
+//   - The catalog row's questionIds were re-extracted with a fix
+//   - A questionKey was added that was missing at submit time
+//
+// Reads the doc as-is, looks up everything fresh, re-runs
+// gradeWorksheetSubmission, writes the result back. Logs the full
+// audit trail so it shows up in cloud function logs immediately.
+//
+// Caller payload: { sid, aid, wsId }
+exports.regradeWorksheetSubmission = onCall(
+  {
+    region: "us-central1",
+    secrets: ALL_WISE_SECRETS,
+    maxInstances: 5,
+    timeoutSeconds: 120,
+  },
+  async (request) => {
+    await verifyCallerIsTutor(request);
+    const { sid, aid, wsId } = request.data || {};
+    if (!sid || !aid || !wsId) {
+      throw new HttpsError("invalid-argument", "sid, aid, wsId required");
+    }
+    const db = admin.firestore();
+    const wsRef = db.collection("students").doc(sid)
+      .collection("assignments").doc(aid)
+      .collection("worksheetSubmissions").doc(wsId);
+    const wsSnap = await wsRef.get();
+    if (!wsSnap.exists) {
+      throw new HttpsError("not-found", "worksheetSubmission doc not found");
+    }
+    const after = wsSnap.data();
+
+    const studentSnap = await db.collection("students").doc(sid).get();
+    if (!studentSnap.exists) throw new HttpsError("not-found", "student not found");
+    const student = studentSnap.data() || {};
+    const assignment = (student.assignments || []).find((a) => a && a.id === aid);
+    if (!assignment) throw new HttpsError("not-found", "assignment not found on student");
+    const worksheet = (assignment.worksheets || []).find((w) => w && w.id === wsId);
+    if (!worksheet) throw new HttpsError("not-found", "worksheet not found on assignment");
+
+    const catalogByTitle = loadCatalogByTitle();
+    const catalogRow = catalogByTitle && catalogByTitle.get(worksheet.title);
+    if (!catalogRow) {
+      throw new HttpsError("failed-precondition", `no catalog row for worksheet title: ${worksheet.title}`);
+    }
+
+    const qIds = Array.isArray(catalogRow.questionIds) ? catalogRow.questionIds : [];
+    const questionKeysById = new Map();
+    if (qIds.length > 0) {
+      const refs = qIds.map((id) => db.collection("questionKeys").doc(id));
+      const snaps = await db.getAll(...refs);
+      for (const s of snaps) {
+        if (s.exists) questionKeysById.set(s.id, s.data());
+      }
+    }
+
+    const result = gradeWorksheetSubmission({
+      worksheetSubmission: after,
+      worksheet,
+      catalogRow,
+      questionKeysById,
+    });
+
+    logger.info("[REGRADE AUDIT]", {
+      sid, aid, wsId,
+      worksheetTitle: worksheet.title,
+      catalogQuestionIds: qIds,
+      result: {
+        status: result.status,
+        scoreCorrect: result.scoreCorrect,
+        scoreTotal: result.scoreTotal,
+        reason: result.reason,
+      },
+      audit: result.audit || [],
+    });
+
+    if (result.status === "skipped") {
+      await wsRef.update({
+        gradedAt: admin.firestore.FieldValue.serverTimestamp(),
+        gradeSkipReason: result.reason,
+      });
+      return { status: "skipped", reason: result.reason, audit: result.audit || [] };
+    }
+
+    await wsRef.update({
+      status: "graded",
+      scoreCorrect: result.scoreCorrect,
+      scoreTotal: result.scoreTotal,
+      perQuestion: result.perQuestion,
+      gradedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return {
+      status: "graded",
+      scoreCorrect: result.scoreCorrect,
+      scoreTotal: result.scoreTotal,
+      perQuestion: result.perQuestion,
+      audit: result.audit || [],
+    };
+  },
 );
 
 // ── syncStudentsFromWise (Session 18C) ────────────────────────────────────
