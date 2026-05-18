@@ -4905,9 +4905,16 @@ function GeneratorTab(props){
       </div>
 
       {/* MIDDLE: STUDENT SUMMARY (when selected) + WORKSHEET PICKER */}
-      <div style={{display:"flex",flexDirection:"column",gap:12,overflow:"hidden",maxHeight:"calc(100vh - 140px)"}}>
+      {/* Session 18C v20: outer wrapper no longer height-capped, so the
+          page scrolls naturally when StudentSummaryCard is tall. The
+          worksheet card now has its OWN tall max-height + internal
+          scroll, so even when the summary card is fully expanded the
+          worksheet list is comfortable to scroll. Fixes "scrolling
+          difficulty with worksheets at bottom once I select a student"
+          per Aidan. */}
+      <div style={{display:"flex",flexDirection:"column",gap:12}}>
       {curStudent && <StudentSummaryCard student={curStudent}/>}
-      <div style={{...CARD,display:"flex",flexDirection:"column",overflow:"hidden",flex:1,minHeight:0,padding:20}}>
+      <div style={{...CARD,display:"flex",flexDirection:"column",overflow:"hidden",padding:20,minHeight:520,maxHeight:"80vh"}}>
         <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:16,flexShrink:0,paddingBottom:12,borderBottom:"1px solid rgba(15,26,46,.08)"}}>
           <div style={{fontFamily:"'Fraunces',Georgia,serif",fontVariationSettings:'"opsz" 96',fontSize:22,fontWeight:600,color:"#0F1A2E",letterSpacing:-.3}}>Worksheets <span style={{fontSize:11,fontWeight:500,color:"#66708A",fontFamily:"'IBM Plex Mono',monospace",letterSpacing:.3,marginLeft:8}}>{Object.values(grouped).reduce((n,doms)=>n+Object.values(doms).reduce((m,subs)=>m+Object.values(subs).reduce((k,arr)=>k+arr.length,0),0),0)} shown</span></div>
           <div style={{display:"flex",gap:6}}>
@@ -4915,7 +4922,7 @@ function GeneratorTab(props){
             <button onClick={()=>setChk({})} style={{...mkBtn("transparent","#8C2E2E"),border:"1px solid rgba(140,46,46,.3)",padding:"5px 14px",fontSize:11}}>Clear</button>
           </div>
         </div>
-        <div style={{overflowY:"auto",flex:1}}>
+        <div style={{overflowY:"auto",flex:1,minHeight:0}}>
           {Object.keys(grouped).length===0&&<div style={{color:"#94a3b8",textAlign:"center",paddingTop:40,fontSize:13}}>No worksheets match filters.</div>}
           {Object.entries(grouped).map(([subj,doms])=>{
             const sc = SUBJ_COLOR[subj]||{bg:"#F3EEE4",fg:"#2E3A57",accent:B2};
@@ -10134,14 +10141,12 @@ function allScoreDataPoints(student, submissions = [], perWsSubmissions = []){
       // only. Mirrors how the catalog organizes things: comprehensive
       // worksheets aggregate across a whole domain, themed worksheets
       // drill into a single subskill.
-      // Session 18C v19: per Aidan — ONLY title prefix "comp" routes
-      // to the comprehensive DOMAIN bucket. "- Comp" anywhere else in
-      // a title (e.g., "Circles - Comp", "Algebra - Comp") is a
-      // DIFFICULTY indicator on a specific subskill, not a domain rollup.
-      // Subdomain check removed so a worksheet titled "X - Comp" stays
-      // a subskill point even if its subdomain string starts with
-      // "Comprehensive ".
+      // Session 18C v19: ONLY title prefix "comp" routes to DOMAIN.
+      // v20: when subskill (subdomain) is missing on a non-Comp
+      // worksheet, emit a DOMAIN-level fallback point so the grade
+      // never gets silently dropped.
       const isComp = (w.title||"").trim().toLowerCase().startsWith("comp");
+      const subskillName = w.subdomain || null;
       if(isComp){
         pts.push({
           date: dateStr,
@@ -10157,14 +10162,14 @@ function allScoreDataPoints(student, submissions = [], perWsSubmissions = []){
           _subId: sub.id,
           _wsId: wsId,
         });
-      } else if(w.subdomain){
+      } else if(subskillName){
         pts.push({
           date: dateStr,
-          category: `${w.subject} — ${w.domain} — ${w.subdomain}`,
-          subcategory: w.subdomain,
+          category: `${w.subject} — ${w.domain} — ${subskillName}`,
+          subcategory: subskillName,
           subject: w.subject,
           domain: w.domain,
-          subskill: w.subdomain,
+          subskill: subskillName,
           score: correct, max: total, pct,
           source: "submission_graded",
           difficulty: w.difficulty,
@@ -10172,6 +10177,21 @@ function allScoreDataPoints(student, submissions = [], perWsSubmissions = []){
           _label: `${wsLabel} (submitted)`,
           _subId: sub.id,
           _wsId: wsId,
+        });
+      } else {
+        // No subskill known and not Comp-prefixed — still emit a
+        // DOMAIN-level point so the grade isn't silently dropped.
+        pts.push({
+          date: dateStr,
+          category: `${w.subject||"Unknown"} — ${w.domain||"Unknown"}`,
+          subcategory: w.domain,
+          subject: w.subject, domain: w.domain,
+          score: correct, max: total, pct,
+          source: "submission_graded",
+          difficulty: w.difficulty,
+          level: "domain",
+          _label: `${wsLabel} (submitted, no subskill mapped)`,
+          _subId: sub.id, _wsId: wsId,
         });
       }
     });
