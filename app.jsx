@@ -614,13 +614,54 @@ async function parseWelledReport(file){
   const _IS_VALID_SECTION = (n) => Number.isFinite(n) && n >= 200 && n <= 800;
   const _IS_VALID_TOTAL = (n) => Number.isFinite(n) && n >= 400 && n <= 1600;
 
-  // Helper: extract a candidate score from a regex match while rejecting
-  // false-positive contexts (numbers that are part of /800 or 200-800).
-  function _grabScore(text, namePattern, validate){
-    // Match: <label><sep><N> but NOT <label>/N (denominator) and NOT
-    // <label> 200-800 (a range like "scaled 200-800").
+  // Session 18C v18: rewritten score detection.
+  //
+  // Bug fixed: PDFs often have a scale label "200 to 800" right next to
+  // every section score. The old "<label><whitespace><digits>" regex
+  // allowed newlines + arbitrary whitespace between the label and the
+  // digits, so for layouts like:
+  //     Math
+  //
+  //                          800   <-- scale-range label, not a score!
+  // it would skip past the actual score (730 on a different line) and
+  // grab 800. The new strategy:
+  //
+  //   PRIMARY: find every instance of "<NNN> 200 to 800" (the section-
+  //     score-with-scale-label pattern). NNN is the actual section score.
+  //     For "<NNN> 400 to 1600", NNN is the total. These patterns are
+  //     extremely specific and rarely false-match.
+  //
+  //   FALLBACK: only used when no scale-label pattern is found, with a
+  //     tight whitespace cap (no newlines, max 6 chars) to prevent the
+  //     "two lines down" misread.
+  //
+  // Section assignment (R&W vs Math) when only the score-with-label
+  // appears: rely on positional context. The first occurrence after
+  // "Reading and Writing" label = rwScore. The first occurrence after
+  // "Math" label = mathScore. We slice the text around each label and
+  // search within that window.
+
+  const _IS_VALID_SECTION_V2 = _IS_VALID_SECTION;
+  const _IS_VALID_TOTAL_V2 = _IS_VALID_TOTAL;
+  const _SECTION_RANGE_RX = /\b(\d{3,4})\s+200\s+(?:to|–|-)\s+800\b/g;
+  const _TOTAL_RANGE_RX = /\b(\d{3,4})\s+400\s+(?:to|–|-)\s+1600\b/g;
+
+  // Helper: collect all (value, position) hits for a regex.
+  function _hitsOf(text, regex){
+    const out = [];
+    let m;
+    const rx = new RegExp(regex.source, regex.flags);
+    while((m = rx.exec(text)) !== null){
+      const n = parseInt(m[1]);
+      if(Number.isFinite(n)) out.push({ value: n, pos: m.index });
+    }
+    return out;
+  }
+
+  // Helper: tight label-anchored grab (no newlines, ≤6 char gap).
+  function _grabScoreTight(text, namePattern, validate){
     let rx;
-    try { rx = new RegExp(namePattern + "[\\s:]*(\\d{3,4})\\b(?!\\s*[-/]\\s*\\d)", "i"); }
+    try { rx = new RegExp(namePattern + "[ \\t:]{0,6}(\\d{3,4})\\b(?!\\s*[-/–]\\s*\\d)", "i"); }
     catch { return null; }
     const m = text.match(rx);
     if(!m) return null;
@@ -628,35 +669,85 @@ async function parseWelledReport(file){
     return validate(n) ? n : null;
   }
 
-  // Anchor: find the section-scores block. Most WellEd reports have
-  // "TOTAL SCORE" as the header. Slice ~500 chars from there.
+  // Anchor: find the section-scores block.
   const anchorMatch = textForSearch.match(/TOTAL\s*SCORE/i);
   const scoreBlock = anchorMatch
-    ? textForSearch.slice(anchorMatch.index, anchorMatch.index + 600)
-    : textForSearch.slice(0, 1200); // fallback: search the top of the doc
+    ? textForSearch.slice(anchorMatch.index, anchorMatch.index + 1200)
+    : textForSearch.slice(0, 2000);
 
-  // 1. Total — anchor to "TOTAL SCORE" specifically.
-  const totalGrabbed = _grabScore(scoreBlock, "TOTAL\\s*SCORE", _IS_VALID_TOTAL);
-  if(totalGrabbed != null) result.totalScore = totalGrabbed;
-
-  // 2. R&W section. Try labels in order of specificity.
-  for(const lbl of [
-    "Reading\\s*(?:and|&)\\s*Writing\\s*Section",  // most specific
-    "Reading\\s*(?:and|&)\\s*Writing",
-    "R\\s*&?\\s*W\\s*Section",
-  ]){
-    const n = _grabScore(scoreBlock, lbl, _IS_VALID_SECTION);
-    if(n != null){ result.rwScore = n; break; }
+  // 1. Total — try total-range first (400 to 1600), fall back to tight
+  // label-anchored grab.
+  const totalRangeHits = _hitsOf(scoreBlock, _TOTAL_RANGE_RX).filter(h => _IS_VALID_TOTAL_V2(h.value));
+  if(totalRangeHits.length > 0){
+    result.totalScore = totalRangeHits[0].value;
+  } else {
+    const tightTotal = _grabScoreTight(scoreBlock, "TOTAL\\s*SCORE", _IS_VALID_TOTAL_V2);
+    if(tightTotal != null) result.totalScore = tightTotal;
   }
 
-  // 3. Math section. The word "Math" alone is too generic — anchor it
-  // to "Math Section" or require it to appear AFTER R&W in the grid.
-  for(const lbl of [
-    "Math\\s*Section",
-    "(?:^|\\n)\\s*Math\\b",
-  ]){
-    const n = _grabScore(scoreBlock, lbl, _IS_VALID_SECTION);
-    if(n != null){ result.mathScore = n; break; }
+  // 2. Section scores via range pattern. Each "<NNN> 200 to 800" is a
+  // section score. Assign to R&W vs Math by position relative to known
+  // section labels in the doc.
+  const sectionRangeHits = _hitsOf(scoreBlock, _SECTION_RANGE_RX).filter(h => _IS_VALID_SECTION_V2(h.value));
+
+  if(sectionRangeHits.length > 0){
+    // For each hit, find the nearest preceding section label.
+    const rwLabelMatch = scoreBlock.match(/Reading\s*(?:and|&)\s*Writing/i);
+    const mathLabelMatch = scoreBlock.match(/\bMath\b/i);
+    // Track which hits we've assigned to avoid double-assign on
+    // math-only or rw-only reports.
+    const assignedHits = new Set();
+    function findHitAfter(labelPos){
+      if(labelPos == null) return null;
+      for(const h of sectionRangeHits){
+        if(h.pos >= labelPos && !assignedHits.has(h.pos)){
+          return h;
+        }
+      }
+      return null;
+    }
+    if(rwLabelMatch){
+      const h = findHitAfter(rwLabelMatch.index);
+      if(h){ result.rwScore = h.value; assignedHits.add(h.pos); }
+    }
+    if(mathLabelMatch){
+      const h = findHitAfter(mathLabelMatch.index);
+      if(h){ result.mathScore = h.value; assignedHits.add(h.pos); }
+    }
+    // If only one section label was found (single-section report), the
+    // unassigned hit goes to that section. If none assigned but hits
+    // exist, fall back to first hit → rw, second hit → math.
+    if(result.rwScore == null && result.mathScore == null && sectionRangeHits.length > 0){
+      // No label match at all — guess by order
+      if(sectionRangeHits.length >= 2){
+        result.rwScore = sectionRangeHits[0].value;
+        result.mathScore = sectionRangeHits[1].value;
+      } else {
+        // Single section — assume Math if title hints at it, else R&W
+        if(/math/i.test(result.fileName||"") || /math/i.test(result.testName||"")) {
+          result.mathScore = sectionRangeHits[0].value;
+        } else {
+          result.rwScore = sectionRangeHits[0].value;
+        }
+      }
+    }
+  } else {
+    // FALLBACK — no scale-label pattern found. Use tight label grabs.
+    for(const lbl of [
+      "Reading\\s*(?:and|&)\\s*Writing\\s*Section",
+      "Reading\\s*(?:and|&)\\s*Writing",
+      "R\\s*&?\\s*W\\s*Section",
+    ]){
+      const n = _grabScoreTight(scoreBlock, lbl, _IS_VALID_SECTION_V2);
+      if(n != null){ result.rwScore = n; break; }
+    }
+    for(const lbl of [
+      "Math\\s*Section",
+      "(?:^|\\n)\\s*Math\\b",
+    ]){
+      const n = _grabScoreTight(scoreBlock, lbl, _IS_VALID_SECTION_V2);
+      if(n != null){ result.mathScore = n; break; }
+    }
   }
 
   // 4. Cross-validation: if total and both sections are present,
@@ -5681,10 +5772,10 @@ function StudentPortal({studentId, onSignOut, currentUserEntry, switcherSlot, im
         />
       )}
       <div style={{display:"flex",gap:28,marginBottom:24,borderBottom:"1px solid rgba(15,26,46,.12)",flexWrap:"wrap"}}>
+        {/* Session 18C v18: Score Trends tab removed per Aidan — not useful. */}
         {[
           {id:"tracking", label:"Score Tracking"},
           {id:"history",  label:"Assignment History"},
-          {id:"trends",   label:"Score Trends"},
         ].map(t=>{
           const active = tab===t.id;
           return (
@@ -7407,6 +7498,12 @@ function AssignmentDetailView({student, studentId, assignment, submissions, canE
 // worksheet drill-in opens a fresh per-WS doc lifecycle.
 function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, onClose}){
   const {catalog, status: catalogStatus} = useWorksheetCatalog();
+  // Session 18C v18: also subscribe to legacy whole-PSM submission. When
+  // no per-WS doc exists for this worksheet, we fall back to showing the
+  // legacy responses + perQuestion for this worksheet (read-only review).
+  // This fixes the bug where students hitting Review on a legacy
+  // submitted worksheet saw a blank editor.
+  const {submission: legacySubmission} = useSubmissionDraft(studentId, assignment.id);
   // Session 18C v13: internal currentWsId allows switching worksheets
   // without unmounting the editor. Initial value is the worksheetId
   // prop; user can change it via the nav pane above the worksheet,
@@ -7496,7 +7593,10 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
           setSubmittedAt(data.submittedAt || null);
         }
       } else {
-        // Brand-new — seed empty array based on catalog length.
+        // No per-WS doc — seed empty array. Legacy fallback below will
+        // overlay any legacy whole-PSM data for this worksheet via a
+        // separate effect (since legacySubmission may resolve at a
+        // different time than this snapshot).
         const expected = catalogEntry?.questionIds?.length || 0;
         if(!dirtyRef.current){
           setAnswers(new Array(expected).fill(""));
@@ -7511,6 +7611,56 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
     });
     return ()=>unsub();
   }, [studentId, assignment.id, currentWsId, catalogEntry]);
+
+  // Session 18C v18: legacy-submission overlay. If no per-WS doc exists
+  // (doc=null after docLoaded) AND legacy submission has data for this
+  // worksheet, render in legacy-review mode. We synthesize a "fake doc"
+  // built from the legacy responses + perQuestion filtered to currentWsId.
+  // This fixes Review opening to a blank screen for students whose work
+  // was submitted via the old whole-PSM path.
+  useEffect(()=>{
+    if(!docLoaded) return;
+    if(doc) return; // per-WS doc exists, prefer it
+    if(!legacySubmission || !Array.isArray(legacySubmission.responses)) return;
+    if(dirtyRef.current) return;
+    const wsResponses = legacySubmission.responses.filter(r => r && r.worksheetId === currentWsId);
+    if(wsResponses.length === 0) return;
+    const wsPerQuestion = Array.isArray(legacySubmission.perQuestion)
+      ? legacySubmission.perQuestion.filter(p => p && p.worksheetId === currentWsId)
+      : [];
+    const expected = catalogEntry?.questionIds?.length || 0;
+    const a = new Array(expected).fill("");
+    const f = new Array(expected).fill(null);
+    for(const r of wsResponses){
+      const qi = Number(r.questionIndex);
+      if(Number.isFinite(qi) && qi >= 0 && qi < expected){
+        a[qi] = typeof r.studentAnswer === "string" ? r.studentAnswer : "";
+        f[qi] = r.flag || null;
+      }
+    }
+    // Build a synthetic doc with the legacy data. localStatus matches
+    // the legacy submission's status so the banner + chip grid + read-
+    // only lockdown all behave correctly.
+    setAnswers(a);
+    setFlags(f);
+    setLocalStatus(legacySubmission.status || "submitted");
+    setSubmittedAt(legacySubmission.submittedAt || null);
+    setDoc({
+      _legacy: true,
+      worksheetId: currentWsId,
+      responses: wsResponses.map(r => ({
+        questionIndex: r.questionIndex,
+        studentAnswer: r.studentAnswer || "",
+        flag: r.flag || null,
+      })),
+      status: legacySubmission.status || "submitted",
+      perQuestion: wsPerQuestion,
+      submittedAt: legacySubmission.submittedAt || null,
+      // pass through scoring info from legacy if available
+      scoreCorrect: wsPerQuestion.filter(p => p.correct === true).length || legacySubmission.scoreCorrect,
+      scoreTotal: wsPerQuestion.length || legacySubmission.scoreTotal,
+    });
+  }, [docLoaded, doc, legacySubmission, currentWsId, catalogEntry]);
 
   const isLocked = readOnly || localStatus === "submitted";
 
@@ -9781,7 +9931,7 @@ function ScoreHistoryPanel({p, sfm, setSfm, addScore, delScore, addWelledLog, de
 //   3. Practice exam scores from assignment history
 //   4. WellEd Domain scores from assignment history (split by E/M/H)
 // Each point: {date, category, subcategory, score, max, source, note, difficulty?}
-function allScoreDataPoints(student, submissions = []){
+function allScoreDataPoints(student, submissions = [], perWsSubmissions = []){
   const pts = [];
   // 1. Diagnostic → section + total + domain + subskill scores. Diagnostic
   // is the anchor "day-0" baseline — it should be the first time-point in
@@ -9977,25 +10127,31 @@ function allScoreDataPoints(student, submissions = []){
       if(total === 0) return;
       const pct = Math.round((correct/total)*100);
       const wsLabel = w.title || `${w.domain||""} ${w.difficulty||""}`;
-      // domain-level point (for domain card)
-      pts.push({
-        date: dateStr,
-        category: `${w.subject||"Unknown"} — ${w.domain||"Unknown"}`,
-        subcategory: w.domain,
-        subject: w.subject,
-        domain: w.domain,
-        score: correct,
-        max: total,
-        pct,
-        source: "submission_graded",
-        difficulty: w.difficulty,
-        level: "domain",
-        _label: `${wsLabel} (submitted)`,
-        _subId: sub.id,
-        _wsId: wsId,
-      });
-      // sub-level point (for subskill expansion)
-      if(w.subdomain){
+      // Session 18C v18: Comp/non-Comp routing rule per Aidan.
+      // Worksheets with title starting "Comp" (CompPSDA, CompGeo, etc.)
+      // OR subdomain starting "Comprehensive " → emit DOMAIN-level
+      // point only. All other worksheets → emit SUBSKILL-level point
+      // only. Mirrors how the catalog organizes things: comprehensive
+      // worksheets aggregate across a whole domain, themed worksheets
+      // drill into a single subskill.
+      const isComp = ((w.title||"").trim().toLowerCase().startsWith("comp")) ||
+                     ((w.subdomain||"").trim().startsWith("Comprehensive "));
+      if(isComp){
+        pts.push({
+          date: dateStr,
+          category: `${w.subject||"Unknown"} — ${w.domain||"Unknown"}`,
+          subcategory: w.domain,
+          subject: w.subject,
+          domain: w.domain,
+          score: correct, max: total, pct,
+          source: "submission_graded",
+          difficulty: w.difficulty,
+          level: "domain",
+          _label: `${wsLabel} (submitted)`,
+          _subId: sub.id,
+          _wsId: wsId,
+        });
+      } else if(w.subdomain){
         pts.push({
           date: dateStr,
           category: `${w.subject} — ${w.domain} — ${w.subdomain}`,
@@ -10003,9 +10159,7 @@ function allScoreDataPoints(student, submissions = []){
           subject: w.subject,
           domain: w.domain,
           subskill: w.subdomain,
-          score: correct,
-          max: total,
-          pct,
+          score: correct, max: total, pct,
           source: "submission_graded",
           difficulty: w.difficulty,
           level: "sub",
@@ -10015,6 +10169,62 @@ function allScoreDataPoints(student, submissions = []){
         });
       }
     });
+  });
+  // ── Session 18C v18: per-WS submissions → time-points ──────────────────
+  // The per-WS subcollection (worksheetSubmissions/{wsId}) is the new
+  // primary path. Caller hands these in as a Map keyed by `${aid}|${wsId}`
+  // via the `perWsSubmissions` arg. Emits the same Comp/non-Comp routed
+  // time-points as the legacy whole-PSM path above.
+  (perWsSubmissions || []).forEach(entry => {
+    if(!entry || !entry.aid || !entry.wsId || !entry.doc) return;
+    const doc = entry.doc;
+    if(doc.status !== "submitted" && doc.status !== "graded") return;
+    if(typeof doc.scoreCorrect !== "number" || typeof doc.scoreTotal !== "number") return;
+    if(!Array.isArray(doc.perQuestion)) return;
+    const asg = (student.assignments||[]).find(a => a && a.id === entry.aid);
+    if(!asg) return;
+    const w = (asg.worksheets || []).find(x => x && x.id === entry.wsId);
+    if(!w) return;
+    const correct = doc.perQuestion.filter(p => p.correct === true).length;
+    const total = doc.perQuestion.filter(p => p.correct === true || p.correct === false).length;
+    if(total === 0) return;
+    const pct = Math.round((correct/total)*100);
+    const wsLabel = w.title || `${w.domain||""} ${w.difficulty||""}`;
+    const dateStr = (() => {
+      const st = doc.submittedAt;
+      if(typeof st === "string") return st.slice(0,10);
+      if(st && st.toDate){ try { return st.toDate().toISOString().slice(0,10); } catch { /**/ } }
+      return asg.date || todayStr();
+    })();
+    const isComp = ((w.title||"").trim().toLowerCase().startsWith("comp")) ||
+                   ((w.subdomain||"").trim().startsWith("Comprehensive "));
+    if(isComp){
+      pts.push({
+        date: dateStr,
+        category: `${w.subject||"Unknown"} — ${w.domain||"Unknown"}`,
+        subcategory: w.domain,
+        subject: w.subject, domain: w.domain,
+        score: correct, max: total, pct,
+        source: "submission_graded_perws",
+        difficulty: w.difficulty,
+        level: "domain",
+        _label: `${wsLabel} (submitted)`,
+        _aid: entry.aid, _wsId: entry.wsId,
+      });
+    } else if(w.subdomain){
+      pts.push({
+        date: dateStr,
+        category: `${w.subject} — ${w.domain} — ${w.subdomain}`,
+        subcategory: w.subdomain,
+        subject: w.subject, domain: w.domain, subskill: w.subdomain,
+        score: correct, max: total, pct,
+        source: "submission_graded_perws",
+        difficulty: w.difficulty,
+        level: "sub",
+        _label: `${wsLabel} (submitted)`,
+        _aid: entry.aid, _wsId: entry.wsId,
+      });
+    }
   });
   return pts.sort((a,b)=>(a.date||"").localeCompare(b.date||""));
 }
