@@ -824,87 +824,113 @@ exports.regradeWorksheetSubmission = onCall(
     timeoutSeconds: 120,
   },
   async (request) => {
-    await verifyCallerIsTutor(request);
-    const { sid, aid, wsId } = request.data || {};
-    if (!sid || !aid || !wsId) {
-      throw new HttpsError("invalid-argument", "sid, aid, wsId required");
-    }
-    const db = admin.firestore();
-    const wsRef = db.collection("students").doc(sid)
-      .collection("assignments").doc(aid)
-      .collection("worksheetSubmissions").doc(wsId);
-    const wsSnap = await wsRef.get();
-    if (!wsSnap.exists) {
-      throw new HttpsError("not-found", "worksheetSubmission doc not found");
-    }
-    const after = wsSnap.data();
-
-    const studentSnap = await db.collection("students").doc(sid).get();
-    if (!studentSnap.exists) throw new HttpsError("not-found", "student not found");
-    const student = studentSnap.data() || {};
-    const assignment = (student.assignments || []).find((a) => a && a.id === aid);
-    if (!assignment) throw new HttpsError("not-found", "assignment not found on student");
-    const worksheet = (assignment.worksheets || []).find((w) => w && w.id === wsId);
-    if (!worksheet) throw new HttpsError("not-found", "worksheet not found on assignment");
-
-    const catalogByTitle = loadCatalogByTitle();
-    const catalogRow = catalogByTitle && catalogByTitle.get(worksheet.title);
-    if (!catalogRow) {
-      throw new HttpsError("failed-precondition", `no catalog row for worksheet title: ${worksheet.title}`);
-    }
-
-    const qIds = Array.isArray(catalogRow.questionIds) ? catalogRow.questionIds : [];
-    const questionKeysById = new Map();
-    if (qIds.length > 0) {
-      const refs = qIds.map((id) => db.collection("questionKeys").doc(id));
-      const snaps = await db.getAll(...refs);
-      for (const s of snaps) {
-        if (s.exists) questionKeysById.set(s.id, s.data());
+    // Session 18C v15: wrap the whole body in try/catch so any thrown
+    // Error gets a real message instead of bare "internal" on the
+    // client side. Without this wrap, only HttpsError survives the
+    // crossing.
+    const { sid, aid, wsId } = (request.data || {});
+    try {
+      await verifyCallerIsTutor(request);
+      if (!sid || !aid || !wsId) {
+        throw new HttpsError("invalid-argument", "sid, aid, wsId required");
       }
-    }
+      const db = admin.firestore();
+      const wsRef = db.collection("students").doc(sid)
+        .collection("assignments").doc(aid)
+        .collection("worksheetSubmissions").doc(wsId);
+      const wsSnap = await wsRef.get();
+      if (!wsSnap.exists) {
+        throw new HttpsError("not-found", "worksheetSubmission doc not found");
+      }
+      const after = wsSnap.data();
 
-    const result = gradeWorksheetSubmission({
-      worksheetSubmission: after,
-      worksheet,
-      catalogRow,
-      questionKeysById,
-    });
+      const studentSnap = await db.collection("students").doc(sid).get();
+      if (!studentSnap.exists) throw new HttpsError("not-found", "student not found");
+      const student = studentSnap.data() || {};
+      const assignment = (student.assignments || []).find((a) => a && a.id === aid);
+      if (!assignment) throw new HttpsError("not-found", "assignment not found on student");
+      const worksheet = (assignment.worksheets || []).find((w) => w && w.id === wsId);
+      if (!worksheet) throw new HttpsError("not-found", "worksheet not found on assignment");
 
-    logger.info("[REGRADE AUDIT]", {
-      sid, aid, wsId,
-      worksheetTitle: worksheet.title,
-      catalogQuestionIds: qIds,
-      result: {
-        status: result.status,
+      const catalogByTitle = loadCatalogByTitle();
+      if (!catalogByTitle) {
+        throw new HttpsError("failed-precondition", "catalog not bundled with function deploy (predeploy cp may have failed)");
+      }
+      const catalogRow = catalogByTitle.get(worksheet.title);
+      if (!catalogRow) {
+        throw new HttpsError("failed-precondition", `no catalog row for worksheet title: ${worksheet.title}`);
+      }
+
+      const qIds = Array.isArray(catalogRow.questionIds) ? catalogRow.questionIds : [];
+      const questionKeysById = new Map();
+      if (qIds.length > 0) {
+        const refs = qIds.map((id) => db.collection("questionKeys").doc(id));
+        const snaps = await db.getAll(...refs);
+        for (const s of snaps) {
+          if (s.exists) questionKeysById.set(s.id, s.data());
+        }
+      }
+
+      const result = gradeWorksheetSubmission({
+        worksheetSubmission: after,
+        worksheet,
+        catalogRow,
+        questionKeysById,
+      });
+
+      logger.info("[REGRADE AUDIT]", {
+        sid, aid, wsId,
+        worksheetTitle: worksheet.title,
+        catalogQuestionIds: qIds,
+        questionKeysFoundCount: questionKeysById.size,
+        questionKeysExpectedCount: qIds.length,
+        result: {
+          status: result.status,
+          scoreCorrect: result.scoreCorrect,
+          scoreTotal: result.scoreTotal,
+          reason: result.reason,
+        },
+        audit: result.audit || [],
+      });
+
+      if (result.status === "skipped") {
+        await wsRef.update({
+          gradedAt: admin.firestore.FieldValue.serverTimestamp(),
+          gradeSkipReason: result.reason,
+        });
+        return { status: "skipped", reason: result.reason, audit: result.audit || [] };
+      }
+
+      await wsRef.update({
+        status: "graded",
         scoreCorrect: result.scoreCorrect,
         scoreTotal: result.scoreTotal,
-        reason: result.reason,
-      },
-      audit: result.audit || [],
-    });
-
-    if (result.status === "skipped") {
-      await wsRef.update({
+        perQuestion: result.perQuestion,
         gradedAt: admin.firestore.FieldValue.serverTimestamp(),
-        gradeSkipReason: result.reason,
       });
-      return { status: "skipped", reason: result.reason, audit: result.audit || [] };
+      return {
+        status: "graded",
+        scoreCorrect: result.scoreCorrect,
+        scoreTotal: result.scoreTotal,
+        perQuestion: result.perQuestion,
+        audit: result.audit || [],
+      };
+    } catch (err) {
+      // HttpsError passes through with its code intact. Anything else
+      // gets wrapped so the real message reaches the client (not just
+      // "internal"). Also logged to Cloud Function logs so we can read
+      // the stack trace there.
+      if (err instanceof HttpsError) {
+        logger.warn("[REGRADE]", { sid, aid, wsId, code: err.code, message: err.message });
+        throw err;
+      }
+      logger.error("[REGRADE] unhandled exception", {
+        sid, aid, wsId,
+        message: err && err.message,
+        stack: err && err.stack,
+      });
+      throw new HttpsError("internal", (err && err.message) || "unknown regrade error");
     }
-
-    await wsRef.update({
-      status: "graded",
-      scoreCorrect: result.scoreCorrect,
-      scoreTotal: result.scoreTotal,
-      perQuestion: result.perQuestion,
-      gradedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-    return {
-      status: "graded",
-      scoreCorrect: result.scoreCorrect,
-      scoreTotal: result.scoreTotal,
-      perQuestion: result.perQuestion,
-      audit: result.audit || [],
-    };
   },
 );
 
