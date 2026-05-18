@@ -10134,8 +10134,14 @@ function allScoreDataPoints(student, submissions = [], perWsSubmissions = []){
       // only. Mirrors how the catalog organizes things: comprehensive
       // worksheets aggregate across a whole domain, themed worksheets
       // drill into a single subskill.
-      const isComp = ((w.title||"").trim().toLowerCase().startsWith("comp")) ||
-                     ((w.subdomain||"").trim().startsWith("Comprehensive "));
+      // Session 18C v19: per Aidan — ONLY title prefix "comp" routes
+      // to the comprehensive DOMAIN bucket. "- Comp" anywhere else in
+      // a title (e.g., "Circles - Comp", "Algebra - Comp") is a
+      // DIFFICULTY indicator on a specific subskill, not a domain rollup.
+      // Subdomain check removed so a worksheet titled "X - Comp" stays
+      // a subskill point even if its subdomain string starts with
+      // "Comprehensive ".
+      const isComp = (w.title||"").trim().toLowerCase().startsWith("comp");
       if(isComp){
         pts.push({
           date: dateStr,
@@ -10196,8 +10202,8 @@ function allScoreDataPoints(student, submissions = [], perWsSubmissions = []){
       if(st && st.toDate){ try { return st.toDate().toISOString().slice(0,10); } catch { /**/ } }
       return asg.date || todayStr();
     })();
-    const isComp = ((w.title||"").trim().toLowerCase().startsWith("comp")) ||
-                   ((w.subdomain||"").trim().startsWith("Comprehensive "));
+    // Session 18C v19: same Comp rule for per-WS submissions.
+    const isComp = (w.title||"").trim().toLowerCase().startsWith("comp");
     if(isComp){
       pts.push({
         date: dateStr,
