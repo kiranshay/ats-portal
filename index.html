@@ -8173,14 +8173,35 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
         responses.push(obj);
       }
       try{
+        // Session 18C v16: NEVER overwrite status if the doc is already
+        // submitted/graded. previously writeDraft included status:'draft'
+        // on every set, which (with merge:true) would clobber 'submitted'
+        // back to 'draft' if writeDraft raced past submit. transaction
+        // reads the current state and skips the status field when the
+        // doc is locked, so the grade record can't be reverted by a
+        // stale write.
         const FV = firebase.firestore.FieldValue;
-        await col.doc(currentWsId).set({
-          worksheetId: currentWsId,
-          responses,
-          status: "draft",
-          updatedAt: FV.serverTimestamp(),
-          createdAt: FV.serverTimestamp(), // server merges; only sets first time
-        }, {merge: true});
+        await window.db.runTransaction(async (tx) => {
+          const ref = col.doc(currentWsId);
+          const cur = await tx.get(ref);
+          const curData = cur.exists ? cur.data() : null;
+          const payload = {
+            worksheetId: currentWsId,
+            responses,
+            updatedAt: FV.serverTimestamp(),
+          };
+          if (!curData) {
+            // Brand-new doc — set createdAt + initial draft status.
+            payload.createdAt = FV.serverTimestamp();
+            payload.status = "draft";
+          } else if (curData.status === "draft" || !curData.status) {
+            // Still in draft → reaffirm. Safe to keep at draft.
+            payload.status = "draft";
+          }
+          // If status is "submitted" or "graded", do NOT include status
+          // in payload — keep the locked state intact.
+          tx.set(ref, payload, { merge: true });
+        });
         dirtyRef.current = false;
       } catch(e){
         console.warn("[SingleWorksheetEditor] draft write failed:", e);
@@ -8318,6 +8339,10 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
   }
 
   // Banner: graded? submitted? draft?
+  // Session 18C v16: always show a status banner so the student knows
+  // what state their work is in (graded, pending, saved as draft, or
+  // not started). Previously only submitted got a banner; drafts were
+  // silent and the student couldn't tell if their work was saved.
   let banner = null;
   if(localStatus === "submitted"){
     if(typeof doc?.scoreCorrect === "number"){
@@ -8330,8 +8355,10 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
     } else if(doc?.gradeSkipReason){
       banner = { text: `Submitted · Not auto-graded (${doc.gradeSkipReason})`, color: "#9A5B1F", border: "rgba(154,91,31,.4)" };
     } else {
-      banner = { text: "Submitted · Score pending…", color: "#66708A", border: "rgba(102,112,138,.35)" };
+      banner = { text: "Submitted · Score pending… (refresh in a moment)", color: "#66708A", border: "rgba(102,112,138,.35)" };
     }
+  } else if(doc && doc.status === "draft" && (doc.responses || []).some(r => (r.studentAnswer||"").trim() !== "")){
+    banner = { text: "In progress · saved as draft (not yet submitted)", color: "#9A5B1F", border: "rgba(154,91,31,.4)" };
   }
 
   return (
@@ -9257,10 +9284,31 @@ function TutorPerWsSection({student}){
 function TutorPerWsAssignmentRow({studentId, assignment, open, onToggle, regradeBusy, regradeResults, onRegrade}){
   const perWs = useWorksheetSubmissions(studentId, assignment.id);
   const worksheets = (assignment.worksheets || []).filter(w => !w.deleted);
-  const docs = Object.values(perWs.byWorksheet || {});
-  const submittedOrGraded = docs.filter(d => d && (d.status === "submitted" || d.status === "graded"));
-  if(submittedOrGraded.length === 0){
-    return null; // nothing to show for assignments with no per-WS submissions
+  // Session 18C v16: show ALL per-WS docs, including drafts in progress.
+  // per Aidan: 'Every worksheet submission should immediately show up on
+  // tutor end and say pending for ones that have yet to be completed.'
+  // Worksheets with no per-WS doc at all show as "Not started" so the
+  // tutor sees the full PSM picture, not just submitted items.
+  const anyDoc = worksheets.some(w => !!perWs.byWorksheet[w.id]);
+  if(!anyDoc){
+    return null; // no per-WS activity yet on this PSM
+  }
+  // Count by status for the row header.
+  const counts = { draft: 0, submitted: 0, graded: 0, "not-started": 0 };
+  for(const w of worksheets){
+    const d = perWs.byWorksheet[w.id];
+    if(!d) counts["not-started"]++;
+    else if(d.status === "graded" || typeof d.scoreCorrect === "number") counts.graded++;
+    else if(d.status === "submitted") counts.submitted++;
+    else counts.draft++;
+  }
+  function statusFor(d){
+    if(!d) return { kind: "not-started", color: "#66708A", border: "rgba(102,112,138,.35)", label: "Not started" };
+    if(d.status === "graded" || typeof d.scoreCorrect === "number") {
+      return { kind: "graded", color: "#4C7A4C", border: "rgba(76,122,76,.4)", label: `Graded · ${d.scoreCorrect}/${d.scoreTotal}` };
+    }
+    if(d.status === "submitted") return { kind: "submitted", color: "#003258", border: "rgba(0,50,88,.4)", label: "Submitted · pending grade" };
+    return { kind: "draft", color: "#9A5B1F", border: "rgba(154,91,31,.4)", label: "In progress (draft)" };
   }
   return (
     <div style={{padding:"10px 12px",background:"#FAF7F2",border:"1px solid rgba(15,26,46,.08)",borderRadius:6}}>
@@ -9269,8 +9317,11 @@ function TutorPerWsAssignmentRow({studentId, assignment, open, onToggle, regrade
           <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:14,fontWeight:600,color:"#0F1A2E"}}>
             {assignment.date || assignment.dateAssigned || "Undated"}
           </div>
-          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,color:"#66708A",letterSpacing:.5,textTransform:"uppercase"}}>
-            {submittedOrGraded.length} per-WS submission{submittedOrGraded.length===1?"":"s"}
+          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,color:"#66708A",letterSpacing:.5,textTransform:"uppercase",display:"flex",gap:8,flexWrap:"wrap",marginTop:2}}>
+            {counts.graded > 0 && <span style={{color:"#4C7A4C",fontWeight:600}}>✓ {counts.graded} graded</span>}
+            {counts.submitted > 0 && <span style={{color:"#003258",fontWeight:600}}>⏳ {counts.submitted} pending</span>}
+            {counts.draft > 0 && <span style={{color:"#9A5B1F",fontWeight:600}}>… {counts.draft} draft</span>}
+            {counts["not-started"] > 0 && <span style={{color:"#66708A"}}>○ {counts["not-started"]} not started</span>}
           </div>
         </div>
         <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#003258",letterSpacing:.5,textTransform:"uppercase",fontWeight:600}}>
@@ -9281,25 +9332,26 @@ function TutorPerWsAssignmentRow({studentId, assignment, open, onToggle, regrade
         <div style={{marginTop:10,display:"flex",flexDirection:"column",gap:8}}>
           {worksheets.map(w=>{
             const d = perWs.byWorksheet[w.id];
-            if(!d || (d.status !== "submitted" && d.status !== "graded")) return null;
+            const sty = statusFor(d);
             const busyKey = `${assignment.id}|${w.id}`;
             const busy = !!regradeBusy[busyKey];
             const result = regradeResults[busyKey];
-            const isGraded = d.status === "graded" || typeof d.scoreCorrect === "number";
-            const score = isGraded ? `${d.scoreCorrect}/${d.scoreTotal}` : "—";
+            const canRegrade = d && (d.status === "submitted" || d.status === "graded" || typeof d.scoreCorrect === "number");
             return (
-              <div key={w.id} style={{padding:"8px 10px",background:"#fff",border:"1px solid rgba(15,26,46,.08)",borderRadius:4,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+              <div key={w.id} style={{padding:"8px 10px",background:"#fff",border:`1px solid ${sty.border}`,borderRadius:4,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
                 <div style={{flex:"1 1 200px",minWidth:0}}>
                   <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:13,color:"#0F1A2E",fontWeight:600}}>
                     {w.title}
                   </div>
-                  <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,color:"#66708A",letterSpacing:.3,marginTop:2}}>
-                    {d.status} · score {score}{d.gradeSkipReason ? ` · ${d.gradeSkipReason}` : ""}
+                  <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,color:sty.color,letterSpacing:.3,marginTop:2,fontWeight:600,textTransform:"uppercase"}}>
+                    {sty.label}{d?.gradeSkipReason ? ` · ${d.gradeSkipReason}` : ""}
                   </div>
                 </div>
-                <button onClick={()=>onRegrade(w.id)} disabled={busy} style={{...mkBtn("transparent","#003258"),border:"1px solid rgba(0,50,88,.4)",padding:"5px 12px",fontSize:11,cursor:busy?"not-allowed":"pointer"}}>
-                  {busy ? "Regrading…" : "Re-grade"}
-                </button>
+                {canRegrade && (
+                  <button onClick={()=>onRegrade(w.id)} disabled={busy} style={{...mkBtn("transparent","#003258"),border:"1px solid rgba(0,50,88,.4)",padding:"5px 12px",fontSize:11,cursor:busy?"not-allowed":"pointer"}}>
+                    {busy ? "Regrading…" : "Re-grade"}
+                  </button>
+                )}
                 {result && (
                   <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#4C7A4C",fontWeight:600,letterSpacing:.3}}>
                     ✓ {result.scoreCorrect}/{result.scoreTotal} (audit in console)
