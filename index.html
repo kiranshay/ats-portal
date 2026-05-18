@@ -6498,13 +6498,15 @@ function LatestPsmCard({student, studentId, submissions, canEdit}){
   const latest = useMemo(()=>{
     const list = (student.assignments||[]).filter(a => !a.deleted);
     if(list.length === 0) return null;
-    // sort by date desc, then by array-index as a tiebreaker (newer
-    // additions appended later)
-    const sorted = [...list].sort((a,b)=>{
+    // Session 18C v21: assignments are appended in insertion order, so
+    // reversing first puts the newest at index 0. The stable date sort
+    // then keeps insertion-order DESC as the tie-breaker — fixes the
+    // case where a new PSM with today's date was being hidden behind
+    // an older PSM that also had today's date (added earlier).
+    const sorted = [...list].reverse().sort((a,b)=>{
       const da = (a.date || a.dateAssigned || "");
       const db = (b.date || b.dateAssigned || "");
-      if(da !== db) return db.localeCompare(da);
-      return 0;
+      return db.localeCompare(da);
     });
     return sorted[0] || null;
   }, [student.assignments]);
