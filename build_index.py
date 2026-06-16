@@ -22,7 +22,18 @@ shell_head = r'''<!DOCTYPE html>
      crossorigin makes the browser expose the real message + stack. -->
 <script crossorigin="anonymous" src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script crossorigin="anonymous" src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script crossorigin="anonymous" src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<!-- Session 18C v32: PINNED to @babel/standalone 7.26.4. Previously this
+     loaded the unversioned `latest`, which unpkg promoted to 8.0.0.
+     Babel 8 flipped the @babel/preset-react default `runtime` from
+     "classic" to "automatic", so JSX compiled to
+       import { jsx } from "react/jsx-runtime"
+     — a bare module specifier the browser can't resolve with no bundler
+     / import map. The module failed to load and the whole portal went
+     blank ("Failed to resolve module specifier react/jsx-runtime").
+     Pinning to 7.x restores the classic runtime (React.createElement),
+     and the registerPreset below forces classic explicitly regardless
+     of version. -->
+<script crossorigin="anonymous" src="https://unpkg.com/@babel/standalone@7.26.4/babel.min.js"></script>
 <script crossorigin="anonymous" src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script crossorigin="anonymous" src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script crossorigin="anonymous" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -31,6 +42,17 @@ shell_head = r'''<!DOCTYPE html>
 <script crossorigin="anonymous" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
 <script>
 if(window['pdfjsLib']){window['pdfjsLib'].GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';}
+// Session 18C v32: force the CLASSIC JSX runtime no matter which Babel
+// version is loaded. Registers a react preset variant with
+// runtime:"classic" (emits React.createElement, never a react/jsx-runtime
+// import) and the babel module below uses data-presets="env,react-classic".
+// This runs during parse, before @babel/standalone auto-transforms the
+// text/babel script on DOMContentLoaded, so the preset is ready in time.
+if(window.Babel && Babel.registerPreset && Babel.availablePresets && Babel.availablePresets['react']){
+  Babel.registerPreset('react-classic', {
+    presets: [[Babel.availablePresets['react'], { runtime: 'classic' }]]
+  });
+}
 // Initialize Firebase
 window.firebaseConfig = {
   apiKey: "AIzaSyAr4Gbc3nCV6zbJKSg1_xWUqsMVqFnhmjg",
@@ -379,7 +401,7 @@ window.auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(()=>{});
   }, 25000);
 })();
 </script>
-<script type="text/babel" data-type="module" data-presets="env,react">
+<script type="text/babel" data-type="module" data-presets="env,react-classic">
 const { useState, useEffect, useMemo, useRef } = React;
 '''
 
