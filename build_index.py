@@ -321,6 +321,57 @@ window.auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(()=>{});
 </head>
 <body>
 <div id="root"></div>
+<!-- Session 18C v30: pre-React error trap. The main app is an in-browser
+     Babel module (<script type="text/babel" data-type="module">). If that
+     module throws at COMPILE time (syntax error) or at top-level EVAL time
+     (before ReactDOM.render runs), React never mounts and the React-level
+     RootErrorBoundary can't help — the page is just blank white. This
+     plain script installs window 'error' + 'unhandledrejection' listeners
+     BEFORE the babel module, and paints the actual error into #root so a
+     blank screen becomes a readable, screenshot-able diagnostic. A normal
+     successful mount clears #root and replaces this, so it only ever shows
+     when something genuinely broke before React took over. -->
+<script>
+(function(){
+  var shown = false;
+  function paint(label, msg, stack){
+    if(shown) return; shown = true;
+    var root = document.getElementById('root');
+    if(!root) return;
+    // If React already mounted something, don't clobber it.
+    if(root.children && root.children.length > 0) return;
+    root.innerHTML =
+      '<div style="min-height:100vh;background:#FAF7F2;display:flex;align-items:flex-start;justify-content:center;padding:40px 20px;box-sizing:border-box;font-family:monospace">'
+      + '<div style="background:#fff;border:1px solid rgba(140,46,46,.4);border-radius:8px;padding:24px;max-width:680px;width:100%">'
+      + '<div style="font-size:10px;font-weight:700;letter-spacing:1.4px;color:#8C2E2E;text-transform:uppercase;margin-bottom:8px">Portal failed to load ('+label+')</div>'
+      + '<div style="font-family:Georgia,serif;font-size:20px;color:#0F1A2E;margin-bottom:14px">The app could not start.</div>'
+      + '<div style="font-size:13px;color:#66708A;line-height:1.6;margin-bottom:14px">Send this to your tutor / support@affordabletutoringsolutions.org. Then try Reload.</div>'
+      + '<div style="font-size:11px;color:#7A2020;background:#FAF7F2;padding:12px;border-radius:4px;border:1px solid rgba(140,46,46,.25);white-space:pre-wrap;word-break:break-word;max-height:260px;overflow:auto">'
+      + String(msg||'Unknown error') + (stack ? '\n\n' + String(stack).split('\n').slice(0,10).join('\n') : '')
+      + '</div>'
+      + '<button onclick="location.reload()" style="margin-top:14px;background:#0F1A2E;color:#FAF7F2;border:none;padding:10px 20px;border-radius:4px;font-size:11px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;cursor:pointer">Reload portal</button>'
+      + '</div></div>';
+  }
+  window.addEventListener('error', function(e){
+    // Resource load errors (img/script 404) have no e.error; still useful.
+    var msg = (e && e.message) || (e && e.error && e.error.message) || 'Script error';
+    var stack = (e && e.error && e.error.stack) || ((e && e.filename) ? (e.filename + ':' + e.lineno + ':' + e.colno) : '');
+    paint('runtime', msg, stack);
+  }, true);
+  window.addEventListener('unhandledrejection', function(e){
+    var r = e && e.reason;
+    paint('promise', (r && r.message) || String(r), (r && r.stack) || '');
+  });
+  // Safety net: if nothing has rendered after 25s, surface a timeout notice
+  // (covers a hung babel compile / stuck top-level await).
+  setTimeout(function(){
+    var root = document.getElementById('root');
+    if(root && (!root.children || root.children.length === 0)){
+      paint('timeout', 'The app did not finish loading within 25 seconds. This usually means the in-browser compiler stalled or a top-level error was swallowed. Check the browser console for details.', '');
+    }
+  }, 25000);
+})();
+</script>
 <script type="text/babel" data-type="module" data-presets="env,react">
 const { useState, useEffect, useMemo, useRef } = React;
 '''
