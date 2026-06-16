@@ -13,15 +13,22 @@ shell_head = r'''<!DOCTYPE html>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT@0,9..144,300..900,0..100;1,9..144,300..900,0..100&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,500&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
-<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
+<!-- Session 18C v31: crossorigin="anonymous" on EVERY CDN script. Without
+     it, any error thrown through one of these (especially the Firebase
+     SDK, whose async onSnapshot callbacks bypass React error boundaries)
+     is reported to window.onerror as a detail-less "Script error." with
+     no message or stack — exactly what the v30 trap showed. unpkg,
+     cdnjs, and gstatic all send Access-Control-Allow-Origin:*, so adding
+     crossorigin makes the browser expose the real message + stack. -->
+<script crossorigin="anonymous" src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin="anonymous" src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script crossorigin="anonymous" src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script crossorigin="anonymous" src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script crossorigin="anonymous" src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script crossorigin="anonymous" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script crossorigin="anonymous" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script crossorigin="anonymous" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script crossorigin="anonymous" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
 <script>
 if(window['pdfjsLib']){window['pdfjsLib'].GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';}
 // Initialize Firebase
@@ -398,7 +405,33 @@ logo_b64 = base64.b64encode(open('ats_logo.png','rb').read()).decode('ascii')
 logo_js = f'window.ATS_LOGO_PNG = "data:image/png;base64,{logo_b64}";\n'
 
 shell_tail = r'''
-ReactDOM.createRoot(document.getElementById("root")).render(<RootErrorBoundary><App /></RootErrorBoundary>);
+// Session 18C v31: same-context try/catch around the mount. This runs
+// INSIDE the Babel module, so a synchronous throw here (or anywhere the
+// module reached before this point) is fully visible — message + stack,
+// not the cross-origin "Script error." mask. We re-paint the real error
+// into #root via the same trap UI. Async throws (onSnapshot etc.) still
+// go through window.onerror, now unmasked by the crossorigin attrs.
+try {
+  ReactDOM.createRoot(document.getElementById("root")).render(<RootErrorBoundary><App /></RootErrorBoundary>);
+} catch (e) {
+  try {
+    var root = document.getElementById("root");
+    if (root && (!root.children || root.children.length === 0)) {
+      root.innerHTML =
+        '<div style="min-height:100vh;background:#FAF7F2;display:flex;align-items:flex-start;justify-content:center;padding:40px 20px;box-sizing:border-box;font-family:monospace">'
+        + '<div style="background:#fff;border:1px solid rgba(140,46,46,.4);border-radius:8px;padding:24px;max-width:680px;width:100%">'
+        + '<div style="font-size:10px;font-weight:700;letter-spacing:1.4px;color:#8C2E2E;text-transform:uppercase;margin-bottom:8px">Portal failed to load (mount)</div>'
+        + '<div style="font-family:Georgia,serif;font-size:20px;color:#0F1A2E;margin-bottom:14px">The app could not start.</div>'
+        + '<div style="font-size:13px;color:#66708A;line-height:1.6;margin-bottom:14px">Send this to support@affordabletutoringsolutions.org, then Reload.</div>'
+        + '<div style="font-size:11px;color:#7A2020;background:#FAF7F2;padding:12px;border-radius:4px;border:1px solid rgba(140,46,46,.25);white-space:pre-wrap;word-break:break-word;max-height:300px;overflow:auto">'
+        + String((e && e.message) || e) + (e && e.stack ? '\n\n' + String(e.stack).split('\n').slice(0,12).join('\n') : '')
+        + '</div>'
+        + '<button onclick="location.reload()" style="margin-top:14px;background:#0F1A2E;color:#FAF7F2;border:none;padding:10px 20px;border-radius:4px;font-size:11px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;cursor:pointer">Reload portal</button>'
+        + '</div></div>';
+    }
+  } catch (e2) { /* last resort — nothing else we can do */ }
+  throw e;
+}
 </script>
 </body>
 </html>
