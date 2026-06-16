@@ -977,14 +977,26 @@ exports.syncStudentsFromWise = onCall(
 
     const fsByEmail = new Map();
     const fsByWiseId = new Map();
+    // Session 18C v29: name index used ONLY to WARN about likely
+    // duplicates — never to auto-match (two distinct students can share
+    // a name, and auto-merging on name would be data-corrupting). When a
+    // Wise student has no email/wiseId match but a same-name Firestore
+    // student exists, we surface it in plan.warnings so the admin can
+    // reconcile manually instead of silently creating an orphan dupe.
+    const fsByName = new Map();
     for (const fs of fsStudents) {
       const email = ((fs.data.meta && fs.data.meta.email) || "").trim().toLowerCase();
       if (email) fsByEmail.set(email, fs);
       const wiseId = fs.data.wiseUserId || (fs.data.meta && fs.data.meta.wiseUserId);
       if (wiseId) fsByWiseId.set(wiseId, fs);
+      const nm = (fs.data.name || "").trim().toLowerCase();
+      if (nm && !fs.data.deleted) {
+        if (!fsByName.has(nm)) fsByName.set(nm, []);
+        fsByName.get(nm).push(fs);
+      }
     }
 
-    const plan = { toAdd: [], toUpdate: [], toTrash: [], errors: [] };
+    const plan = { toAdd: [], toUpdate: [], toTrash: [], errors: [], warnings: [] };
     const seenFsIds = new Set();
     let satCount = 0, nonSatCount = 0;
 
@@ -1024,6 +1036,26 @@ exports.syncStudentsFromWise = onCall(
           },
         });
       } else {
+        // No email/wiseId match. Before treating this as a brand-new
+        // student, check for a same-name existing student — that's almost
+        // always the same person whose Firestore doc just lacks
+        // meta.email/wiseUserId, and creating a new wise_<id> doc would
+        // orphan their real data. We still add them (so they get portal
+        // access) but flag the likely duplicate for manual reconciliation.
+        const nmKey = (name || "").trim().toLowerCase();
+        const nameMatches = (nmKey && fsByName.get(nmKey)) || [];
+        if (nameMatches.length > 0) {
+          plan.warnings.push({
+            kind: "possible-duplicate",
+            wiseName: name,
+            wiseUserId,
+            email,
+            existingStudentIds: nameMatches.map(function(fs){ return fs.id; }),
+            note: "Same name already exists in Firestore without an email/wiseId match. " +
+                  "Creating a new wise_ doc would orphan the existing one. " +
+                  "Consider setting meta.email or wiseUserId on the existing doc and re-running.",
+          });
+        }
         plan.toAdd.push({
           name,
           email,
@@ -1086,6 +1118,7 @@ exports.syncStudentsFromWise = onCall(
       toUpdateCount: plan.toUpdate.length,
       toTrashCount: plan.toTrash.length,
       errorCount: plan.errors.length,
+      warningCount: plan.warnings.length,
     };
 
     logger.info("syncStudentsFromWise: plan built", { dryRun, summary });
@@ -1096,20 +1129,64 @@ exports.syncStudentsFromWise = onCall(
 
     let writes = 0;
 
+    // Session 18C v29: hardened allowlist writer. The previous code did
+    // set({role:"student", active:true, studentIds:[id]}, {merge:true}),
+    // which (a) OVERWROTE the role of any existing allowlist entry —
+    // silently downgrading an admin/tutor whose email collided with a
+    // Wise SAT student to role:"student", and (b) REPLACED studentIds
+    // (set+merge replaces array fields wholesale), orphaning a
+    // student/parent's existing links. This helper instead:
+    //   - reads the existing entry first,
+    //   - NEVER touches role / active when an entry already exists
+    //     (preserves admin/tutor/parent), and
+    //   - unions the new studentId in rather than replacing the array.
+    // Only a brand-new entry is created with role:"student".
+    async function linkAllowlist(email, studentId) {
+      if (!email) return;
+      const alRef = db.collection("allowlist").doc(email);
+      const alSnap = await alRef.get();
+      if (alSnap.exists) {
+        await alRef.set({
+          studentIds: admin.firestore.FieldValue.arrayUnion(studentId),
+          // Do NOT write role/active/source here — preserve whatever the
+          // existing entry has. A tutor or admin must never be downgraded
+          // by a roster sync.
+        }, { merge: true });
+      } else {
+        await alRef.set({
+          email,
+          role: "student",
+          active: true,
+          studentIds: [studentId],
+          source: "wise-sync",
+          addedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
+    }
+
     for (const a of plan.toAdd) {
       try {
         const id = a.wiseUserId ? `wise_${a.wiseUserId}` : db.collection("students").doc().id;
-        await db.collection("students").doc(id).set(Object.assign({ id }, a.dataToWrite));
-        if (a.email) {
-          await db.collection("allowlist").doc(a.email).set({
-            email: a.email,
-            role: "student",
-            active: true,
-            studentIds: [id],
-            source: "wise-sync",
-            addedAt: admin.firestore.FieldValue.serverTimestamp(),
-          }, { merge: true });
+        // Session 18C v29: never blow away an existing student doc. The id
+        // is deterministic (wise_<userId>), so a re-run hits the same doc;
+        // a plain set() would reset assignments/scores/etc. back to []. If
+        // the doc already exists, only refresh the wise metadata and leave
+        // the student's actual work untouched.
+        const stuRef = db.collection("students").doc(id);
+        const stuSnap = await stuRef.get();
+        if (stuSnap.exists) {
+          const cur = stuSnap.data() || {};
+          await stuRef.update({
+            wiseUserId: a.wiseUserId,
+            "meta.email": a.email || (cur.meta && cur.meta.email) || "",
+            "meta.wiseUserId": a.wiseUserId,
+            "meta.wiseClasses": a.satClasses,
+            "meta.lastSyncedFromWise": new Date().toISOString(),
+          });
+        } else {
+          await stuRef.set(Object.assign({ id }, a.dataToWrite));
         }
+        await linkAllowlist(a.email, id);
         writes++;
       } catch (e) {
         plan.errors.push({ kind: "add", name: a.name, message: e.message || String(e) });
@@ -1119,15 +1196,7 @@ exports.syncStudentsFromWise = onCall(
     for (const u of plan.toUpdate) {
       try {
         await db.collection("students").doc(u.studentId).update(u.updates);
-        if (u.email) {
-          await db.collection("allowlist").doc(u.email).set({
-            email: u.email,
-            role: "student",
-            active: true,
-            studentIds: admin.firestore.FieldValue.arrayUnion(u.studentId),
-            source: "wise-sync",
-          }, { merge: true });
-        }
+        await linkAllowlist(u.email, u.studentId);
         writes++;
       } catch (e) {
         plan.errors.push({ kind: "update", studentId: u.studentId, message: e.message || String(e) });
