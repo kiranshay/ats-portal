@@ -6540,20 +6540,7 @@ function StudentPortal({studentId, onSignOut, currentUserEntry, switcherSlot, im
       </div>
 
       {tab==="tracking" && <PortalTrackingTab student={student} submissions={portalSubmissions}/>}
-      {tab==="history"  && (
-        <PortalErrorBoundary fallback={
-          <div style={{...CARD, padding:"40px 24px", textAlign:"center"}}>
-            <div style={{fontFamily:"'Fraunces',Georgia,serif",fontStyle:"italic",color:"#8C2E2E",fontSize:18,marginBottom:14}}>
-              Couldn't load assignment history.
-            </div>
-            <div style={{fontSize:12,color:"#66708A",lineHeight:1.55}}>
-              Refresh the page — if it persists, ping your tutor.
-            </div>
-          </div>
-        }>
-          <PortalHistoryTab student={student} studentId={studentId} currentUserEntry={currentUserEntry} deepLinkAssignmentId={deepLinkAssignmentId} submissions={portalSubmissions} impersonating={impersonating}/>
-        </PortalErrorBoundary>
-      )}
+      {tab==="history"  && <PortalHistoryTab student={student} studentId={studentId} currentUserEntry={currentUserEntry} deepLinkAssignmentId={deepLinkAssignmentId} submissions={portalSubmissions} impersonating={impersonating}/>}
       {tab==="trends"   && <PortalTrendsTab student={student}/>}
     </PortalShell>
   );
