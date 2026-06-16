@@ -347,7 +347,7 @@ logo_b64 = base64.b64encode(open('ats_logo.png','rb').read()).decode('ascii')
 logo_js = f'window.ATS_LOGO_PNG = "data:image/png;base64,{logo_b64}";\n'
 
 shell_tail = r'''
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+ReactDOM.createRoot(document.getElementById("root")).render(<RootErrorBoundary><App /></RootErrorBoundary>);
 </script>
 </body>
 </html>

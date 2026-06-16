@@ -2074,6 +2074,57 @@ function RoleRouter({authUser, onSignOut, currentUserEntry}){
   );
 }
 
+// Session 18C v29: TOP-LEVEL error boundary. The whole app was rendered
+// as a bare <App/> with no boundary — so ANY uncaught exception anywhere
+// in the tree (a malformed student doc from a Wise sync, an unexpected
+// field shape, a third-party lib failure) unmounted everything and left
+// a fully blank white screen with zero on-screen diagnostics. Students
+// just saw white; we couldn't tell what threw without their console.
+//
+// This boundary catches everything App can throw and renders the actual
+// error message + stack + a reload button. A crash is still a crash, but
+// now it's a *visible, screenshot-able* crash instead of a blank page,
+// and individual sub-boundaries (PortalErrorBoundary etc.) still handle
+// their own narrower fallbacks first.
+class RootErrorBoundary extends React.Component {
+  constructor(props){ super(props); this.state = {hasError:false, error:null, info:null}; }
+  static getDerivedStateFromError(error){ return {hasError:true, error}; }
+  componentDidCatch(error, info){
+    this.setState({info});
+    console.error("[RootErrorBoundary] uncaught app crash:", error, info);
+  }
+  render(){
+    if(!this.state.hasError) return this.props.children;
+    const err = this.state.error;
+    const msg = (err && (err.message || String(err))) || "Unknown error";
+    const stack = (err && err.stack) || (this.state.info && this.state.info.componentStack) || "";
+    return (
+      <div style={{minHeight:"100vh",background:"#FAF7F2",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"40px 20px",boxSizing:"border-box"}}>
+        <div style={{background:"#fff",border:"1px solid rgba(140,46,46,.4)",borderRadius:8,padding:"28px 26px",maxWidth:640,width:"100%",boxShadow:"0 4px 24px -8px rgba(15,26,46,.2)"}}>
+          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,fontWeight:700,letterSpacing:1.4,color:"#8C2E2E",textTransform:"uppercase",marginBottom:8}}>
+            Something went wrong
+          </div>
+          <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:22,fontWeight:600,color:"#0F1A2E",marginBottom:14,letterSpacing:-.2}}>
+            The portal hit an unexpected error.
+          </div>
+          <div style={{fontSize:13,color:"#66708A",lineHeight:1.6,marginBottom:16}}>
+            Try reloading. If it keeps happening, send this message to your tutor
+            or <span style={{fontFamily:"'IBM Plex Mono',monospace"}}>support@affordabletutoringsolutions.org</span> —
+            the text below tells us exactly what to fix.
+          </div>
+          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"#7A2020",background:"#FAF7F2",padding:"12px 14px",borderRadius:4,border:"1px solid rgba(140,46,46,.25)",whiteSpace:"pre-wrap",wordBreak:"break-word",marginBottom:16,maxHeight:240,overflow:"auto"}}>
+            {msg}
+            {stack ? "\n\n" + String(stack).split("\n").slice(0,8).join("\n") : ""}
+          </div>
+          <button onClick={()=>{ try{ location.reload(); }catch{ /**/ } }} style={{background:"#0F1A2E",color:"#FAF7F2",border:"none",padding:"10px 20px",borderRadius:4,fontFamily:"'IBM Plex Mono',monospace",fontSize:11,fontWeight:600,letterSpacing:.5,textTransform:"uppercase",cursor:"pointer"}}>
+            Reload portal
+          </button>
+        </div>
+      </div>
+    );
+  }
+}
+
 function App(){
   const [authUser, setAuthUser] = useState(()=>{
     if(DEV_BYPASS) return DEV_FAKE_USER;
