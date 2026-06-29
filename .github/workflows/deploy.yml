@@ -89,7 +89,18 @@ jobs:
       # after google-github-actions/auth@v2 floated forward — the old CLI
       # no longer understood the credentials file the newer auth action
       # writes. 14.x reads the external_account ADC file correctly.
+      # Session 18C v34: FIREBASE_TOKEN is the primary, reliable auth path.
+      # The WIF/ADC handshake (auth step succeeds, but firebase-tools then
+      # rejects the external_account credentials file -> "Failed to
+      # authenticate") broke after the auth action drifted. firebase-tools
+      # automatically uses FIREBASE_TOKEN when the env var is set, taking
+      # precedence over ADC, so a one-time `firebase login:ci` token stored
+      # as the FIREBASE_TOKEN repo secret makes deploys deterministic. If
+      # the secret is unset it's an empty string and firebase-tools falls
+      # back to the WIF ADC path (unchanged).
       - name: Deploy to Firebase Hosting
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
         run: |
           npx --yes firebase-tools@14 deploy \
             --only hosting \
@@ -119,6 +130,8 @@ jobs:
 
       - name: Deploy Cloud Functions
         continue-on-error: true
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
         run: |
           npx --yes firebase-tools@14 deploy \
             --only functions \

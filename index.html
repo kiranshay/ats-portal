@@ -18,8 +18,12 @@
      no message or stack — exactly what the v30 trap showed. unpkg,
      cdnjs, and gstatic all send Access-Control-Allow-Origin:*, so adding
      crossorigin makes the browser expose the real message + stack. -->
-<script crossorigin="anonymous" src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script crossorigin="anonymous" src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<!-- Session 18C v34: PIN React to an exact version. "react@18" floats to
+     the latest 18.x on unpkg; an unattended CDN bump is exactly what took
+     the whole site down via Babel. Exact pins make the portal reproducible
+     and immune to surprise upstream changes. -->
+<script crossorigin="anonymous" src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+<script crossorigin="anonymous" src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
 <!-- Session 18C v32: PINNED to @babel/standalone 7.26.4. Previously this
      loaded the unversioned `latest`, which unpkg promoted to 8.0.0.
      Babel 8 flipped the @babel/preset-react default `runtime` from
