@@ -1796,6 +1796,52 @@ function fetchWorksheetCatalog(){
     });
   return __worksheetCatalogPromise;
 }
+// Session 18C v33: tolerant catalog lookup. The bug Jackson hit ("No
+// bubble sheet available — type your answers below" on worksheets that
+// DO exist in the catalog) was an exact-match failure: the worksheet
+// title stored on the assignment differed from the catalog title by
+// something invisible — a trailing/doubled space, a non-breaking space
+// ( ), a zero-width char, a unicode dash (–/—) vs hyphen, or case.
+// catalog.find(c => c.title === w.title) then returned undefined and the
+// editor dropped to the plain-textarea fallback, so the student had no
+// questions to answer.
+//
+// normalizeTitle collapses all of those so matching is robust. We still
+// prefer an exact match first (fast, zero risk), then fall back to a
+// normalized match, then to a normalized match ignoring the "(NQs)"
+// suffix. Difficulty (Easy/Medium/Hard/Comprehensive) is preserved by
+// normalization, so we never cross-match difficulties.
+function normalizeTitle(s){
+  // Pure-ASCII normalization: lowercase, then collapse ANY run of
+  // non-alphanumeric chars (spaces, hyphens/unicode dashes, parens,
+  // non-breaking/zero-width spaces, punctuation) into a single space.
+  // This makes title matching immune to invisible-character and
+  // dash/whitespace differences without needing unicode char classes.
+  return (s == null ? "" : String(s))
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+function findCatalogEntry(catalog, title){
+  if(!Array.isArray(catalog) || !title) return null;
+  // 1. Exact match - unchanged fast path.
+  let row = catalog.find(c => c && c.title === title);
+  if(row) return row;
+  // 2. Normalized match - tolerates whitespace/dash/case/invisible chars.
+  const want = normalizeTitle(title);
+  row = catalog.find(c => c && normalizeTitle(c.title) === want);
+  if(row) return row;
+  // 3. Suffix-insensitive match - tolerate a missing/extra "(NQs)" suffix
+  //    (after normalization "(5Qs)" becomes "5qs" at the end).
+  const stripQs = (t) => normalizeTitle(t).replace(/\s*\d+\s*qs?$/, "").trim();
+  const wantNoQs = stripQs(title);
+  if(wantNoQs){
+    row = catalog.find(c => c && stripQs(c.title) === wantNoQs);
+    if(row) return row;
+  }
+  return null;
+}
+
 function useWorksheetCatalog(){
   const [state, setState] = useState({status:"loading", catalog:null});
   useEffect(()=>{
@@ -8535,7 +8581,13 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
     [allWorksheets, currentWsId]);
   const catalogEntry = useMemo(()=>{
     if(catalogStatus !== "ready" || !catalog || !worksheet) return null;
-    const row = catalog.find(c => c.title === worksheet.title);
+    // Session 18C v33: tolerant lookup so an invisible-char / dash /
+    // whitespace difference in the stored title can't strand a worksheet
+    // on the "no bubble sheet" textarea fallback (Jackson's bug).
+    const row = findCatalogEntry(catalog, worksheet.title);
+    if((!row || !Array.isArray(row.questionIds) || row.questionIds.length === 0)){
+      console.warn("[catalog] no questionIds match for worksheet title:", JSON.stringify(worksheet.title));
+    }
     return (row && Array.isArray(row.questionIds) && row.questionIds.length > 0) ? row : null;
   }, [catalogStatus, catalog, worksheet]);
 
@@ -9104,7 +9156,7 @@ function SubmissionEditor({studentId, assignment, readOnly, onClose, focusWorksh
     if(catalogStatus !== "ready" || !catalog) return {};
     const out = {};
     for(const w of worksheetsStable){
-      const entry = catalog.find(c => c.title === w.title);
+      const entry = findCatalogEntry(catalog, w.title);
       if(entry && Array.isArray(entry.questionIds) && entry.questionIds.length > 0){
         out[w.id] = entry;
       }
@@ -9914,7 +9966,7 @@ function TutorPerWsAssignmentRow({studentId, assignment, open, onToggle, regrade
           {worksheets.map(w=>{
             const d = perWs.byWorksheet[w.id];
             const sty = statusFor(d);
-            const catalogEntry = (wsCatalog || []).find(c => c.title === w.title);
+            const catalogEntry = findCatalogEntry(wsCatalog || [], w.title);
             return (
               <TutorPerWsWorksheetCard
                 key={w.id}
