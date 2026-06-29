@@ -83,9 +83,15 @@ jobs:
       # rules change ~once a year; require Kiran or Aidan to run
       # `firebase deploy --only storage` manually when storage.rules
       # changes. Avoids needing storage.admin on the CI service account.
+      # Session 18C v33: bumped firebase-tools@13 -> @14. The pinned 13.x
+      # (npx resolved it to the last 13.x, 13.35.1) started failing WIF
+      # auth with "Failed to authenticate, have you run firebase login?"
+      # after google-github-actions/auth@v2 floated forward — the old CLI
+      # no longer understood the credentials file the newer auth action
+      # writes. 14.x reads the external_account ADC file correctly.
       - name: Deploy to Firebase Hosting
         run: |
-          npx --yes firebase-tools@13 deploy \
+          npx --yes firebase-tools@14 deploy \
             --only hosting \
             --project psm-generator \
             --non-interactive
@@ -114,7 +120,7 @@ jobs:
       - name: Deploy Cloud Functions
         continue-on-error: true
         run: |
-          npx --yes firebase-tools@13 deploy \
+          npx --yes firebase-tools@14 deploy \
             --only functions \
             --project psm-generator \
             --non-interactive \
