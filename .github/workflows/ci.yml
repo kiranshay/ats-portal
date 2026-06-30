@@ -54,9 +54,9 @@ jobs:
         # build_index.py produces a different index.html than the one checked
         # in, the PR is stale and needs a rebuild + recommit.
         run: |
-          if ! git diff --quiet -- index.html; then
-            echo "::error::index.html is out of date with its sources (app.jsx / embed.js / build_index.py)."
+          if ! git diff --quiet -- index.html public/index.html public/worksheets_catalog.json; then
+            echo "::error::Built artifacts are out of date with their sources (app.jsx / embed.js / build_index.py / worksheets_catalog.json)."
             echo "Run 'python build_index.py' locally, commit the result, and push again."
-            git diff --stat -- index.html
+            git diff --stat -- index.html public/index.html public/worksheets_catalog.json
             exit 1
           fi

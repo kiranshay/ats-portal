@@ -464,6 +464,22 @@ try {
 '''
 
 full = shell_head + logo_js + embed + '\n' + diagnostic + '\n' + app + '\n' + shell_tail
+
+# Session 18C v36: write the deployable artifacts into a dedicated `public/`
+# directory and point Firebase Hosting at it. Previously hosting deployed
+# the entire repo root ("public": "."), relying on a long ignore list. In
+# practice that pushed thousands of stray files (e.g. a nested node_modules
+# the ignore globs missed) — ~3,945 files — which made deploys slow and
+# flaky and triggered a firebase-tools upload crash. With a dedicated
+# folder, every deploy is exactly two files (index.html + the catalog),
+# so it's fast and can't get stuck.
+import shutil
+os.makedirs('public', exist_ok=True)
+with open('public/index.html','w',encoding='utf-8') as f:
+    f.write(full)
+shutil.copyfile('worksheets_catalog.json', 'public/worksheets_catalog.json')
+# Keep a root copy too so existing tooling / the CI "up-to-date" check and
+# any direct references still resolve. The deployed copy is public/.
 with open('index.html','w',encoding='utf-8') as f:
     f.write(full)
-print(f'index.html: {len(full)} bytes, {full.count(chr(10))+1} lines')
+print(f'public/index.html: {len(full)} bytes, {full.count(chr(10))+1} lines (+ public/worksheets_catalog.json)')

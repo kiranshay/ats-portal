@@ -24,24 +24,10 @@
     }
   ],
   "hosting": {
-    "public": ".",
+    "public": "public",
     "ignore": [
-      "firebase.json",
-      ".firebaserc",
-      "firestore.rules",
-      "storage.rules",
-      "app.jsx",
-      "build_index.py",
-      "embed.js",
-      "shell_head.html",
-      "shell_tail.html",
-      ".git/**",
-      ".claude/**",
-      "node_modules/**",
-      "functions/**",
-      "**/*.py",
-      "**/*.jsx",
-      "**/*.md"
+      "**/.*",
+      "**/node_modules/**"
     ],
     "rewrites": [
       {

@@ -58,13 +58,16 @@ jobs:
       - name: Build index.html
         run: python build_index.py
 
-      - name: Verify index.html is up-to-date with sources
+      - name: Verify built artifacts are up-to-date with sources
         run: |
-          if ! git diff --quiet -- index.html; then
-            echo "::error::index.html is out of date with its sources. Refusing to deploy."
-            git diff --stat -- index.html
+          if ! git diff --quiet -- index.html public/index.html public/worksheets_catalog.json; then
+            echo "::error::Built artifacts are out of date with their sources. Refusing to deploy."
+            git diff --stat -- index.html public/index.html public/worksheets_catalog.json
             exit 1
           fi
+
+      - name: QC — every assignable worksheet renders a bubble sheet
+        run: node scripts/qc_worksheets.mjs
 
       # ── Authenticate to Google Cloud via WIF ───────────────────────────
       # Exchanges the GitHub OIDC token for a short-lived Google access
