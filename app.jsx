@@ -7158,6 +7158,50 @@ function FlagBadge({flag}){
   return <span style={{width:22, flexShrink:0}}/>;
 }
 
+// Session 18C v38: Desmos calculator usage flag. INDEPENDENT of the
+// star/? flag (a question can be both starred and Desmos-used), so it
+// lives in its own `usedDesmos` boolean per response rather than the
+// single `flag` field. Only shown on Math worksheets. CalcIcon is a small
+// inline SVG so it renders identically everywhere (no emoji font deps).
+function CalcIcon({color, size = 13}){
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{display:"block"}}>
+      <rect x="4" y="2" width="16" height="20" rx="2"/>
+      <line x1="8" y1="6" x2="16" y2="6"/>
+      <line x1="8" y1="10" x2="8" y2="10"/><line x1="12" y1="10" x2="12" y2="10"/><line x1="16" y1="10" x2="16" y2="10"/>
+      <line x1="8" y1="14" x2="8" y2="14"/><line x1="12" y1="14" x2="12" y2="14"/><line x1="16" y1="14" x2="16" y2="14"/>
+      <line x1="8" y1="18" x2="8" y2="18"/><line x1="12" y1="18" x2="12" y2="18"/><line x1="16" y1="18" x2="16" y2="18"/>
+    </svg>
+  );
+}
+const DESMOS_COLOR = "#0E7490"; // teal — distinct from star (amber) and ? (purple)
+function CalcToggle({on, onToggle}){
+  return (
+    <button
+      type="button"
+      title={on ? "Clear: you marked you used Desmos on this question" : "I used Desmos on this question"}
+      onClick={()=> onToggle(!on)}
+      style={{
+        width:22, height:22, borderRadius:4, padding:0,
+        border:`1px solid ${on?DESMOS_COLOR:"rgba(15,26,46,.18)"}`,
+        background: on?"#E0F2F6":"transparent",
+        cursor:"pointer", flexShrink:0,
+        display:"inline-flex", alignItems:"center", justifyContent:"center",
+      }}
+    ><CalcIcon color={on?DESMOS_COLOR:"#9AA3B8"}/></button>
+  );
+}
+function CalcBadge({on}){
+  if(!on) return <span style={{width:22, flexShrink:0}}/>;
+  return (
+    <span title="Student used Desmos on this question" style={{
+      width:22, height:22, borderRadius:4, flexShrink:0,
+      display:"inline-flex", alignItems:"center", justifyContent:"center",
+      background:"#E0F2F6",
+    }}><CalcIcon color={DESMOS_COLOR}/></span>
+  );
+}
+
 // Session 15: per-question correctness indicator rendered to the right of
 // each answer row when the submission is graded and locked. Receives the
 // perQuestion[i] entry from the submission doc (may be null for skipped).
@@ -7262,6 +7306,11 @@ function SubmissionReviewGrid({worksheets, perQuestion, responses}){
                         {flagIcon}
                       </span>
                     )}
+                    {r && r.usedDesmos === true && (
+                      <span style={{marginLeft:2, display:"inline-flex", alignItems:"center"}} title="Used Desmos">
+                        <CalcIcon color={DESMOS_COLOR} size={11}/>
+                      </span>
+                    )}
                   </span>
                 );
               })}
@@ -7346,8 +7395,12 @@ function isInSubset(i, subset){
   return true;
 }
 
-function WorksheetBlock({worksheet, catalogEntry, answers, onAnswersChange, flags, onFlagsChange, isLocked, indexLabel, results, showResults}){
+function WorksheetBlock({worksheet, catalogEntry, answers, onAnswersChange, flags, onFlagsChange, desmos, onDesmosChange, isLocked, indexLabel, results, showResults}){
   const hasCatalog = !!(catalogEntry && Array.isArray(catalogEntry.questionIds) && catalogEntry.questionIds.length > 0);
+  // Session 18C v38: the Desmos calculator flag only applies to Math
+  // worksheets (Desmos is the SAT math calculator). subject is on the
+  // worksheet row; default to showing nothing for non-math.
+  const showDesmos = String(worksheet.subject || "").toLowerCase().startsWith("math");
   const format = hasCatalog ? catalogEntry.answerFormat : null;
   const pdfUrl = (catalogEntry && catalogEntry.stu) || worksheet.url || null;
   // Session 18A: subset = "EVEN" | "ODD" | null (= all). Render full list
@@ -7383,6 +7436,14 @@ function WorksheetBlock({worksheet, catalogEntry, answers, onAnswersChange, flag
     while(next.length <= i) next.push(null);
     next[i] = next[i] === value ? null : value;
     onFlagsChange(next);
+  };
+  const setDesmosAt = (i, value) => {
+    if(isLocked) return;
+    if(!onDesmosChange) return;
+    const next = (desmos || []).slice();
+    while(next.length <= i) next.push(false);
+    next[i] = !!value;
+    onDesmosChange(next);
   };
 
   // Session 18C v10: per-question answer type. For "mixed" worksheets,
@@ -7470,6 +7531,12 @@ function WorksheetBlock({worksheet, catalogEntry, answers, onAnswersChange, flag
                   <div style={{flex:1, minWidth:0}}>
                     {renderRow(i)}
                   </div>
+                  {!isLocked && showDesmos && (
+                    <CalcToggle on={!!(desmos && desmos[i])} onToggle={(v)=> setDesmosAt(i, v)}/>
+                  )}
+                  {isLocked && showDesmos && (
+                    <CalcBadge on={!!((results && results[i] && results[i].usedDesmos) || (desmos && desmos[i]))}/>
+                  )}
                   {!isLocked && (
                     <FlagToggle flag={currentFlag} onToggle={(v)=> setFlagAt(i, v)}/>
                   )}
@@ -7487,6 +7554,15 @@ function WorksheetBlock({worksheet, catalogEntry, answers, onAnswersChange, flag
                 </div>
               );
             })}
+            {!isLocked && (
+              <div style={{marginTop:10, paddingTop:8, borderTop:"1px solid rgba(15,26,46,.06)", display:"flex", flexWrap:"wrap", gap:"4px 14px", alignItems:"center", fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:"#66708A", letterSpacing:.3}}>
+                <span><span style={{color:"#9A5B1F",fontWeight:700,marginRight:3}}>★</span> had trouble</span>
+                <span><span style={{color:"#5C4178",fontWeight:700,marginRight:3}}>?</span> guessed / skipped (blank, counts as 0)</span>
+                {showDesmos && (
+                  <span style={{display:"inline-flex",alignItems:"center",gap:4}}><CalcIcon color={DESMOS_COLOR} size={11}/> used Desmos on this question</span>
+                )}
+              </div>
+            )}
           </div>
         </div>
       ) : (
@@ -7861,6 +7937,7 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
   const [docLoaded, setDocLoaded] = useState(false);
   const [answers, setAnswers] = useState([]); // [string]
   const [flags, setFlags] = useState([]);     // ["star"|"question"|null]
+  const [desmos, setDesmos] = useState([]);   // [bool] — used-Desmos per question (math only)
   const [localStatus, setLocalStatus] = useState("draft");
   const [submittedAt, setSubmittedAt] = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -7880,6 +7957,7 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
   // same correct data.
   const answersRef = useRef([]);
   const flagsRef = useRef([]);
+  const desmosRef = useRef([]);
   // pendingWriteRef serializes writes so they complete in order.
   const pendingWriteRef = useRef(Promise.resolve());
   // All non-deleted worksheets in this PSM, for the nav pane.
@@ -7919,6 +7997,7 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
     setDocLoaded(false);
     setAnswers([]);
     setFlags([]);
+    setDesmos([]);
     setLocalStatus("draft");
     setSubmittedAt(null);
     dirtyRef.current = false;
@@ -7930,15 +8009,18 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
           const expected = catalogEntry?.questionIds?.length || 0;
           const a = new Array(expected).fill("");
           const f = new Array(expected).fill(null);
+          const dz = new Array(expected).fill(false);
           for(const r of (data.responses || [])){
             const qi = Number(r.questionIndex);
             if(Number.isFinite(qi) && qi >= 0 && qi < expected){
               a[qi] = typeof r.studentAnswer === "string" ? r.studentAnswer : "";
               f[qi] = r.flag || null;
+              dz[qi] = r.usedDesmos === true;
             }
           }
           setAnswers(a);
           setFlags(f);
+          setDesmos(dz);
           setLocalStatus(data.status || "draft");
           setSubmittedAt(data.submittedAt || null);
         }
@@ -7951,6 +8033,7 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
         if(!dirtyRef.current){
           setAnswers(new Array(expected).fill(""));
           setFlags(new Array(expected).fill(null));
+          setDesmos(new Array(expected).fill(false));
           setLocalStatus("draft");
         }
       }
@@ -7981,11 +8064,13 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
     const expected = catalogEntry?.questionIds?.length || 0;
     const a = new Array(expected).fill("");
     const f = new Array(expected).fill(null);
+    const dz = new Array(expected).fill(false);
     for(const r of wsResponses){
       const qi = Number(r.questionIndex);
       if(Number.isFinite(qi) && qi >= 0 && qi < expected){
         a[qi] = typeof r.studentAnswer === "string" ? r.studentAnswer : "";
         f[qi] = r.flag || null;
+        dz[qi] = r.usedDesmos === true;
       }
     }
     // Build a synthetic doc with the legacy data. localStatus matches
@@ -7993,6 +8078,7 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
     // only lockdown all behave correctly.
     setAnswers(a);
     setFlags(f);
+    setDesmos(dz);
     setLocalStatus(legacySubmission.status || "submitted");
     setSubmittedAt(legacySubmission.submittedAt || null);
     setDoc({
@@ -8002,6 +8088,7 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
         questionIndex: r.questionIndex,
         studentAnswer: r.studentAnswer || "",
         flag: r.flag || null,
+        usedDesmos: r.usedDesmos === true,
       })),
       status: legacySubmission.status || "submitted",
       perQuestion: wsPerQuestion,
@@ -8021,8 +8108,9 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
   // recent values.
   useEffect(()=>{ answersRef.current = answers; }, [answers]);
   useEffect(()=>{ flagsRef.current = flags; }, [flags]);
+  useEffect(()=>{ desmosRef.current = desmos; }, [desmos]);
 
-  const writeDraft = async (overrideAnswers, overrideFlags) => {
+  const writeDraft = async (overrideAnswers, overrideFlags, overrideDesmos) => {
     if(isLocked) return;
     const col = studentAssignmentWorksheetSubmissionsCollection(studentId, assignment.id);
     if(!col) return;
@@ -8033,6 +8121,7 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
       // Always read from the refs (latest values), NOT from closure.
       const aArr = overrideAnswers || answersRef.current || [];
       const fArr = overrideFlags  || flagsRef.current  || [];
+      const dArr = overrideDesmos || desmosRef.current || [];
       // Pad the responses array to the full catalog length so we never
       // lose slots when the local answers array is shorter than the
       // worksheet's question count (the seed inits to `expected` but
@@ -8042,6 +8131,7 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
         catalogEntry?.questionIds?.length || 0,
         aArr.length,
         fArr.length,
+        dArr.length,
       );
       const responses = [];
       for(let i = 0; i < expectedLen; i++){
@@ -8051,6 +8141,7 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
           studentAnswer: typeof v === "string" ? v : "",
         };
         if(fArr[i]) obj.flag = fArr[i];
+        if(dArr[i]) obj.usedDesmos = true;
         responses.push(obj);
       }
       try{
@@ -8092,14 +8183,14 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
     return myWrite;
   };
 
-  // Debounced autosave on answer/flag changes.
+  // Debounced autosave on answer/flag/desmos changes.
   useEffect(()=>{
     if(isLocked || !docLoaded) return;
     if(!dirtyRef.current) return;
     if(debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(()=> writeDraft(), 750);
     return ()=>{ if(debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [answers, flags, isLocked, docLoaded]);
+  }, [answers, flags, desmos, isLocked, docLoaded]);
 
   const setAnswerAt = (i, v) => {
     if(isLocked) return;
@@ -8383,6 +8474,8 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
         onAnswersChange={(next)=>{ dirtyRef.current = true; setAnswers(next); }}
         flags={flags}
         onFlagsChange={(next)=>{ dirtyRef.current = true; setFlags(next); }}
+        desmos={desmos}
+        onDesmosChange={(next)=>{ dirtyRef.current = true; setDesmos(next); }}
         isLocked={isLocked}
         indexLabel={`Worksheet · ${worksheet.title || ""}`}
         results={localStatus === "submitted" ? (() => {
@@ -9434,6 +9527,7 @@ function TutorPerWsWorksheetCard({studentId, assignmentId, worksheet, doc, statu
                 </span>
                 {reveal && <span style={{opacity:.8,fontWeight:500}}>(✓ {reveal})</span>}
                 {flagIcon && <span style={{color:flagColor,fontWeight:700,marginLeft:2}} title={flag === "star" ? "Student starred — had trouble" : "Student question-marked — guessed/skipped"}>{flagIcon}</span>}
+                {r && r.usedDesmos === true && <span style={{marginLeft:2,display:"inline-flex",alignItems:"center"}} title="Student used Desmos"><CalcIcon color={DESMOS_COLOR} size={11}/></span>}
               </span>
             );
           })}
@@ -9617,6 +9711,7 @@ function TutorSubmissionRow({studentId, submission}){
       groups[wId][Number(r.questionIndex) || 0] = {
         ans: typeof r.studentAnswer === "string" ? r.studentAnswer : "",
         flag: r.flag || null,
+        usedDesmos: r.usedDesmos === true,
       };
     }
     return { kind: "nested", groups };
@@ -9847,6 +9942,7 @@ function TutorSubmissionRow({studentId, submission}){
                             {flagIcon}
                           </span>
                         )}
+                        {e.usedDesmos === true && <span style={{marginLeft:2,display:"inline-flex",alignItems:"center"}} title="Student used Desmos"><CalcIcon color={DESMOS_COLOR} size={11}/></span>}
                       </span>
                     );
                   })}
