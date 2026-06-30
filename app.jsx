@@ -6130,15 +6130,7 @@ function LatestPsmCard({student, studentId, submissions, canEdit}){
         </div>
       )}
 
-      {(welledDomain.length > 0 || practiceExams.length > 0) && (
-        <div style={{marginTop:14,padding:"10px 12px",background:"#FAF7F2",borderRadius:6,border:"1px solid rgba(15,26,46,.08)",fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#66708A",lineHeight:1.6}}>
-          This PSM also includes{" "}
-          {welledDomain.length > 0 && <span><strong>{welledDomain.length}</strong> WellEd domain practice{welledDomain.length===1?"":"s"}</span>}
-          {welledDomain.length > 0 && practiceExams.length > 0 && " and "}
-          {practiceExams.length > 0 && <span><strong>{practiceExams.length}</strong> practice exam{practiceExams.length===1?"":"s"}</span>}
-          {". Do those on WellEd / BlueBook (links above)."}
-        </div>
-      )}
+      <PsmExtrasSection assignment={latest}/>
     </div>
   );
 }
@@ -7594,6 +7586,88 @@ function renderMixedRow(i, value, onChange, isLocked){
   );
 }
 
+// Session 18C v37: full breakdown of everything in a PSM besides the
+// portal worksheets — WellEd Labs domain assignments, vocab, practice
+// exams, and the relevant platform instructions. Mirrors what the Wise
+// post and the generator output include, so the student sees the SAME
+// thing on their portal assignment card. Previously the portal showed
+// only a terse "This PSM also includes N WellEd practices and N exams"
+// line and never told the student what to do or submit where.
+const PSM_INSTR_TEXT = {
+  oneNote: "Printouts of the worksheet are on the next session's OneNote page. Do all work in black ink, check answers against the keys, and use red ink for corrections + stars on questions you struggled with. Leave room for us to work through missed problems.",
+  timeDrill: "Time limits are shown in parentheses before each worksheet. Set a timer before starting each one and stop when time expires. Mark any unfinished questions so we can review them.",
+  welledDomain: "Complete the assigned domain assignments on WellEd Labs. Log in, then toggle the Assignments section (top right) to see your topic-specific assignments.",
+  vocab: "Complete the assigned vocab flashcards/quizzes on WellEd Labs. Log in, then toggle the Vocab section (top right).",
+};
+function PsmExtrasSection({assignment}){
+  const welledDomain = (assignment.welledDomain || []).filter(w => w && !w.deleted);
+  const vocab = (assignment.vocab || []).filter(v => v && !v.deleted);
+  const exams = (assignment.practiceExams || []).filter(e => e && !e.deleted);
+  const bb = exams.filter(e => e.platform === "BlueBook");
+  const we = exams.filter(e => e.platform === "WellEd");
+  const oneNote = !!assignment.oneNote;
+  const timeDrill = !!assignment.timeDrill;
+  if(!welledDomain.length && !vocab.length && !exams.length && !oneNote && !timeDrill) return null;
+
+  const WE_LOGIN = "https://ats.practicetest.io/sign-in";
+  const BB_LOGIN = "https://bluebook.app.collegeboard.org/";
+  const card = {background:"#FAF7F2",border:"1px solid rgba(15,26,46,.1)",borderRadius:6,padding:"12px 14px",marginTop:10};
+  const hdr = {fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:700,letterSpacing:1.2,textTransform:"uppercase",color:"#66708A",marginBottom:6};
+  const item = {fontFamily:"'Fraunces',Georgia,serif",fontSize:13,color:"#0F1A2E",padding:"2px 0"};
+  const note = {fontSize:11,color:"#66708A",lineHeight:1.5,marginTop:4};
+  const linkS = {color:"#003258",wordBreak:"break-all"};
+
+  return (
+    <div style={{marginTop:14}}>
+      <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:700,letterSpacing:1.4,color:"#9A5B1F",textTransform:"uppercase",marginBottom:4}}>
+        Also assigned — complete + submit on these platforms
+      </div>
+
+      {welledDomain.length > 0 && (
+        <div style={card}>
+          <div style={hdr}>WellEd Labs · Domain Assignments</div>
+          {welledDomain.map((w, i) => (
+            <div key={i} style={item}>{w.label || [w.subject, w.domain, w.difficulty].filter(Boolean).join(" — ")}</div>
+          ))}
+          <div style={note}>{PSM_INSTR_TEXT.welledDomain} <a href={WE_LOGIN} target="_blank" rel="noopener noreferrer" style={linkS}>{WE_LOGIN}</a></div>
+        </div>
+      )}
+
+      {vocab.length > 0 && (
+        <div style={card}>
+          <div style={hdr}>WellEd Labs · Vocab</div>
+          {vocab.map((v, i) => (<div key={i} style={item}>{v.label || v.name}</div>))}
+          <div style={note}>{PSM_INSTR_TEXT.vocab} <a href={WE_LOGIN} target="_blank" rel="noopener noreferrer" style={linkS}>{WE_LOGIN}</a></div>
+        </div>
+      )}
+
+      {we.length > 0 && (
+        <div style={card}>
+          <div style={hdr}>WellEd Labs · Practice Exams</div>
+          {we.map((e, i) => (<div key={i} style={item}>Practice Exam #{e.number || "?"}</div>))}
+          <div style={note}>Complete on WellEd Labs using your "Full Practice Exam Instructions" module. <a href={WE_LOGIN} target="_blank" rel="noopener noreferrer" style={linkS}>{WE_LOGIN}</a></div>
+        </div>
+      )}
+
+      {bb.length > 0 && (
+        <div style={card}>
+          <div style={hdr}>BlueBook (College Board) · Practice Exams</div>
+          {bb.map((e, i) => (<div key={i} style={item}>Practice Exam #{e.number || "?"}</div>))}
+          <div style={note}>Complete on BlueBook. Follow the instructions about screenshotting missed questions. <a href={BB_LOGIN} target="_blank" rel="noopener noreferrer" style={linkS}>{BB_LOGIN}</a></div>
+        </div>
+      )}
+
+      {(oneNote || timeDrill) && (
+        <div style={card}>
+          <div style={hdr}>Instructions</div>
+          {oneNote && <div style={note}><b style={{color:"#0F1A2E"}}>OneNote:</b> {PSM_INSTR_TEXT.oneNote}</div>}
+          {timeDrill && <div style={note}><b style={{color:"#0F1A2E"}}>Time drilling:</b> {PSM_INSTR_TEXT.timeDrill}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Session 18A: PSM detail view. Shown when the student opens a PSM from
 // their history. Lists every worksheet in the PSM as a clickable card with
 // per-worksheet status (Not started / In progress / Submitted / Graded).
@@ -7742,15 +7816,7 @@ function AssignmentDetailView({student, studentId, assignment, submissions, canE
         </div>
       )}
 
-      {(welledDomain.length > 0 || practiceExams.length > 0) && (
-        <div style={{padding:"12px 14px",background:"#FAF7F2",borderRadius:6,border:"1px solid rgba(15,26,46,.08)",fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#66708A",lineHeight:1.6}}>
-          This PSM also includes{" "}
-          {welledDomain.length > 0 && <span><strong>{welledDomain.length}</strong> WellEd domain practice{welledDomain.length===1?"":"s"}</span>}
-          {welledDomain.length > 0 && practiceExams.length > 0 && " and "}
-          {practiceExams.length > 0 && <span><strong>{practiceExams.length}</strong> practice exam{practiceExams.length===1?"":"s"}</span>}
-          {". Do those on WellEd / BlueBook — tutor logs the scores."}
-        </div>
-      )}
+      <PsmExtrasSection assignment={assignment}/>
     </div>
   );
 }

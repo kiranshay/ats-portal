@@ -301,62 +301,111 @@ async function resolveRecipient(cfg, studentDoc) {
 //
 // Returns: { ok: true, mode, classId, deepLink }
 
-function buildPsmDescription(deepLink, worksheets, practiceExams) {
-  // Session 18C v9: per Aidan, the portal link in the Wise discussion
-  // is now generic (the portal base URL). The previous per-assignment
-  // deep-link (?a=<id>&s=<id>) was unreliable across mail clients +
-  // some students hit blank pages on the deep route. Generic link
-  // drops them on the portal landing page, where their most-recent
-  // assignment auto-surfaces in a "Latest PSM" card.
+// Session 18C v37: the Wise discussion now mirrors the FULL PSM the
+// generator builds — not just worksheets + exams. Previously this omitted
+// WellEd Labs domain assignments, vocab, OneNote / time-drilling
+// instructions, and never told the student WHAT to submit where. These
+// instruction blocks are the same text the generator (app.jsx) renders;
+// kept in sync here so the Wise post == the portal == what the tutor sees.
+const WISE_INSTR = {
+  oneNote: "<b>OneNote Instructions:</b> Printouts of the worksheet have been added to the next session's page on OneNote for you to complete all of your work/annotations on. Please complete all of your work in black ink and check all answers with the answer keys provided. Use red ink for marks on your paper (correct/incorrect) and for stars on questions you had trouble on. Please leave room for us to work through problems you miss on each page.",
+  timeDrill: "<b>Time Drilling Instructions:</b> Time limits are shown in parentheses before each worksheet name. Set a timer for the allotted minutes before beginning each worksheet and stop working when time expires. Mark any unfinished questions clearly so we can discuss them next session.",
+  welledDomain: "<b>WellEd Labs Domain Assignment Instructions:</b> Please complete the assigned domain assignments on WellEd Labs. Use the instructions in your Wise \"Full Practice Exam Instructions\" Module to log in, then toggle the assignments section in the top right so you see the topic-specific assignments to complete. https://ats.practicetest.io/sign-in",
+  vocab: "<b>WellEd Labs Vocab Instructions:</b> Please complete the assigned vocab flashcards and/or quizzes on WellEd Labs. Log in using the instructions in your Wise \"Full Practice Exam Instructions\" Module and toggle to the Vocab section in the top right so you see the vocab sets and quizzes to complete. https://ats.practicetest.io/sign-in",
+};
+
+function buildPsmDescription(deepLink, assignment) {
+  // Session 18C v9: portal link is generic (base URL) — deep links were
+  // unreliable across mail clients. Students land on the portal where the
+  // newest assignment auto-surfaces as a "Latest PSM" card.
   const portalUrl = (deepLink || "").split("?")[0] || deepLink;
+  const worksheets = Array.isArray(assignment.worksheets) ? assignment.worksheets : [];
+  const practiceExams = Array.isArray(assignment.practiceExams) ? assignment.practiceExams : [];
+  const welledDomain = (Array.isArray(assignment.welledDomain) ? assignment.welledDomain : []).filter((w) => w && !w.deleted);
+  const vocab = (Array.isArray(assignment.vocab) ? assignment.vocab : []).filter((v) => v && !v.deleted);
+  const oneNote = !!assignment.oneNote;
+  const timeDrill = !!assignment.timeDrill;
+
+  const bbExams = practiceExams.filter((e) => e && e.platform === "BlueBook" && !e.deleted);
+  const weExams = practiceExams.filter((e) => e && e.platform === "WellEd" && !e.deleted);
+
   const lines = [
-    `The recording of today's session has been posted on Wise. Please complete the following worksheets using the PSM instructions posted in the PSMs modules.`,
+    `The recording of today's session has been posted on Wise. Please complete everything assigned below using the PSM instructions posted in the PSMs modules.`,
     ``,
-    `<b>Important Reminder:</b> Please book your next session in advance, timing it for when you expect to have these PSMs completed. After completing the worksheets, check and mark your work according to the PSM instructions, then upload your marked work as a comment to this PSMs assignment.`,
+    `<b>Important Reminder:</b> Please book your next session in advance, timing it for when you expect to have these PSMs completed. After completing the work, check and mark it according to the PSM instructions, then upload your marked work as a comment to this PSMs assignment.`,
     ``,
     `<b>Portal Link:</b> ${portalUrl}`,
   ];
 
+  // Instruction blocks — only the ones relevant to THIS assignment.
+  const instrBlocks = [];
+  if (oneNote) instrBlocks.push(WISE_INSTR.oneNote);
+  if (timeDrill) instrBlocks.push(WISE_INSTR.timeDrill);
+  if (welledDomain.length > 0) instrBlocks.push(WISE_INSTR.welledDomain);
+  if (vocab.length > 0) instrBlocks.push(WISE_INSTR.vocab);
+  if (instrBlocks.length > 0) {
+    lines.push(``, `<b>Instructions:</b>`);
+    instrBlocks.forEach((b) => lines.push(``, b));
+  }
+
+  // Portal worksheets (with time limit + even/odd hints).
   if (worksheets.length > 0) {
-    lines.push(``, `<b>Worksheets:</b>`, ``);
-    worksheets.forEach((w) => {
-      // Session 18A: surface even/odd subset assignment so the student
-      // knows up front which half of the worksheet they're responsible
-      // for. The portal hides answer slots for the other half — Wise
-      // discussion mirrors that with a "(odd questions only)" hint.
+    lines.push(``, `<b>Worksheets (answer on the portal):</b>`, ``);
+    worksheets.filter((w) => w && !w.deleted).forEach((w) => {
       const eo = String(w.evenOdd || "").toUpperCase();
-      const suffix = eo === "EVEN"
-        ? " — even questions only"
-        : eo === "ODD"
-          ? " — odd questions only"
-          : "";
-      lines.push(`  • ${w.title}${suffix}`);
+      const suffix = eo === "EVEN" ? " — even questions only"
+        : eo === "ODD" ? " — odd questions only" : "";
+      const tl = (timeDrill && w.timeLimit) ? `(${w.timeLimit} min) ` : "";
+      lines.push(`  • ${tl}${w.title}${suffix}`);
     });
   }
 
-  const bbExams = practiceExams.filter((e) => e.platform === "BlueBook");
-  const weExams = practiceExams.filter((e) => e.platform === "WellEd");
+  // WellEd Labs domain assignments.
+  if (welledDomain.length > 0) {
+    lines.push(``, `<b>WellEd Labs Domain Assignments (complete + submit on WellEd Labs):</b>`, ``);
+    welledDomain.forEach((w) => {
+      const label = w.label || [w.subject, w.domain, w.difficulty].filter(Boolean).join(" — ");
+      lines.push(`  • ${label}`);
+    });
+  }
 
+  // WellEd Labs vocab.
+  if (vocab.length > 0) {
+    lines.push(``, `<b>Vocab Assignments (complete on WellEd Labs):</b>`, ``);
+    vocab.forEach((v) => lines.push(`  • ${v.label || v.name || "Vocab set"}`));
+  }
+
+  // Practice exams.
   if (bbExams.length > 0 || weExams.length > 0) {
     lines.push(``, `<b>Practice Exams:</b>`);
   }
-
   if (bbExams.length > 0) {
     lines.push(
       ``,
-      `Please complete the following on <b>BlueBook (College Board)</b> using the instructions for BlueBook (College Board) practice exams located in your Wise "Full Practice Exam Instructions" Module - https://bluebook.app.collegeboard.org/. Be sure to follow instructions regarding screenshots of missed questions!`,
+      `Please complete the following on <b>BlueBook (College Board)</b> using the instructions for BlueBook practice exams in your Wise "Full Practice Exam Instructions" Module - https://bluebook.app.collegeboard.org/. Be sure to follow the instructions regarding screenshots of missed questions!`,
       ``
     );
     bbExams.forEach((e) => lines.push(`  • Practice Exam #${e.number || "?"}`));
   }
-
   if (weExams.length > 0) {
     lines.push(
       ``,
-      `Please complete the following on <b>WellEd Labs</b> using the instructions for WellEd Labs practice exams located in your Wise "Full Practice Exam Instructions" Module - https://ats.practicetest.io/sign-in.`,
+      `Please complete the following on <b>WellEd Labs</b> using the instructions for WellEd Labs practice exams in your Wise "Full Practice Exam Instructions" Module - https://ats.practicetest.io/sign-in.`,
       ``
     );
     weExams.forEach((e) => lines.push(`  • Practice Exam #${e.number || "?"}`));
+  }
+
+  // Clear "what to submit" closing so nothing is missed.
+  const submitParts = [];
+  if (worksheets.length > 0) submitParts.push("submit your worksheet answers on the portal");
+  if (welledDomain.length > 0 || weExams.length > 0 || vocab.length > 0) submitParts.push("complete your WellEd Labs assignments");
+  if (bbExams.length > 0) submitParts.push("complete your BlueBook practice exam(s)");
+  if (submitParts.length > 0) {
+    lines.push(
+      ``,
+      `<b>To submit:</b> ${submitParts.join(", ")}. Then upload your marked work as a comment on this assignment.`
+    );
   }
 
   return lines.join("\n");
@@ -437,9 +486,9 @@ exports.assignToWise = onCall(
 
     const sessionDate = assignment.date || "";
     const discussionTitle = sessionDate ? `PSM for ${sessionDate}` : "New PSM Assignment";
-    const worksheets = Array.isArray(assignment.worksheets) ? assignment.worksheets : [];
-    const practiceExams = Array.isArray(assignment.practiceExams) ? assignment.practiceExams : [];
-    const description = buildPsmDescription(deepLink, worksheets, practiceExams);
+    // Session 18C v37: pass the whole assignment so the description includes
+    // WellEd domain, vocab, OneNote/time-drill instructions, and exams.
+    const description = buildPsmDescription(deepLink, assignment);
 
     await createDiscussion(cfg, classId, {
       title: discussionTitle,
