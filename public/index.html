@@ -10215,9 +10215,64 @@ function TutorPerWsWorksheetCard({studentId, assignmentId, worksheet, doc, statu
     }
   };
 
+  // Session 18C v39: tutor can edit the student's per-question answers
+  // (e.g. the student answered on paper or mis-entered). Saving writes the
+  // corrected responses back to the per-WS doc and immediately re-grades
+  // them via the existing regrade callable, so the score + chips update.
+  const [editing, setEditing] = useState(false);
+  const [editAns, setEditAns] = useState({});   // questionIndex -> string
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const startEdit = () => {
+    const init = {};
+    for(const s of slots){
+      init[s.i] = (s.r && typeof s.r.studentAnswer === "string") ? s.r.studentAnswer : "";
+    }
+    setEditAns(init);
+    setEditing(true);
+  };
+  const saveEdits = async () => {
+    setSavingEdit(true);
+    try{
+      const col = studentAssignmentWorksheetSubmissionsCollection(studentId, assignmentId);
+      if(!col) throw new Error("Firestore not ready");
+      // Rebuild the full responses array, preserving each question's
+      // existing flag + usedDesmos, overriding only studentAnswer.
+      const byIdx = new Map(responses.map(r => [Number(r.questionIndex), r]));
+      const len = Math.max(slots.length, qIds.length, responses.length);
+      const newResponses = [];
+      for(let i = 0; i < len; i++){
+        const prev = byIdx.get(i) || {};
+        const v = editAns[i];
+        const obj = {
+          questionIndex: i,
+          studentAnswer: typeof v === "string" ? v : (prev.studentAnswer || ""),
+        };
+        if(prev.flag) obj.flag = prev.flag;
+        if(prev.usedDesmos === true) obj.usedDesmos = true;
+        newResponses.push(obj);
+      }
+      const FV = firebase.firestore.FieldValue;
+      await col.doc(worksheet.id).set({
+        responses: newResponses,
+        tutorEditedAt: FV.serverTimestamp(),
+        updatedAt: FV.serverTimestamp(),
+      }, {merge: true});
+      setEditing(false);
+      // Re-grade with the corrected answers (regrade reads the doc fresh).
+      if(onRegrade) await onRegrade();
+    } catch(e){
+      console.warn("[tutor-edit] save failed:", e);
+      alert("Could not save edited answers: " + (e.message || e));
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   const isGraded = doc && (doc.status === "graded" || typeof doc.scoreCorrect === "number");
   const isSubmitted = doc && doc.status === "submitted";
   const canReset = doc && (isSubmitted || isGraded);
+  const canEditAnswers = doc && (isSubmitted || isGraded) && slots.length > 0;
 
   // Per-question tally for the header
   let okN = 0, wrongN = 0, ungradedN = 0;
@@ -10283,6 +10338,33 @@ function TutorPerWsWorksheetCard({studentId, assignmentId, worksheet, doc, statu
         </div>
       )}
 
+      {/* Edit answers (tutor override) */}
+      {editing && (
+        <div style={{marginTop:8,marginBottom:10,padding:"10px 12px",background:"#F4F8FB",border:"1px solid rgba(0,50,88,.25)",borderRadius:6}}>
+          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:700,letterSpacing:1.2,color:"#003258",textTransform:"uppercase",marginBottom:8}}>
+            Edit student answers — saving re-grades
+          </div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:"8px 12px"}}>
+            {slots.map(({i})=>(
+              <label key={i} style={{display:"inline-flex",alignItems:"center",gap:4,fontFamily:"'IBM Plex Mono',monospace",fontSize:12}}>
+                <span style={{color:"#66708A",fontWeight:600}}>{i+1}.</span>
+                <input
+                  value={editAns[i] != null ? editAns[i] : ""}
+                  onChange={e=> setEditAns(prev=>({...prev, [i]: e.target.value}))}
+                  style={{width:54,padding:"4px 6px",border:"1px solid rgba(15,26,46,.25)",borderRadius:4,fontFamily:"inherit",fontSize:12,textAlign:"center"}}
+                />
+              </label>
+            ))}
+          </div>
+          <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:10}}>
+            <button onClick={()=>setEditing(false)} disabled={savingEdit} style={{...mkBtn("transparent","#66708A"),border:"1px solid rgba(15,26,46,.2)",padding:"5px 12px",fontSize:11}}>Cancel</button>
+            <button onClick={saveEdits} disabled={savingEdit} style={{...mkBtn("#003258","#fff"),padding:"5px 14px",fontSize:11,fontWeight:600,cursor:savingEdit?"not-allowed":"pointer"}}>
+              {savingEdit ? "Saving + regrading…" : "Save & re-grade"}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Tutor notes */}
       {(isGraded || isSubmitted) && (
         <div style={{marginTop:8,marginBottom:8}}>
@@ -10306,8 +10388,13 @@ function TutorPerWsWorksheetCard({studentId, assignmentId, worksheet, doc, statu
         </div>
       )}
 
-      {/* Action row: re-grade + reset */}
+      {/* Action row: edit answers + re-grade + reset */}
       <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:8,paddingTop:8,borderTop:"1px dashed rgba(15,26,46,.1)"}}>
+        {canEditAnswers && !editing && (
+          <button onClick={startEdit} style={{...mkBtn("transparent","#003258"),border:"1px solid rgba(0,50,88,.4)",padding:"5px 12px",fontSize:11}}>
+            Edit answers
+          </button>
+        )}
         {(isSubmitted || isGraded) && (!isGraded || doc?.gradeSkipReason) && (
           <button onClick={onRegrade} disabled={regradeBusy} style={{...mkBtn("transparent","#003258"),border:"1px solid rgba(0,50,88,.4)",padding:"5px 12px",fontSize:11,cursor:regradeBusy?"not-allowed":"pointer"}}>
             {regradeBusy ? "Regrading…" : "Re-grade"}
